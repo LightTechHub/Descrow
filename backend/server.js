@@ -1,4 +1,4 @@
-// backend/server.js - COMPLETE MERGED VERSION WITH ALL NEW ROUTES + KYC MIGRATION
+// backend/server.js - COMPLETE MERGED VERSION WITH EMERGENCY ADMIN SETUP
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
@@ -30,13 +30,8 @@ const platformSettingsRoutes = require('./routes/platformSettings.routes');
 const paymentRoutes = require('./routes/payment.routes');
 const contactRoutes = require('./routes/contact.routes');
 const apiV1Routes = require('./routes/api.v1.routes');
-
-// ✅ NEW ROUTES
 const businessRoutes = require('./routes/business.routes');
 const bankAccountRoutes = require('./routes/bankAccount.routes');
-
-// ✅ IMPORT USER MODEL FOR MIGRATION
-const User = require('./models/User.model');
 
 const app = express();
 
@@ -78,14 +73,11 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
-
     if (allowedOrigins.includes(origin)) {
       console.log('✅ Allowed origin:', origin);
       return callback(null, true);
     }
-
     console.log('❌ Blocked origin:', origin);
     callback(new Error('Not allowed by CORS'));
   },
@@ -101,7 +93,6 @@ app.options('*', cors());
 app.use(express.json({
   limit: '2mb',
   verify: (req, res, buf) => {
-    // Store raw body for webhook signature verification
     if (req.originalUrl.includes('/webhook')) {
       req.rawBody = buf.toString();
     }
@@ -120,7 +111,6 @@ if (process.env.NODE_ENV === 'development') {
 
 // ==================== RATE LIMITING ====================
 
-// General API rate limit
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -129,7 +119,6 @@ const generalLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Strict auth rate limit
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -137,14 +126,12 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true
 });
 
-// Payment rate limit
 const paymentLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
   message: { success: false, message: 'Too many payment attempts, please wait.' }
 });
 
-// Webhook rate limit
 const webhookLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
@@ -174,7 +161,6 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.log(`✅ MongoDB Connected: ${mongoose.connection.name}`);
     console.log(`📊 Database Host: ${mongoose.connection.host}`);
     
-    // ✅ START CRON JOBS AFTER DATABASE CONNECTION
     startSubscriptionCron();
     console.log('⏰ Subscription cron jobs started');
   })
@@ -193,6 +179,138 @@ mongoose.connection.on('disconnected', () => {
 
 mongoose.connection.on('reconnected', () => {
   console.log('✅ MongoDB reconnected');
+});
+
+// ==================== EMERGENCY ADMIN SETUP ====================
+// ⚠️ REMOVE THESE ROUTES AFTER CREATING YOUR ADMIN ACCOUNT!
+
+const Admin = require('./models/Admin.model');
+const bcrypt = require('bcryptjs');
+
+// Create or reset master admin
+app.post('/api/emergency/create-admin', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+
+    console.log('🔧 Emergency admin creation request:', { email, name });
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password required'
+      });
+    }
+
+    // Check if admin exists
+    let admin = await Admin.findOne({ email });
+
+    if (admin) {
+      console.log('⚠️ Admin exists, resetting password...');
+      
+      // Reset password (will be hashed by pre-save middleware)
+      admin.password = password;
+      admin.status = 'active';
+      admin.role = 'master';
+      admin.permissions = {
+        viewTransactions: true,
+        manageDisputes: true,
+        verifyUsers: true,
+        viewAnalytics: true,
+        managePayments: true,
+        manageAPI: true,
+        manageAdmins: true,
+        manageFees: true
+      };
+      
+      await admin.save();
+
+      console.log('✅ Admin password reset successfully');
+
+      return res.status(200).json({
+        success: true,
+        message: 'Admin password reset successfully! You can now login.',
+        admin: {
+          id: admin._id,
+          email: admin.email,
+          name: admin.name,
+          role: admin.role
+        }
+      });
+    } else {
+      console.log('✨ Creating new master admin...');
+      
+      // Create new master admin
+      admin = await Admin.create({
+        name: name || 'Master Admin',
+        email,
+        password, // Will be hashed by pre-save middleware
+        role: 'master',
+        status: 'active',
+        permissions: {
+          viewTransactions: true,
+          manageDisputes: true,
+          verifyUsers: true,
+          viewAnalytics: true,
+          managePayments: true,
+          manageAPI: true,
+          manageAdmins: true,
+          manageFees: true
+        }
+      });
+
+      console.log('✅ Master admin created successfully');
+
+      return res.status(201).json({
+        success: true,
+        message: 'Master admin created successfully! You can now login.',
+        admin: {
+          id: admin._id,
+          email: admin.email,
+          name: admin.name,
+          role: admin.role
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Emergency admin creation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create/reset admin',
+      error: error.message
+    });
+  }
+});
+
+// Check if admin exists
+app.get('/api/emergency/check-admin/:email', async (req, res) => {
+  try {
+    const admin = await Admin.findOne({ email: req.params.email }).select('-password');
+    
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      admin: {
+        id: admin._id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+        status: admin.status,
+        permissions: admin.permissions
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error checking admin',
+      error: error.message
+    });
+  }
 });
 
 // ==================== HEALTH CHECK ====================
@@ -222,50 +340,6 @@ app.get('/api/health', async (req, res) => {
   };
 
   res.json(healthCheck);
-});
-
-
-// Add this TEMPORARY route to your server.js
-const Admin = require('./models/Admin.model');
-const bcrypt = require('bcryptjs');
-
-app.post('/api/admin/reset-password', async (req, res) => {
-  try {
-    const { email, newPassword } = req.body;
-
-    if (!email || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and new password are required'
-      });
-    }
-
-    const admin = await Admin.findOne({ email });
-    if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: 'Admin not found'
-      });
-    }
-
-    // Hash the new password
-    const salt = await bcrypt.genSalt(10);
-    admin.password = await bcrypt.hash(newPassword, salt);
-    await admin.save();
-
-    res.json({
-      success: true,
-      message: 'Admin password reset successfully'
-    });
-
-  } catch (error) {
-    console.error('Reset admin password error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reset admin password',
-      error: error.message
-    });
-  }
 });
 
 // ==================== API ROUTES ====================
@@ -302,13 +376,13 @@ app.use('/api/api-keys', apiKeyRoutes);
 // Contact & Support
 app.use('/api/contact', contactRoutes);
 
-// ✅ NEW: Business Features
+// Business Features
 app.use('/api/business', businessRoutes);
 
-// ✅ NEW: Bank Account Management
+// Bank Account Management
 app.use('/api/bank', bankAccountRoutes);
 
-// Public API Routes (v1) - for external integrators / SDKs
+// Public API Routes (v1)
 app.use('/api/v1', apiV1Routes);
 
 // ==================== ERROR HANDLING ====================
@@ -405,7 +479,7 @@ const server = app.listen(PORT, () => {
   console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
   console.log(`✅ Allowed Origins:`, allowedOrigins);
   console.log(`⏰ Cron jobs: ACTIVE`);
-  console.log(`🛠️  KYC Migration Route: ACTIVE (Remove after use!)`);
+  console.log(`🔧 Emergency Admin Route: POST /api/emergency/create-admin`);
   console.log(`📦 New routes mounted:`);
   console.log(`   - /api/business (Business features)`);
   console.log(`   - /api/bank (Bank account management)`);

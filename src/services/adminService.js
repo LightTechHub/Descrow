@@ -1,184 +1,192 @@
-import api from '../config/api';
+// src/services/adminService.js - COMPLETE FIXED VERSION
 
-// Use admin token instead of user token
-const getAdminHeaders = () => {
-  const token = localStorage.getItem('adminToken');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'https://dealcross.net/api';
+
+// Create axios instance
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  timeout: 30000
+});
+
+// Add token to requests
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('adminToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-  };
-};
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-export const adminService = {
-  // Dashboard stats
+// Handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('admin');
+      window.location.href = '/admin/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ==================== ADMIN SERVICE ====================
+
+const adminService = {
+  // Login
+  login: async (credentials) => {
+    try {
+      console.log('📡 Admin login request:', credentials.email);
+      
+      const response = await api.post('/admin/login', {
+        email: credentials.email.trim(),
+        password: credentials.password
+      });
+      
+      console.log('📦 Response:', response.data);
+      
+      if (response.data.success && response.data.token) {
+        localStorage.setItem('adminToken', response.data.token);
+        localStorage.setItem('admin', JSON.stringify(response.data.admin));
+        console.log('✅ Admin logged in');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      throw error;
+    }
+  },
+
+  // Logout
+  logout: () => {
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('admin');
+  },
+
+  // Dashboard
   getDashboardStats: async () => {
-    const response = await api.get('/admin/dashboard', getAdminHeaders());
+    const response = await api.get('/admin/dashboard');
     return response.data;
   },
 
   // Transactions
-  getTransactions: async (filters) => {
-    const response = await api.get('/admin/transactions', {
-      ...getAdminHeaders(),
-      params: filters
-    });
+  getTransactions: async (params = {}) => {
+    const response = await api.get('/admin/transactions', { params });
     return response.data;
   },
 
   // Disputes
-  getDisputes: async (filters) => {
-    const response = await api.get('/admin/disputes', {
-      ...getAdminHeaders(),
-      params: filters
-    });
+  getDisputes: async (params = {}) => {
+    const response = await api.get('/admin/disputes', { params });
     return response.data;
   },
 
-  resolveDispute: async (disputeId, resolution) => {
-    const response = await api.put(`/admin/disputes/${disputeId}/resolve`, resolution, getAdminHeaders());
+  resolveDispute: async (disputeId, data) => {
+    const response = await api.put(`/admin/disputes/${disputeId}/resolve`, data);
     return response.data;
   },
 
   // Users
-  getUsers: async (filters) => {
-    const response = await api.get('/admin/users', {
-      ...getAdminHeaders(),
-      params: filters
-    });
+  getUsers: async (params = {}) => {
+    const response = await api.get('/admin/users', { params });
     return response.data;
   },
 
-  verifyUser: async (userId, verificationType, status, notes) => {
-    const response = await api.put(`/admin/users/${userId}/verify`, {
-      verificationType,
-      status,
-      notes
-    }, getAdminHeaders());
+  changeUserTier: async (userId, tierData) => {
+    const response = await api.put(`/admin/users/${userId}/tier`, tierData);
     return response.data;
   },
 
-  toggleUserStatus: async (userId) => {
-    const response = await api.put(`/admin/users/${userId}/toggle-status`, {}, getAdminHeaders());
+  toggleUserStatus: async (userId, statusData) => {
+    const response = await api.put(`/admin/users/${userId}/toggle-status`, statusData);
     return response.data;
   },
 
-  // User Tier Management
-  changeUserTier: async (userId, newTier, reason) => {
-    const response = await api.put(`/admin/users/${userId}/tier`, {
-      newTier,
-      reason
-    }, getAdminHeaders());
-    return response.data;
-  },
-
-  // KYC Management
-  reviewKYC: async (userId, action, reason) => {
-    const response = await api.put(`/admin/users/${userId}/kyc`, {
-      action, // 'approve' or 'reject'
-      reason
-    }, getAdminHeaders());
-    return response.data;
-  },
-
-  // Platform Statistics
-  getPlatformStats: async () => {
-    const response = await api.get('/admin/stats', getAdminHeaders());
+  reviewKYC: async (userId, kycData) => {
+    const response = await api.put(`/admin/users/${userId}/kyc`, kycData);
     return response.data;
   },
 
   // Analytics
-  getAnalytics: async (period) => {
-    const response = await api.get('/admin/analytics', {
-      ...getAdminHeaders(),
-      params: { period }
-    });
+  getAnalytics: async (params = {}) => {
+    const response = await api.get('/admin/analytics', { params });
+    return response.data;
+  },
+
+  getPlatformStats: async () => {
+    const response = await api.get('/admin/platform-stats');
     return response.data;
   },
 
   // Admin Management
   getAdmins: async () => {
-    const response = await api.get('/admin/admins', getAdminHeaders());
+    const response = await api.get('/admin/admins');
     return response.data;
   },
 
   createSubAdmin: async (adminData) => {
-    const response = await api.post('/admin/admins', adminData, getAdminHeaders());
+    const response = await api.post('/admin/admins', adminData);
     return response.data;
   },
 
   updateAdminPermissions: async (adminId, permissions) => {
-    const response = await api.put(`/admin/admins/${adminId}/permissions`, { permissions }, getAdminHeaders());
+    const response = await api.put(`/admin/admins/${adminId}/permissions`, { permissions });
     return response.data;
   },
 
   toggleAdminStatus: async (adminId) => {
-    const response = await api.put(`/admin/admins/${adminId}/toggle-status`, {}, getAdminHeaders());
+    const response = await api.put(`/admin/admins/${adminId}/toggle-status`);
     return response.data;
   },
 
   deleteSubAdmin: async (adminId) => {
-    const response = await api.delete(`/admin/admins/${adminId}`, getAdminHeaders());
+    const response = await api.delete(`/admin/admins/${adminId}`);
     return response.data;
   },
 
-  // Crypto payment verification
-  confirmCryptoPayment: async (escrowId) => {
-    const response = await api.post('/payments/crypto/confirm', { escrowId }, getAdminHeaders());
-    return response.data;
-  },
-
-  rejectCryptoPayment: async (escrowId, reason) => {
-    const response = await api.post('/payments/crypto/reject', { escrowId, reason }, getAdminHeaders());
-    return response.data;
-  },
-
-  // ✅ NEW: Fee Management Endpoints
-  
-  // Get current fee settings
+  // Fee Management
   getFeeSettings: async () => {
-    const response = await api.get('/admin/fees', getAdminHeaders());
+    const response = await api.get('/admin/fees');
     return response.data;
   },
 
-  // Update single fee field
-  updateFeeSettings: async (payload) => {
-    const response = await api.put('/admin/fees/update', payload, getAdminHeaders());
+  updateFeeSettings: async (feeData) => {
+    const response = await api.put('/admin/fees/update', feeData);
     return response.data;
   },
 
-  // Bulk update entire tier
   bulkUpdateTierFees: async (tier, updates) => {
-    const response = await api.put('/admin/fees/bulk-update', {
-      tier,
-      updates
-    }, getAdminHeaders());
+    const response = await api.put('/admin/fees/bulk-update', { tier, updates });
     return response.data;
   },
 
-  // Update gateway costs
-  updateGatewayCosts: async (gateway, currency, field, value) => {
-    const response = await api.put('/admin/fees/gateway-costs', {
-      gateway,
-      currency,
-      field,
-      value
-    }, getAdminHeaders());
+  updateGatewayCosts: async (gatewayData) => {
+    const response = await api.put('/admin/fees/gateway-costs', gatewayData);
     return response.data;
   },
 
-  // Get fee change history
-  getFeeHistory: async (page = 1, limit = 20) => {
-    const response = await api.get('/admin/fees/history', {
-      ...getAdminHeaders(),
-      params: { page, limit }
-    });
+  getFeeHistory: async (params = {}) => {
+    const response = await api.get('/admin/fees/history', { params });
     return response.data;
   },
 
-  // Reset fees to default
   resetFeesToDefault: async (tier) => {
-    const response = await api.post('/admin/fees/reset', { tier }, getAdminHeaders());
+    const response = await api.post('/admin/fees/reset', { tier });
     return response.data;
   }
 };
+
+// Export default
+export default adminService;
+
+// Named export
+export { adminService };

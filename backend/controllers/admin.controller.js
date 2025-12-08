@@ -22,33 +22,74 @@ const generateToken = (adminId) => {
 /* =========================================================
    ADMIN LOGIN
 ========================================================= */
+// In admin.controller.js - REPLACE THE LOGIN FUNCTION
+
 const login = async (req, res) => {
   try {
+    console.log('🔐 Admin login attempt:', req.body.email);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array() });
+      console.log('❌ Validation errors:', errors.array());
+      return res.status(400).json({ 
+        success: false, 
+        errors: errors.array() 
+      });
     }
 
     const { email, password } = req.body;
-    const admin = await Admin.findOne({ email }).select('+password');
-    if (!admin) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    if (admin.status !== 'active')
+    // Find admin with password field
+    const admin = await Admin.findOne({ email }).select('+password');
+    
+    if (!admin) {
+      console.log('❌ Admin not found:', email);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+
+    console.log('✅ Admin found:', {
+      id: admin._id,
+      email: admin.email,
+      role: admin.role,
+      status: admin.status,
+      hasPassword: !!admin.password
+    });
+
+    // Check if admin is active
+    if (admin.status !== 'active') {
+      console.log('❌ Admin suspended:', email);
       return res.status(403).json({
         success: false,
         message: 'Account is suspended. Contact master admin.'
       });
+    }
 
+    // Verify password
+    console.log('🔍 Verifying password...');
     const isPasswordValid = await admin.comparePassword(password);
-    if (!isPasswordValid)
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    
+    if (!isPasswordValid) {
+      console.log('❌ Invalid password for:', email);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
 
+    console.log('✅ Password verified successfully');
+
+    // Update last active
     admin.lastActive = new Date();
     await admin.save();
 
+    // Generate token
     const token = generateToken(admin._id);
+    console.log('✅ Token generated:', !!token);
 
-    res.status(200).json({
+    const responseData = {
       success: true,
       message: 'Login successful',
       token,
@@ -59,10 +100,18 @@ const login = async (req, res) => {
         role: admin.role,
         permissions: admin.permissions
       }
-    });
+    };
+
+    console.log('✅ Sending success response');
+    res.status(200).json(responseData);
+    
   } catch (error) {
-    console.error('Admin login error:', error);
-    res.status(500).json({ success: false, message: 'Login failed', error: error.message });
+    console.error('❌ Admin login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Login failed', 
+      error: error.message 
+    });
   }
 };
 

@@ -22,8 +22,6 @@ const generateToken = (adminId) => {
 /* =========================================================
    ADMIN LOGIN
 ========================================================= */
-// In admin.controller.js - REPLACE THE LOGIN FUNCTION
-
 const login = async (req, res) => {
   try {
     console.log('🔐 Admin login attempt:', req.body.email);
@@ -39,7 +37,7 @@ const login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    // Find admin with password field
+    // ✅ FIX: Explicitly select password field
     const admin = await Admin.findOne({ email }).select('+password');
     
     if (!admin) {
@@ -55,7 +53,8 @@ const login = async (req, res) => {
       email: admin.email,
       role: admin.role,
       status: admin.status,
-      hasPassword: !!admin.password
+      hasPassword: !!admin.password,
+      passwordLength: admin.password?.length
     });
 
     // Check if admin is active
@@ -67,8 +66,21 @@ const login = async (req, res) => {
       });
     }
 
+    // ✅ FIX: Verify password exists before comparing
+    if (!admin.password) {
+      console.log('❌ No password set for admin:', email);
+      return res.status(500).json({
+        success: false,
+        message: 'Account configuration error. Please contact support.'
+      });
+    }
+
     // Verify password
     console.log('🔍 Verifying password...');
+    console.log('Input password length:', password.length);
+    console.log('Stored hash length:', admin.password.length);
+    console.log('Stored hash starts with $2a$ or $2b$:', admin.password.startsWith('$2'));
+    
     const isPasswordValid = await admin.comparePassword(password);
     
     if (!isPasswordValid) {
@@ -87,9 +99,8 @@ const login = async (req, res) => {
 
     // Generate token
     const token = generateToken(admin._id);
-    console.log('✅ Token generated:', !!token);
 
-    const responseData = {
+    res.status(200).json({
       success: true,
       message: 'Login successful',
       token,
@@ -100,10 +111,7 @@ const login = async (req, res) => {
         role: admin.role,
         permissions: admin.permissions
       }
-    };
-
-    console.log('✅ Sending success response');
-    res.status(200).json(responseData);
+    });
     
   } catch (error) {
     console.error('❌ Admin login error:', error);

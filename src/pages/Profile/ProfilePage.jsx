@@ -1,4 +1,4 @@
-// File: src/pages/Profile/ProfilePage.jsx - FIXED IMPORT VERSION
+// File: src/pages/Profile/ProfilePage.jsx - COMPLETE FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -6,10 +6,11 @@ import {
   Shield, 
   Settings, 
   FileCheck, 
-  CreditCard, // Added for bank accounts
+  CreditCard,
   ArrowLeft,
   Loader,
-  AlertTriangle // Added for KYC warning
+  AlertTriangle,
+  Mail
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
 import KYCTab from './KYCTab';
@@ -35,7 +36,6 @@ const ProfilePage = () => {
       return;
     }
 
-    // Check URL params for tab
     const tab = searchParams.get('tab');
     if (tab && ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab)) {
       setActiveTab(tab);
@@ -74,10 +74,16 @@ const ProfilePage = () => {
   };
 
   const handleTabChange = (tab) => {
-    // Prevent access to escrow-related features if KYC not verified
-    if ((tab === 'bank-accounts' || tab === 'kyc') && kycStatus?.status !== 'approved') {
-      toast.error('Complete KYC verification to access this feature');
-      return;
+    // ✅ FIXED: Only block bank accounts if KYC not approved
+    if (tab === 'bank-accounts') {
+      if (!user?.verified) {
+        toast.error('Please verify your email first');
+        return;
+      }
+      if (!user?.isKYCVerified || kycStatus?.status !== 'approved') {
+        toast.error('Complete KYC verification to add bank accounts');
+        return;
+      }
     }
     
     setActiveTab(tab);
@@ -109,8 +115,10 @@ const ProfilePage = () => {
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
-  // Check if user can access escrow features
-  const canAccessEscrowFeatures = kycStatus?.status === 'approved';
+  // ✅ Check full verification status
+  const isEmailVerified = user?.verified;
+  const isKYCVerified = user?.isKYCVerified && kycStatus?.status === 'approved';
+  const canAccessEscrowFeatures = isEmailVerified && isKYCVerified;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -151,12 +159,12 @@ const ProfilePage = () => {
                 <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-xs font-medium rounded-full">
                   {user.tier?.toUpperCase() || 'FREE'}
                 </span>
-                {user.verified && (
+                {isEmailVerified && (
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-xs font-medium rounded-full">
-                    ✓ Verified Email
+                    ✓ Email Verified
                   </span>
                 )}
-                {kycStatus?.status === 'approved' && (
+                {isKYCVerified && (
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-xs font-medium rounded-full">
                     ✓ KYC Verified
                   </span>
@@ -165,25 +173,55 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* KYC Warning Banner */}
-          {!canAccessEscrowFeatures && (
+          {/* ✅ FIXED: Email Verification Warning (First Priority) */}
+          {!isEmailVerified && (
+            <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Mail className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                    Verify Your Email Address
+                  </p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                    Check your inbox for the verification email we sent you. You must verify your email before you can complete KYC verification.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {/* TODO: Resend verification email */}}
+                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition whitespace-nowrap"
+                >
+                  Resend Email
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ✅ KYC Warning (Only show if email is verified) */}
+          {isEmailVerified && !isKYCVerified && (
             <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
                     Complete KYC Verification
                   </p>
                   <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                    You need to verify your identity to create escrows and add bank accounts for payouts.
+                    {kycStatus?.status === 'pending' 
+                      ? 'Your KYC documents are under review. This usually takes 24-48 hours.'
+                      : kycStatus?.status === 'rejected'
+                      ? `Your KYC was rejected: ${kycStatus.rejectionReason || 'Please resubmit with correct information.'}`
+                      : 'You need to verify your identity to create escrows and add bank accounts for payouts.'
+                    }
                   </p>
                 </div>
-                <button
-                  onClick={() => handleTabChange('kyc')}
-                  className="ml-auto px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition"
-                >
-                  Verify Now
-                </button>
+                {kycStatus?.status !== 'pending' && (
+                  <button
+                    onClick={() => handleTabChange('kyc')}
+                    className="px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition whitespace-nowrap"
+                  >
+                    {kycStatus?.status === 'rejected' ? 'Resubmit KYC' : 'Verify Now'}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -199,8 +237,23 @@ const ProfilePage = () => {
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
-                const isDisabled = (tab.id === 'bank-accounts' || tab.id === 'kyc') && 
-                                 !canAccessEscrowFeatures && kycStatus?.status !== 'pending';
+                
+                // ✅ FIXED: Disable logic
+                let isDisabled = false;
+                let disabledReason = '';
+                
+                if (tab.id === 'kyc' && !isEmailVerified) {
+                  isDisabled = true;
+                  disabledReason = 'Verify email first';
+                } else if (tab.id === 'bank-accounts') {
+                  if (!isEmailVerified) {
+                    isDisabled = true;
+                    disabledReason = 'Verify email first';
+                  } else if (!isKYCVerified) {
+                    isDisabled = true;
+                    disabledReason = 'Complete KYC first';
+                  }
+                }
 
                 return (
                   <button
@@ -214,7 +267,7 @@ const ProfilePage = () => {
                         ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
                         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
-                    title={isDisabled ? 'Complete KYC verification to access' : ''}
+                    title={isDisabled ? disabledReason : ''}
                   >
                     <Icon className="w-5 h-5" />
                     {tab.label}
@@ -226,7 +279,7 @@ const ProfilePage = () => {
               })}
             </div>
 
-            {/* Payout Information */}
+            {/* ✅ Payout Information (only show if fully verified) */}
             {canAccessEscrowFeatures && (
               <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
                 <h4 className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">

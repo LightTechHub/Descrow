@@ -82,9 +82,8 @@ const adminSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// ✅ FIXED: Hash password before saving
+// Hash password before saving
 adminSchema.pre('save', async function(next) {
-  // Only hash if password is modified
   if (!this.isModified('password')) {
     return next();
   }
@@ -101,16 +100,12 @@ adminSchema.pre('save', async function(next) {
   }
 });
 
-// ✅ FIXED: Compare passwords correctly
+// Compare passwords
 adminSchema.methods.comparePassword = async function(candidatePassword) {
   try {
     console.log('🔍 Comparing passwords...');
-    console.log('📝 Candidate password length:', candidatePassword.length);
-    console.log('📝 Stored hash exists:', !!this.password);
-    
     const isMatch = await bcrypt.compare(candidatePassword, this.password);
     console.log('🔐 Password match result:', isMatch);
-    
     return isMatch;
   } catch (error) {
     console.error('❌ Password comparison error:', error);

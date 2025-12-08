@@ -22,106 +22,211 @@ const generateToken = (adminId) => {
 /* =========================================================
    ADMIN LOGIN
 ========================================================= */
-const login = async (req, res) => {
+// ==================== EMERGENCY ADMIN SETUP ====================
+// ⚠️ REMOVE THESE ROUTES AFTER CREATING YOUR ADMIN ACCOUNT!
+
+const Admin = require('./models/Admin.model');
+const bcrypt = require('bcryptjs');
+
+// Simple test route - CHECK THIS FIRST
+app.get('/api/test-emergency', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Emergency routes are working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Create or reset master admin
+app.post('/api/emergency/create-admin', async (req, res) => {
   try {
-    console.log('🔐 Admin login attempt:', req.body.email);
-    
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      console.log('❌ Validation errors:', errors.array());
-      return res.status(400).json({ 
-        success: false, 
-        errors: errors.array() 
-      });
-    }
+    const { email, password, name } = req.body;
 
-    const { email, password } = req.body;
+    console.log('🔧 Emergency admin creation request:', { email, name });
+    console.log('📦 Request body:', req.body);
 
-    // ✅ FIX: Explicitly select password field
-    const admin = await Admin.findOne({ email }).select('+password');
-    
-    if (!admin) {
-      console.log('❌ Admin not found:', email);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials' 
-      });
-    }
-
-    console.log('✅ Admin found:', {
-      id: admin._id,
-      email: admin.email,
-      role: admin.role,
-      status: admin.status,
-      hasPassword: !!admin.password,
-      passwordLength: admin.password?.length
-    });
-
-    // Check if admin is active
-    if (admin.status !== 'active') {
-      console.log('❌ Admin suspended:', email);
-      return res.status(403).json({
+    if (!email || !password) {
+      return res.status(400).json({
         success: false,
-        message: 'Account is suspended. Contact master admin.'
+        message: 'Email and password required'
       });
     }
 
-    // ✅ FIX: Verify password exists before comparing
-    if (!admin.password) {
-      console.log('❌ No password set for admin:', email);
-      return res.status(500).json({
-        success: false,
-        message: 'Account configuration error. Please contact support.'
+    // Check if admin exists
+    let admin = await Admin.findOne({ email });
+
+    if (admin) {
+      console.log('⚠️ Admin exists, resetting password...');
+      
+      // Reset password (will be hashed by pre-save middleware)
+      admin.password = password;
+      admin.status = 'active';
+      admin.role = 'master';
+      admin.permissions = {
+        viewTransactions: true,
+        manageDisputes: true,
+        verifyUsers: true,
+        viewAnalytics: true,
+        managePayments: true,
+        manageAPI: true,
+        manageAdmins: true,
+        manageFees: true
+      };
+      
+      await admin.save();
+
+      console.log('✅ Admin password reset successfully');
+
+      return res.status(200).json({
+        success: true,
+        message: 'Admin password reset successfully! You can now login.',
+        admin: {
+          id: admin._id,
+          email: admin.email,
+          name: admin.name,
+          role: admin.role
+        }
+      });
+    } else {
+      console.log('✨ Creating new master admin...');
+      
+      // Create new master admin
+      admin = await Admin.create({
+        name: name || 'Master Admin',
+        email,
+        password, // Will be hashed by pre-save middleware
+        role: 'master',
+        status: 'active',
+        permissions: {
+          viewTransactions: true,
+          manageDisputes: true,
+          verifyUsers: true,
+          viewAnalytics: true,
+          managePayments: true,
+          manageAPI: true,
+          manageAdmins: true,
+          manageFees: true
+        }
+      });
+
+      console.log('✅ Master admin created successfully');
+
+      return res.status(201).json({
+        success: true,
+        message: 'Master admin created successfully! You can now login.',
+        admin: {
+          id: admin._id,
+          email: admin.email,
+          name: admin.name,
+          role: admin.role
+        }
       });
     }
-
-    // Verify password
-    console.log('🔍 Verifying password...');
-    console.log('Input password length:', password.length);
-    console.log('Stored hash length:', admin.password.length);
-    console.log('Stored hash starts with $2a$ or $2b$:', admin.password.startsWith('$2'));
-    
-    const isPasswordValid = await admin.comparePassword(password);
-    
-    if (!isPasswordValid) {
-      console.log('❌ Invalid password for:', email);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials' 
-      });
-    }
-
-    console.log('✅ Password verified successfully');
-
-    // Update last active
-    admin.lastActive = new Date();
-    await admin.save();
-
-    // Generate token
-    const token = generateToken(admin._id);
-
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      token,
-      admin: {
-        id: admin._id,
-        name: admin.name,
-        email: admin.email,
-        role: admin.role,
-        permissions: admin.permissions
-      }
-    });
-    
   } catch (error) {
-    console.error('❌ Admin login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Login failed', 
-      error: error.message 
+    console.error('❌ Emergency admin creation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create/reset admin',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
-};
+});
+
+// Check if admin exists
+app.get('/api/emergency/check-admin/:email', async (req, res) => {
+  try {
+    console.log('🔍 Checking admin:', req.params.email);
+    
+    const admin = await Admin.findOne({ email: req.params.email }).select('-password');
+    
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found',
+        email: req.params.email
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Admin found',
+      admin: {
+        id: admin._id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+        status: admin.status,
+        permissions: admin.permissions,
+        createdAt: admin.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('❌ Check admin error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking admin',
+      error: error.message
+    });
+  }
+});
+
+// List all admins (for debugging)
+app.get('/api/emergency/list-admins', async (req, res) => {
+  try {
+    const admins = await Admin.find().select('-password');
+    
+    res.json({
+      success: true,
+      count: admins.length,
+      admins: admins.map(a => ({
+        id: a._id,
+        email: a.email,
+        name: a.name,
+        role: a.role,
+        status: a.status,
+        createdAt: a.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('❌ List admins error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error listing admins',
+      error: error.message
+    });
+  }
+});
+
+// Database debug info
+app.get('/api/emergency/db-info', async (req, res) => {
+  try {
+    const dbName = mongoose.connection.name;
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    const adminCount = await Admin.countDocuments();
+    
+    res.json({
+      success: true,
+      database: dbName,
+      host: mongoose.connection.host,
+      collections: collections.map(c => c.name),
+      adminCount,
+      connectionState: mongoose.connection.readyState,
+      connectionStates: {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting'
+      }
+    });
+  } catch (error) {
+    console.error('❌ Debug info error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 /* =========================================================
    DASHBOARD STATS

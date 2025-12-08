@@ -10,9 +10,6 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 
-// ==================== IMPORT CRON JOBS ====================
-const { startSubscriptionCron } = require('./jobs/subscription.cron');
-
 // ==================== IMPORT ROUTES ====================
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');

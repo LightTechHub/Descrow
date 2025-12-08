@@ -1,4 +1,4 @@
-// backend/server.js - COMPLETE MERGED VERSION WITH EMERGENCY ADMIN SETUP
+// backend/server.js - COMPLETE VERSION WITH ALL ROUTES
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
@@ -313,6 +313,124 @@ app.get('/api/emergency/check-admin/:email', async (req, res) => {
   }
 });
 
+// ==================== DATABASE SEEDER (ONE-TIME USE) ====================
+
+app.post('/api/seed/admin', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    
+    // Security check
+    if (secret !== 'DEALCROSS_SEED_2024') {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid secret'
+      });
+    }
+
+    // Check if any admin exists
+    const existingAdmin = await Admin.findOne({});
+    
+    if (existingAdmin) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin already exists',
+        admin: {
+          email: existingAdmin.email,
+          role: existingAdmin.role,
+          id: existingAdmin._id
+        }
+      });
+    }
+
+    // Create master admin with pre-hashed password
+    const hashedPassword = await bcrypt.hash('Admin123!@#Strong', 12);
+
+    const admin = new Admin({
+      name: 'Master Admin',
+      email: 'admin@dealcross.net',
+      password: hashedPassword,
+      role: 'master',
+      status: 'active',
+      permissions: {
+        viewTransactions: true,
+        manageDisputes: true,
+        verifyUsers: true,
+        viewAnalytics: true,
+        managePayments: true,
+        manageAPI: true,
+        manageAdmins: true,
+        manageFees: true
+      }
+    });
+
+    // Save without triggering pre-save hook
+    await admin.save({ validateBeforeSave: false });
+
+    console.log('✅ Master admin seeded successfully');
+
+    res.json({
+      success: true,
+      message: 'Master admin created successfully',
+      admin: {
+        id: admin._id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Seed admin error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to seed admin',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Check database and collections
+app.get('/api/debug/db-info', async (req, res) => {
+  try {
+    const dbName = mongoose.connection.name;
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    const adminCount = await Admin.countDocuments();
+    
+    res.json({
+      success: true,
+      database: dbName,
+      host: mongoose.connection.host,
+      collections: collections.map(c => c.name),
+      adminCount,
+      connectionState: mongoose.connection.readyState,
+      connectionStates: {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting'
+      }
+    });
+  } catch (error) {
+    console.error('❌ Debug info error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Simple test route
+app.get('/api/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API is working perfectly!',
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
 // ==================== HEALTH CHECK ====================
 app.get('/', (req, res) => {
   res.json({
@@ -479,8 +597,12 @@ const server = app.listen(PORT, () => {
   console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
   console.log(`✅ Allowed Origins:`, allowedOrigins);
   console.log(`⏰ Cron jobs: ACTIVE`);
-  console.log(`🔧 Emergency Admin Route: POST /api/emergency/create-admin`);
-  console.log(`📦 New routes mounted:`);
+  console.log(`🔧 Debug Routes:`);
+  console.log(`   - GET  /api/test`);
+  console.log(`   - GET  /api/debug/db-info`);
+  console.log(`   - POST /api/seed/admin`);
+  console.log(`   - POST /api/emergency/create-admin`);
+  console.log(`📦 Feature routes:`);
   console.log(`   - /api/business (Business features)`);
   console.log(`   - /api/bank (Bank account management)`);
   console.log('='.repeat(60));

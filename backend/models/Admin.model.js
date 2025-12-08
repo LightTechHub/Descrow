@@ -1,52 +1,78 @@
+// backend/models/Admin.model.js - COMPLETE FIXED VERSION
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const adminSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    required: [true, 'Name is required'],
     trim: true
   },
   email: {
     type: String,
-    required: true,
+    required: [true, 'Email is required'],
     unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
   },
   password: {
     type: String,
-    required: true,
-    minlength: 8,
+    required: [true, 'Password is required'],
+    minlength: [8, 'Password must be at least 8 characters'],
     select: false
   },
   role: {
     type: String,
     enum: ['master', 'sub_admin'],
-    required: true
+    default: 'sub_admin'
   },
   permissions: {
-    viewTransactions: { type: Boolean, default: false },
-    manageDisputes: { type: Boolean, default: false },
-    verifyUsers: { type: Boolean, default: false },
-    viewAnalytics: { type: Boolean, default: false },
-    managePayments: { type: Boolean, default: false },
-    manageAPI: { type: Boolean, default: false },
-    manageAdmins: { type: Boolean, default: false },
-    manageFees: { type: Boolean, default: false },      // ← Added
-    manageSettings: { type: Boolean, default: false }   // ← Added
+    viewTransactions: {
+      type: Boolean,
+      default: false
+    },
+    manageDisputes: {
+      type: Boolean,
+      default: false
+    },
+    verifyUsers: {
+      type: Boolean,
+      default: false
+    },
+    viewAnalytics: {
+      type: Boolean,
+      default: false
+    },
+    managePayments: {
+      type: Boolean,
+      default: false
+    },
+    manageAPI: {
+      type: Boolean,
+      default: false
+    },
+    manageAdmins: {
+      type: Boolean,
+      default: false
+    },
+    manageFees: {
+      type: Boolean,
+      default: false
+    }
   },
   status: {
     type: String,
     enum: ['active', 'suspended'],
     default: 'active'
   },
+  lastActive: {
+    type: Date
+  },
   actionsCount: {
     type: Number,
     default: 0
-  },
-  lastActive: {
-    type: Date
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -56,40 +82,40 @@ const adminSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Hash password before saving
-adminSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+// ✅ FIXED: Hash password before saving
+adminSchema.pre('save', async function(next) {
+  // Only hash if password is modified
+  if (!this.isModified('password')) {
+    return next();
+  }
 
   try {
-    const salt = await bcrypt.genSalt(10);
+    console.log('🔐 Hashing admin password...');
+    const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
+    console.log('✅ Password hashed successfully');
     next();
   } catch (error) {
+    console.error('❌ Password hashing error:', error);
     next(error);
   }
 });
 
-// Compare passwords
-adminSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-// Master admin gets all permissions
-adminSchema.pre('save', function (next) {
-  if (this.role === 'master') {
-    this.permissions = {
-      viewTransactions: true,
-      manageDisputes: true,
-      verifyUsers: true,
-      viewAnalytics: true,
-      managePayments: true,
-      manageAPI: true,
-      manageAdmins: true,
-      manageFees: true,       // ← Automatically enabled for master
-      manageSettings: true    // ← Automatically enabled for master
-    };
+// ✅ FIXED: Compare passwords correctly
+adminSchema.methods.comparePassword = async function(candidatePassword) {
+  try {
+    console.log('🔍 Comparing passwords...');
+    console.log('📝 Candidate password length:', candidatePassword.length);
+    console.log('📝 Stored hash exists:', !!this.password);
+    
+    const isMatch = await bcrypt.compare(candidatePassword, this.password);
+    console.log('🔐 Password match result:', isMatch);
+    
+    return isMatch;
+  } catch (error) {
+    console.error('❌ Password comparison error:', error);
+    return false;
   }
-  next();
-});
+};
 
 module.exports = mongoose.model('Admin', adminSchema);

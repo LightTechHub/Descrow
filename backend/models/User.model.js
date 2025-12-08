@@ -33,6 +33,84 @@ const userSchema = new mongoose.Schema({
     default: 'free'
   },
   
+  // ✅ FIXED: Email verification (primary gate)
+  verified: {
+    type: Boolean,
+    default: false
+  },
+  verifiedAt: {
+    type: Date
+  },
+  
+  // ✅ FIXED: KYC verification (secondary gate)
+  isKYCVerified: {
+    type: Boolean,
+    default: false
+  },
+  
+  // ✅ FIXED: Simplified KYC Status object
+  kycStatus: {
+    status: {
+      type: String,
+      enum: ['unverified', 'pending', 'under_review', 'approved', 'rejected', 'resubmission_required'],
+      default: 'unverified'
+    },
+    tier: {
+      type: String,
+      enum: ['basic', 'advanced', 'premium'],
+      default: 'basic'
+    },
+    submittedAt: Date,
+    reviewedAt: Date,
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin'
+    },
+    rejectionReason: String,
+    resubmissionAllowed: {
+      type: Boolean,
+      default: true
+    },
+    documents: [{
+      type: {
+        type: String,
+        enum: ['id_front', 'id_back', 'proof_of_address', 'selfie', 'business_registration', 'tax_certificate']
+      },
+      url: String,
+      uploadedAt: {
+        type: Date,
+        default: Date.now
+      },
+      verified: {
+        type: Boolean,
+        default: false
+      }
+    }],
+    personalInfo: {
+      dateOfBirth: Date,
+      nationality: String,
+      idNumber: String,
+      idType: {
+        type: String,
+        enum: ['passport', 'drivers_license', 'national_id']
+      },
+      address: {
+        street: String,
+        city: String,
+        state: String,
+        country: String,
+        postalCode: String
+      }
+    },
+    businessInfo: {
+      companyName: String,
+      registrationNumber: String,
+      taxId: String,
+      businessType: String,
+      website: String
+    }
+  },
+  
   apiAccess: {
     enabled: {
       type: Boolean,
@@ -48,17 +126,11 @@ const userSchema = new mongoose.Schema({
       select: false
     },
     createdAt: Date,
-    regeneratedAt: Date,
     lastUsedAt: Date,
-    revokedAt: Date,
     requestCount: {
       type: Number,
       default: 0
-    },
-    keyHistory: [{
-      apiKey: String,
-      revokedAt: Date
-    }]
+    }
   },
   
   subscription: {
@@ -88,223 +160,27 @@ const userSchema = new mongoose.Schema({
     }
   },
   
-  verified: {
-    type: Boolean,
-    default: false
-  },
-  
-  isEmailVerified: {
-    type: Boolean,
-    default: false
-  },
-  isPhoneVerified: {
-    type: Boolean,
-    default: false
-  },
-  isKYCVerified: {
-    type: Boolean,
-    default: false
-  },
-  
-  // ✅ FIXED: Enhanced KYC Status with proper defaults and validation
-  kycStatus: {
-    status: {
-      type: String,
-      enum: ['unverified', 'pending', 'under_review', 'approved', 'rejected', 'resubmission_required'],
-      default: 'unverified'
-    },
-    tier: {
-      type: String,
-      enum: ['basic', 'advanced', 'premium'],
-      default: 'basic'
-    },
-    submittedAt: {
-      type: Date,
-      default: null
-    },
-    reviewedAt: {
-      type: Date,
-      default: null
-    },
-    rejectionReason: {
-      type: String,
-      default: null
-    },
-    resubmissionAllowed: {
-      type: Boolean,
-      default: true
-    },
-    verificationId: {
-      type: String,
-      sparse: true,
-      default: null
-    },
-    documents: {
-      type: [{
-        type: {
-          type: String,
-          enum: ['id_front', 'id_back', 'proof_of_address', 'selfie', 'business_registration', 'tax_certificate']
-        },
-        url: String,
-        uploadedAt: {
-          type: Date,
-          default: Date.now
-        },
-        verified: {
-          type: Boolean,
-          default: false
-        }
-      }],
-      default: []
-    },
-    personalInfo: {
-      dateOfBirth: {
-        type: Date,
-        default: null
-      },
-      nationality: {
-        type: String,
-        default: null
-      },
-      idNumber: {
-        type: String,
-        default: null
-      },
-      idType: {
-        type: String,
-        enum: ['passport', 'drivers_license', 'national_id', null],
-        default: null
-      },
-      address: {
-        street: {
-          type: String,
-          default: null
-        },
-        city: {
-          type: String,
-          default: null
-        },
-        state: {
-          type: String,
-          default: null
-        },
-        country: {
-          type: String,
-          default: null
-        },
-        postalCode: {
-          type: String,
-          default: null
-        }
-      }
-    },
-    businessInfo: {
-      companyName: {
-        type: String,
-        default: null
-      },
-      registrationNumber: {
-        type: String,
-        default: null
-      },
-      taxId: {
-        type: String,
-        default: null
-      },
-      businessType: {
-        type: String,
-        default: null
-      },
-      website: {
-        type: String,
-        default: null
-      }
-    }
-  },
-  
   stats: {
-    totalTransactions: {
-      type: Number,
-      default: 0
-    },
-    totalSpent: {
-      type: Number,
-      default: 0
-    },
-    totalEarned: {
-      type: Number,
-      default: 0
-    },
-    completedEscrows: {
-      type: Number,
-      default: 0
-    },
-    cancelledEscrows: {
-      type: Number,
-      default: 0
-    },
-    
-    bankAccountsCount: {
-      type: Number,
-      default: 0
-    },
-    verifiedBankAccountsCount: {
-      type: Number,
-      default: 0
-    },
-    totalPayoutsReceived: {
-      type: Number,
-      default: 0
-    },
-    totalPayoutAmount: {
-      type: Number,
-      default: 0
-    },
-    lastPayoutAt: {
-      type: Date,
-      default: null
-    },
-    
-    totalLogins: {
-      type: Number,
-      default: 0
-    },
-    accountAgeDays: {
-      type: Number,
-      default: 0
-    },
-    responseRate: {
-      type: Number,
-      default: 0
-    },
-    averageCompletionTime: {
-      type: Number,
-      default: 0
-    }
+    totalTransactions: { type: Number, default: 0 },
+    totalSpent: { type: Number, default: 0 },
+    totalEarned: { type: Number, default: 0 },
+    completedEscrows: { type: Number, default: 0 },
+    cancelledEscrows: { type: Number, default: 0 },
+    bankAccountsCount: { type: Number, default: 0 },
+    verifiedBankAccountsCount: { type: Number, default: 0 },
+    totalPayoutsReceived: { type: Number, default: 0 },
+    totalPayoutAmount: { type: Number, default: 0 },
+    lastPayoutAt: Date,
+    totalLogins: { type: Number, default: 0 },
+    accountAgeDays: { type: Number, default: 0 }
   },
   
-  totalTransactions: {
-    type: Number,
-    default: 0
-  },
-  totalSpent: {
-    type: Number,
-    default: 0
-  },
-  totalEarned: {
-    type: Number,
-    default: 0
-  },
+  totalTransactions: { type: Number, default: 0 },
+  totalSpent: { type: Number, default: 0 },
+  totalEarned: { type: Number, default: 0 },
   
-  phone: {
-    type: String,
-    trim: true
-  },
-  
-  bio: {
-    type: String,
-    maxlength: 500
-  },
+  phone: { type: String, trim: true },
+  bio: { type: String, maxlength: 500 },
   
   address: {
     street: String,
@@ -326,32 +202,14 @@ const userSchema = new mongoose.Schema({
     industry: String
   },
   
-  profilePicture: {
-    type: String
-  },
+  profilePicture: String,
+  avatar: String,
   
-  avatar: {
-    type: String
-  },
+  twoFactorEnabled: { type: Boolean, default: false },
+  twoFactorSecret: { type: String, select: false },
   
-  twoFactorEnabled: {
-    type: Boolean,
-    default: false
-  },
-  
-  twoFactorSecret: {
-    type: String,
-    select: false
-  },
-  
-  lastLogin: {
-    type: Date
-  },
-  
-  isActive: {
-    type: Boolean,
-    default: true
-  },
+  lastLogin: Date,
+  isActive: { type: Boolean, default: true },
   
   status: {
     type: String,
@@ -362,10 +220,7 @@ const userSchema = new mongoose.Schema({
   deletedAt: Date,
   deletionReason: String,
   
-  hasBankAccount: {
-    type: Boolean,
-    default: false
-  },
+  hasBankAccount: { type: Boolean, default: false },
   
   primaryBankAccount: {
     type: mongoose.Schema.Types.ObjectId,
@@ -374,18 +229,9 @@ const userSchema = new mongoose.Schema({
   },
   
   escrowAccess: {
-    canCreateEscrow: {
-      type: Boolean,
-      default: true
-    },
-    canReceiveEscrow: {
-      type: Boolean,
-      default: true
-    },
-    maxActiveEscrows: {
-      type: Number,
-      default: 5
-    },
+    canCreateEscrow: { type: Boolean, default: true },
+    canReceiveEscrow: { type: Boolean, default: true },
+    maxActiveEscrows: { type: Number, default: 5 },
     restrictions: [{
       type: String,
       enum: ['amount_limit', 'currency_restriction', 'geographic_restriction']
@@ -414,18 +260,9 @@ const userSchema = new mongoose.Schema({
   },
   
   preferences: {
-    language: {
-      type: String,
-      default: 'en'
-    },
-    timezone: {
-      type: String,
-      default: 'UTC'
-    },
-    defaultCurrency: {
-      type: String,
-      default: 'USD'
-    },
+    language: { type: String, default: 'en' },
+    timezone: { type: String, default: 'UTC' },
+    defaultCurrency: { type: String, default: 'USD' },
     theme: {
       type: String,
       enum: ['light', 'dark', 'auto'],
@@ -438,58 +275,15 @@ const userSchema = new mongoose.Schema({
     description: String,
     ipAddress: String,
     userAgent: String,
-    timestamp: {
-      type: Date,
-      default: Date.now
-    },
+    timestamp: { type: Date, default: Date.now },
     metadata: mongoose.Schema.Types.Mixed
   }]
 }, {
   timestamps: true
 });
 
-// ✅ FIXED: Pre-save middleware to handle corrupted KYC data
+// ✅ FIXED: Pre-save middleware
 userSchema.pre('save', function(next) {
-  // Fix corrupted kycStatus data
-  if (this.kycStatus && typeof this.kycStatus === 'string') {
-    console.warn(`Fixing corrupted KYC data for user ${this.email}`);
-    this.kycStatus = {
-      status: this.kycStatus,
-      tier: 'basic',
-      submittedAt: null,
-      reviewedAt: null,
-      rejectionReason: null,
-      resubmissionAllowed: true,
-      verificationId: null,
-      documents: [],
-      personalInfo: {
-        dateOfBirth: null,
-        nationality: null,
-        idNumber: null,
-        idType: null,
-        address: {
-          street: null,
-          city: null,
-          state: null,
-          country: null,
-          postalCode: null
-        }
-      },
-      businessInfo: {
-        companyName: null,
-        registrationNumber: null,
-        taxId: null,
-        businessType: null,
-        website: null
-      }
-    };
-  }
-
-  // Ensure kycStatus.documents is an array
-  if (this.kycStatus && !Array.isArray(this.kycStatus.documents)) {
-    this.kycStatus.documents = [];
-  }
-
   // Sync isKYCVerified with kycStatus.status
   if (this.kycStatus && this.kycStatus.status === 'approved') {
     this.isKYCVerified = true;
@@ -497,7 +291,7 @@ userSchema.pre('save', function(next) {
     this.isKYCVerified = false;
   }
 
-  // Reset monthly transaction count if it's a new month
+  // Reset monthly transaction count if new month
   const now = new Date();
   const lastReset = this.monthlyUsage?.lastResetDate;
   
@@ -506,7 +300,7 @@ userSchema.pre('save', function(next) {
     this.monthlyUsage.lastResetDate = now;
   }
   
-  // Update account age in days
+  // Update account age
   if (this.createdAt) {
     const ageInDays = Math.floor((now - this.createdAt) / (1000 * 60 * 60 * 24));
     this.stats.accountAgeDays = ageInDays;
@@ -533,47 +327,61 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Check if user can access escrow features
+// ✅ FIXED: Check escrow access with proper verification flow
 userSchema.methods.canAccessEscrow = function() {
-  // Check KYC verification
-  if (!this.isKYCVerified) {
+  // Step 1: Check email verification FIRST
+  if (!this.verified) {
+    return {
+      allowed: false,
+      reason: 'Email verification required',
+      action: 'verify_email',
+      required: true,
+      step: 1
+    };
+  }
+  
+  // Step 2: Check KYC verification
+  if (!this.isKYCVerified || this.kycStatus.status !== 'approved') {
     return {
       allowed: false,
       reason: 'KYC verification required',
       action: 'complete_kyc',
-      required: true
+      required: true,
+      step: 2,
+      kycStatus: this.kycStatus.status
     };
   }
   
-  // Check account status
+  // Step 3: Check account status
   if (this.status !== 'active') {
     return {
       allowed: false,
       reason: 'Account is suspended or deleted',
-      action: 'contact_support'
+      action: 'contact_support',
+      step: 3
     };
   }
   
-  // Check escrow access restrictions
+  // Step 4: Check escrow restrictions
   if (!this.escrowAccess.canCreateEscrow) {
     return {
       allowed: false,
       reason: 'Escrow creation is temporarily restricted',
-      action: 'contact_support'
+      action: 'contact_support',
+      step: 4
     };
   }
   
   return { allowed: true };
 };
 
-// Check if user can receive payouts
+// ✅ Check if user can receive payouts
 userSchema.methods.canReceivePayouts = function() {
   const escrowAccess = this.canAccessEscrow();
   if (!escrowAccess.allowed) {
     return escrowAccess;
   }
   
-  // Check if user has verified bank accounts
   if (this.stats.verifiedBankAccountsCount === 0) {
     return {
       allowed: false,
@@ -591,225 +399,82 @@ userSchema.methods.getTierLimits = function() {
   const limits = {
     free: {
       name: 'Free',
-      maxTransactionAmount: {
-        NGN: 50000,
-        USD: 500,
-        EUR: 450,
-        GBP: 400
-      },
+      maxTransactionAmount: { NGN: 50000, USD: 500, EUR: 450, GBP: 400 },
       maxTransactionsPerMonth: 5,
-      monthlyCost: {
-        NGN: 0,
-        USD: 0,
-        EUR: 0,
-        GBP: 0
-      },
+      monthlyCost: { NGN: 0, USD: 0, EUR: 0, GBP: 0 },
       fees: {
-        NGN: {
-          buyer: 0.03,
-          seller: 0.03
-        },
-        USD: {
-          buyer: 0.035,
-          seller: 0.035
-        },
-        EUR: {
-          buyer: 0.035,
-          seller: 0.035
-        },
-        GBP: {
-          buyer: 0.035,
-          seller: 0.035
-        },
-        crypto: {
-          buyer: 0.0175,
-          seller: 0.0175
-        }
+        NGN: { buyer: 0.03, seller: 0.03 },
+        USD: { buyer: 0.035, seller: 0.035 },
+        EUR: { buyer: 0.035, seller: 0.035 },
+        GBP: { buyer: 0.035, seller: 0.035 },
+        crypto: { buyer: 0.0175, seller: 0.0175 }
       },
-      features: ['Basic processing', 'Email support', '5 transactions/month', 'KYC required for escrow']
+      features: ['Basic processing', 'Email support', '5 transactions/month', 'KYC required']
     },
-    
     starter: {
       name: 'Starter',
-      maxTransactionAmount: {
-        NGN: 50000,
-        USD: 500,
-        EUR: 450,
-        GBP: 400
-      },
+      maxTransactionAmount: { NGN: 50000, USD: 500, EUR: 450, GBP: 400 },
       maxTransactionsPerMonth: 10,
-      monthlyCost: {
-        NGN: 0,
-        USD: 0,
-        EUR: 0,
-        GBP: 0
-      },
+      monthlyCost: { NGN: 0, USD: 0, EUR: 0, GBP: 0 },
       fees: {
-        NGN: {
-          buyer: 0.03,
-          seller: 0.03
-        },
-        USD: {
-          buyer: 0.035,
-          seller: 0.035
-        },
-        EUR: {
-          buyer: 0.035,
-          seller: 0.035
-        },
-        GBP: {
-          buyer: 0.035,
-          seller: 0.035
-        },
-        crypto: {
-          buyer: 0.0175,
-          seller: 0.0175
-        }
+        NGN: { buyer: 0.03, seller: 0.03 },
+        USD: { buyer: 0.035, seller: 0.035 },
+        EUR: { buyer: 0.035, seller: 0.035 },
+        GBP: { buyer: 0.035, seller: 0.035 },
+        crypto: { buyer: 0.0175, seller: 0.0175 }
       },
-      features: ['Standard processing', 'Basic support', '10 transactions/month', 'Multi-currency support']
+      features: ['Standard processing', 'Basic support', '10 transactions/month', 'Multi-currency']
     },
-    
     growth: {
       name: 'Growth',
-      maxTransactionAmount: {
-        NGN: 500000,
-        USD: 5000,
-        EUR: 4500,
-        GBP: 4000
-      },
+      maxTransactionAmount: { NGN: 500000, USD: 5000, EUR: 4500, GBP: 4000 },
       maxTransactionsPerMonth: 50,
-      monthlyCost: {
-        NGN: 5000,
-        USD: 10,
-        EUR: 9,
-        GBP: 8
-      },
+      monthlyCost: { NGN: 5000, USD: 10, EUR: 9, GBP: 8 },
       fees: {
-        NGN: {
-          buyer: 0.025,
-          seller: 0.025
-        },
-        USD: {
-          buyer: 0.03,
-          seller: 0.03
-        },
-        EUR: {
-          buyer: 0.03,
-          seller: 0.03
-        },
-        GBP: {
-          buyer: 0.03,
-          seller: 0.03
-        },
-        crypto: {
-          buyer: 0.0125,
-          seller: 0.0125
-        }
+        NGN: { buyer: 0.025, seller: 0.025 },
+        USD: { buyer: 0.03, seller: 0.03 },
+        EUR: { buyer: 0.03, seller: 0.03 },
+        GBP: { buyer: 0.03, seller: 0.03 },
+        crypto: { buyer: 0.0125, seller: 0.0125 }
       },
-      features: ['Fast processing', 'Priority support', '50 transactions/month', 'Advanced KYC options']
+      features: ['Fast processing', 'Priority support', '50 transactions/month', 'Advanced KYC']
     },
-    
     enterprise: {
       name: 'Enterprise',
-      maxTransactionAmount: {
-        NGN: -1,
-        USD: -1,
-        EUR: -1,
-        GBP: -1
-      },
+      maxTransactionAmount: { NGN: -1, USD: -1, EUR: -1, GBP: -1 },
       maxTransactionsPerMonth: -1,
-      monthlyCost: {
-        NGN: 15000,
-        USD: 30,
-        EUR: 27,
-        GBP: 24
-      },
+      monthlyCost: { NGN: 15000, USD: 30, EUR: 27, GBP: 24 },
       fees: {
-        NGN: {
-          buyer: 0.0225,
-          seller: 0.0225
-        },
-        USD: {
-          buyer: 0.0275,
-          seller: 0.0275
-        },
-        EUR: {
-          buyer: 0.0275,
-          seller: 0.0275
-        },
-        GBP: {
-          buyer: 0.0275,
-          seller: 0.0275
-        },
-        crypto: {
-          buyer: 0.009,
-          seller: 0.009
-        }
+        NGN: { buyer: 0.0225, seller: 0.0225 },
+        USD: { buyer: 0.0275, seller: 0.0275 },
+        EUR: { buyer: 0.0275, seller: 0.0275 },
+        GBP: { buyer: 0.0275, seller: 0.0275 },
+        crypto: { buyer: 0.009, seller: 0.009 }
       },
-      features: ['Instant processing', 'Premium support', 'Unlimited transactions', 'Dedicated manager', 'Custom solutions']
+      features: ['Instant processing', 'Premium support', 'Unlimited transactions', 'Dedicated manager']
     },
-    
     api: {
       name: 'API Tier',
-      maxTransactionAmount: {
-        NGN: -1,
-        USD: -1,
-        EUR: -1,
-        GBP: -1
-      },
+      maxTransactionAmount: { NGN: -1, USD: -1, EUR: -1, GBP: -1 },
       maxTransactionsPerMonth: -1,
-      monthlyCost: {
-        NGN: 50000,
-        USD: 100,
-        EUR: 90,
-        GBP: 80
-      },
-      setupFee: {
-        NGN: 100000,
-        USD: 200,
-        EUR: 180,
-        GBP: 160
-      },
+      monthlyCost: { NGN: 50000, USD: 100, EUR: 90, GBP: 80 },
+      setupFee: { NGN: 100000, USD: 200, EUR: 180, GBP: 160 },
       fees: {
-        NGN: {
-          buyer: 0.02,
-          seller: 0.02
-        },
-        USD: {
-          buyer: 0.025,
-          seller: 0.025
-        },
-        EUR: {
-          buyer: 0.025,
-          seller: 0.025
-        },
-        GBP: {
-          buyer: 0.025,
-          seller: 0.025
-        },
-        crypto: {
-          buyer: 0.0075,
-          seller: 0.0075
-        }
+        NGN: { buyer: 0.02, seller: 0.02 },
+        USD: { buyer: 0.025, seller: 0.025 },
+        EUR: { buyer: 0.025, seller: 0.025 },
+        GBP: { buyer: 0.025, seller: 0.025 },
+        crypto: { buyer: 0.0075, seller: 0.0075 }
       },
-      features: [
-        'Full API access',
-        'Webhook support',
-        'White-label option',
-        'Custom integration',
-        'Dedicated account manager',
-        'Priority processing',
-        'Bulk operations'
-      ]
+      features: ['Full API access', 'Webhook support', 'White-label', 'Custom integration', 'Dedicated manager']
     }
   };
   
   return limits[this.tier];
 };
 
-// Check if user can create transaction with KYC verification
+// Check if user can create transaction
 userSchema.methods.canCreateTransaction = function(amount, currency) {
-  // Check KYC first
   const kycCheck = this.canAccessEscrow();
   if (!kycCheck.allowed) {
     return kycCheck;
@@ -817,7 +482,6 @@ userSchema.methods.canCreateTransaction = function(amount, currency) {
   
   const limits = this.getTierLimits();
   
-  // Check transaction count limit
   if (limits.maxTransactionsPerMonth !== -1 && 
       this.monthlyUsage.transactionCount >= limits.maxTransactionsPerMonth) {
     return {
@@ -829,7 +493,6 @@ userSchema.methods.canCreateTransaction = function(amount, currency) {
     };
   }
   
-  // Check transaction amount limit
   const maxAmount = limits.maxTransactionAmount[currency];
   if (maxAmount !== -1 && amount > maxAmount) {
     return {
@@ -844,7 +507,7 @@ userSchema.methods.canCreateTransaction = function(amount, currency) {
   return { allowed: true };
 };
 
-// Get fees for specific transaction
+// Get fees for transaction
 userSchema.methods.getFeesForTransaction = function(amount, currency) {
   const limits = this.getTierLimits();
   const fees = limits.fees[currency] || limits.fees.USD;
@@ -863,7 +526,7 @@ userSchema.methods.getFeesForTransaction = function(amount, currency) {
   };
 };
 
-// Add audit log entry
+// Add audit log
 userSchema.methods.addAuditLog = function(action, description, ipAddress = '', userAgent = '', metadata = {}) {
   this.auditLog.push({
     action,
@@ -873,7 +536,6 @@ userSchema.methods.addAuditLog = function(action, description, ipAddress = '', u
     metadata
   });
   
-  // Keep only last 100 audit entries
   if (this.auditLog.length > 100) {
     this.auditLog = this.auditLog.slice(-100);
   }
@@ -894,22 +556,6 @@ userSchema.methods.updateLoginStats = function(ipAddress = '', userAgent = '') {
   );
   
   return this.save();
-};
-
-// Check if user needs to upgrade tier
-userSchema.methods.needsTierUpgrade = function() {
-  const limits = this.getTierLimits();
-  
-  if (limits.maxTransactionsPerMonth !== -1 && 
-      this.monthlyUsage.transactionCount >= limits.maxTransactionsPerMonth) {
-    return {
-      needed: true,
-      reason: 'transaction_limit',
-      currentTier: this.tier
-    };
-  }
-  
-  return { needed: false };
 };
 
 module.exports = mongoose.model('User', userSchema);

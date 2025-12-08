@@ -142,10 +142,10 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// Upload KYC Documents
+// ✅ FIXED: Upload KYC Documents
 exports.uploadKYC = async (req, res) => {
   try {
-    const { documentUrls } = req.body;
+    const { personalInfo, businessInfo, tier } = req.body;
 
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -155,20 +155,45 @@ exports.uploadKYC = async (req, res) => {
       });
     }
 
-    // Add documents
-    user.kycDocuments = documentUrls;
-    user.kycStatus = 'pending';
+    // ✅ Check if email is verified first
+    if (!user.verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify your email address before submitting KYC documents',
+        requiresEmailVerification: true
+      });
+    }
+
+    // ✅ Check if already approved
+    if (user.kycStatus.status === 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Your KYC is already approved'
+      });
+    }
+
+    // ✅ Update KYC information
+    user.kycStatus.status = 'pending';
+    user.kycStatus.tier = tier || 'basic';
+    user.kycStatus.submittedAt = new Date();
+    user.kycStatus.personalInfo = personalInfo;
+    user.kycStatus.businessInfo = businessInfo;
+    
+    // ✅ Mark as modified
+    user.markModified('kycStatus');
+    
     await user.save();
 
     // Notify admin
-    console.log(`Admin notification: KYC documents uploaded by user ${user._id}`);
+    console.log(`✅ KYC documents submitted by user ${user._id} (${user.email})`);
 
     res.status(200).json({
       success: true,
-      message: 'KYC documents uploaded successfully. Verification in progress.',
+      message: 'KYC documents submitted successfully. Admin review in progress.',
       data: {
-        kycStatus: user.kycStatus,
-        kycDocuments: user.kycDocuments
+        kycStatus: user.kycStatus.status,
+        verified: user.verified,
+        isKYCVerified: user.isKYCVerified
       }
     });
 

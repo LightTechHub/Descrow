@@ -3,49 +3,53 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User.model');
 const diditService = require('../services/didit.service');
-const emailService = require('../services/email.service');
 
 /**
  * Didit Webhook Handler
  * POST /api/webhooks/didit
  */
-router.post('/didit', express.raw({ type: 'application/json' }), async (req, res) => {
+router.post('/didit', express.json({ 
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}), async (req, res) => {
   try {
-    const signature = req.headers['x-didit-signature'];
-    const payload = JSON.parse(req.body.toString());
+    const signature = req.headers['x-didit-signature'] || req.headers['x-webhook-signature'];
+    
+    if (!signature) {
+      console.error('❌ Missing Didit webhook signature');
+      return res.status(401).json({ success: false, message: 'Missing signature' });
+    }
 
     // Verify webhook signature
-    if (!diditService.verifyWebhookSignature(payload, signature)) {
+    const isValid = diditService.verifyWebhookSignature(req.rawBody, signature);
+    
+    if (!isValid) {
       console.error('❌ Invalid Didit webhook signature');
       return res.status(401).json({ success: false, message: 'Invalid signature' });
     }
 
+    const payload = req.body;
+    console.log('✅ Didit webhook received:', payload.event_type);
+
     // Process the event
     const event = await diditService.processWebhookEvent(payload);
-
-    console.log('✅ Didit webhook event:', event.type);
 
     // Handle verification completed
     if (event.type === 'completed' && event.verified) {
       const user = await User.findById(event.userId);
       
       if (user) {
-        // Update user KYC status
         user.kycStatus.status = 'approved';
         user.kycStatus.verifiedAt = new Date();
-        user.kycStatus.verificationResult = event.data;
+        user.kycStatus.verificationResult = event.verificationData;
         user.isKYCVerified = true;
         user.markModified('kycStatus');
         await user.save();
 
         console.log(`✅ KYC auto-approved for user ${user.email} via Didit`);
 
-        // Send approval email
-        try {
-          await emailService.sendKYCApprovedEmail(user.email, user.name);
-        } catch (emailError) {
-          console.error('Failed to send KYC approval email:', emailError);
-        }
+        // TODO: Send approval email
       }
     }
 
@@ -55,19 +59,14 @@ router.post('/didit', express.raw({ type: 'application/json' }), async (req, res
       
       if (user) {
         user.kycStatus.status = 'rejected';
-        user.kycStatus.rejectionReason = event.reason || 'Verification failed';
+        user.kycStatus.rejectionReason = event.reason;
         user.isKYCVerified = false;
         user.markModified('kycStatus');
         await user.save();
 
         console.log(`❌ KYC rejected for user ${user.email}: ${event.reason}`);
 
-        // Send rejection email
-        try {
-          await emailService.sendKYCRejectedEmail(user.email, user.name, event.reason);
-        } catch (emailError) {
-          console.error('Failed to send KYC rejection email:', emailError);
-        }
+        // TODO: Send rejection email
       }
     }
 
@@ -81,6 +80,19 @@ router.post('/didit', express.raw({ type: 'application/json' }), async (req, res
         await user.save();
 
         console.log(`⏰ KYC session expired for user ${user.email}`);
+      }
+    }
+
+    // Handle in progress
+    if (event.type === 'in_progress') {
+      const user = await User.findById(event.userId);
+      
+      if (user) {
+        user.kycStatus.status = 'in_progress';
+        user.markModified('kycStatus');
+        await user.save();
+
+        console.log(`🔄 KYC in progress for user ${user.email}`);
       }
     }
 

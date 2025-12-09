@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema({
     default: 'free'
   },
   
-  // ✅ FIXED: Email verification (primary gate)
+  // ✅ Email verification (primary gate)
   verified: {
     type: Boolean,
     default: false
@@ -42,74 +42,57 @@ const userSchema = new mongoose.Schema({
     type: Date
   },
   
-  // ✅ FIXED: KYC verification (secondary gate)
+  // ✅ KYC verification (secondary gate)
   isKYCVerified: {
     type: Boolean,
     default: false
   },
   
-  // ✅ FIXED: Simplified KYC Status object
-kycStatus: {
-  status: {
-    type: String,
-    enum: ['unverified', 'pending', 'in_progress', 'approved', 'rejected', 'expired'],
-    default: 'unverified'
-  },
-  // ✅ ADD DIDIT FIELDS
-  diditSessionId: {
-    type: String,
-    sparse: true
-  },
-  diditVerificationUrl: String,
-  diditSessionExpiresAt: Date,
-  verifiedAt: Date,
-  verificationResult: {
-    identity: {
-      verified: Boolean,
-      firstName: String,
-      lastName: String,
-      dateOfBirth: String,
-      nationality: String
-    },
-    document: {
-      verified: Boolean,
-      type: String, // passport, drivers_license, national_id
-      number: String,
-      country: String,
-      expiryDate: String
-    },
-    liveness: {
-      verified: Boolean,
-      score: Number
-    },
-    address: {
-      verified: Boolean,
-      street: String,
-      city: String,
-      state: String,
-      country: String,
-      postalCode: String
-    }
-  },
-  rejectionReason: String,
-  tier: {
-    type: String,
-    enum: ['basic', 'advanced', 'premium'],
-    default: 'basic'
-  },
-  // ... rest of your existing fields
-}
+  // ✅ SINGLE, MERGED KYC Status object
   kycStatus: {
     status: {
       type: String,
-      enum: ['unverified', 'pending', 'under_review', 'approved', 'rejected', 'resubmission_required'],
+      enum: ['unverified', 'pending', 'in_progress', 'approved', 'rejected', 'expired'],
       default: 'unverified'
     },
-    tier: {
+    // ✅ DIDIT Integration Fields
+    diditSessionId: {
       type: String,
-      enum: ['basic', 'advanced', 'premium'],
-      default: 'basic'
+      sparse: true
     },
+    diditVerificationUrl: String,
+    diditSessionExpiresAt: Date,
+    // ✅ Verification Details & Results
+    verifiedAt: Date,
+    verificationResult: {
+      identity: {
+        verified: Boolean,
+        firstName: String,
+        lastName: String,
+        dateOfBirth: String,
+        nationality: String
+      },
+      document: {
+        verified: Boolean,
+        type: String, // e.g., passport, drivers_license, national_id
+        number: String,
+        country: String,
+        expiryDate: String
+      },
+      liveness: {
+        verified: Boolean,
+        score: Number
+      },
+      address: {
+        verified: Boolean,
+        street: String,
+        city: String,
+        state: String,
+        country: String,
+        postalCode: String
+      }
+    },
+    // ✅ KYC Processing & Admin Fields
     submittedAt: Date,
     reviewedAt: Date,
     approvedBy: {
@@ -117,10 +100,16 @@ kycStatus: {
       ref: 'Admin'
     },
     rejectionReason: String,
+    tier: {
+      type: String,
+      enum: ['basic', 'advanced', 'premium'],
+      default: 'basic'
+    },
     resubmissionAllowed: {
       type: Boolean,
       default: true
     },
+    // ✅ Document Uploads
     documents: [{
       type: {
         type: String,
@@ -136,6 +125,7 @@ kycStatus: {
         default: false
       }
     }],
+    // ✅ Personal & Business Information
     personalInfo: {
       dateOfBirth: Date,
       nationality: String,
@@ -246,6 +236,7 @@ kycStatus: {
     website: String
   },
   
+  // Top-level business info (kept separate from KYC business info)
   businessInfo: {
     companyName: String,
     taxId: String,
@@ -332,7 +323,7 @@ kycStatus: {
   timestamps: true
 });
 
-// ✅ FIXED: Pre-save middleware
+// ✅ Pre-save middleware to sync KYC status
 userSchema.pre('save', function(next) {
   // Sync isKYCVerified with kycStatus.status
   if (this.kycStatus && this.kycStatus.status === 'approved') {
@@ -377,7 +368,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// ✅ FIXED: Check escrow access with proper verification flow
+// ✅ Check escrow access with proper verification flow
 userSchema.methods.canAccessEscrow = function() {
   // Step 1: Check email verification FIRST
   if (!this.verified) {

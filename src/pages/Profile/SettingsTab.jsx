@@ -67,7 +67,7 @@ const SettingsTab = ({ user, onUpdate }) => {
       }
     } catch (error) {
       console.error('Failed to fetch notification settings:', error);
-      // ✅ Set default if error
+      // ✅ Set default if error (silently fail)
       setNotificationSettings({
         email: {
           escrowUpdates: true,
@@ -173,7 +173,7 @@ const SettingsTab = ({ user, onUpdate }) => {
             )}
           </div>
           <div>
-            <h​​​​​​​​​​​​​​​​<h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               Appearance
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -333,6 +333,8 @@ const SettingsTab = ({ user, onUpdate }) => {
               <option value="es">Español</option>
               <option value="fr">Français</option>
               <option value="de">Deutsch</option>
+              <option value="pt">Português</option>
+              <option value="ar">العربية</option>
             </select>
           </div>
 
@@ -353,8 +355,12 @@ const SettingsTab = ({ user, onUpdate }) => {
               <option value="Europe/London">London (GMT)</option>
               <option value="Europe/Paris">Paris (CET)</option>
               <option value="Africa/Lagos">Lagos (WAT)</option>
+              <option value="Africa/Johannesburg">Johannesburg (SAST)</option>
               <option value="Asia/Dubai">Dubai (GST)</option>
               <option value="Asia/Tokyo">Tokyo (JST)</option>
+              <option value="Asia/Shanghai">Shanghai (CST)</option>
+              <option value="Asia/Kolkata">India (IST)</option>
+              <option value="Australia/Sydney">Sydney (AEDT)</option>
             </select>
           </div>
 
@@ -372,8 +378,15 @@ const SettingsTab = ({ user, onUpdate }) => {
               <option value="EUR">EUR - Euro</option>
               <option value="GBP">GBP - British Pound</option>
               <option value="NGN">NGN - Nigerian Naira</option>
+              <option value="ZAR">ZAR - South African Rand</option>
+              <option value="KES">KES - Kenyan Shilling</option>
+              <option value="GHS">GHS - Ghanaian Cedi</option>
               <option value="JPY">JPY - Japanese Yen</option>
+              <option value="CNY">CNY - Chinese Yuan</option>
               <option value="AED">AED - UAE Dirham</option>
+              <option value="CAD">CAD - Canadian Dollar</option>
+              <option value="AUD">AUD - Australian Dollar</option>
+              <option value="INR">INR - Indian Rupee</option>
             </select>
           </div>
         </div>
@@ -407,6 +420,7 @@ const SettingsTab = ({ user, onUpdate }) => {
                     <li>• Your profile and data will be permanently deleted</li>
                     <li>• You will lose access to all messages and history</li>
                     <li>• Any pending transactions will be cancelled</li>
+                    <li>• Your bank accounts and payout information will be removed</li>
                   </ul>
                 </div>
               </div>
@@ -443,6 +457,7 @@ const SettingsTab = ({ user, onUpdate }) => {
                   value={deleteConfirmation.password}
                   onChange={(e) => setDeleteConfirmation({ ...deleteConfirmation, password: e.target.value })}
                   required
+                  placeholder="Your current password"
                   className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 outline-none transition text-gray-900 dark:text-white"
                 />
                 <button
@@ -487,11 +502,11 @@ const SettingsTab = ({ user, onUpdate }) => {
               <button
                 type="submit"
                 disabled={loading || deleteConfirmation.confirmText !== 'DELETE'}
-                className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <Loader className="w-5 h-5 animate-spin inline mr-2" />
+                    <Loader className="w-5 h-5 animate-spin" />
                     Deleting Account...
                   </>
                 ) : (

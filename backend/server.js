@@ -15,6 +15,7 @@ const { startSubscriptionCron } = require('./jobs/subscription.cron');
 
 // ==================== IMPORT ROUTES ====================
 const authRoutes = require('./routes/auth.routes');
+const webhookRoutes = require('./routes/webhook.routes');
 const userRoutes = require('./routes/user.routes');
 const profileRoutes = require('./routes/profile.routes');
 const securityRoutes = require('./routes/security.routes');
@@ -499,6 +500,9 @@ app.use('/api/business', businessRoutes);
 
 // Bank Account Management
 app.use('/api/bank', bankAccountRoutes);
+
+// didit verification
+app.use('/api/webhooks', webhookRoutes);
 
 // Public API Routes (v1)
 app.use('/api/v1', apiV1Routes);

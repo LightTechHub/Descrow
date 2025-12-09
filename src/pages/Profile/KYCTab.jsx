@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CheckCircle, XCircle, Clock, Loader, AlertCircle, Mail, ExternalLink } from 'lucide-react';
 import profileService from 'services/profileService';
 import toast from 'react-hot-toast';
@@ -7,9 +7,15 @@ const KYCTab = ({ user, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [kycStatus, setKycStatus] = useState(null);
   const [verificationUrl, setVerificationUrl] = useState(null);
+  
+  // ✅ Prevent duplicate fetches
+  const hasFetchedKYC = useRef(false);
 
   useEffect(() => {
-    fetchKYCStatus();
+    if (!hasFetchedKYC.current) {
+      hasFetchedKYC.current = true;
+      fetchKYCStatus();
+    }
   }, []);
 
   const fetchKYCStatus = async () => {
@@ -55,11 +61,13 @@ const KYCTab = ({ user, onUpdate }) => {
           if (response.data.status === 'approved') {
             clearInterval(interval);
             toast.success('KYC Verification completed!');
+            hasFetchedKYC.current = false; // ✅ Allow refetch
             fetchKYCStatus();
             onUpdate && onUpdate();
           } else if (response.data.status === 'rejected') {
             clearInterval(interval);
             toast.error('KYC Verification failed');
+            hasFetchedKYC.current = false; // ✅ Allow refetch
             fetchKYCStatus();
           }
         }

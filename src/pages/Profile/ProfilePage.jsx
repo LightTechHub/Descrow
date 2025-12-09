@@ -1,5 +1,5 @@
 // File: src/pages/Profile/ProfilePage.jsx - COMPLETE FIXED VERSION
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   User, 
@@ -28,6 +28,9 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState(null);
+  
+  // ✅ Prevent duplicate API calls
+  const hasFetched = useRef(false);
 
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
@@ -41,9 +44,13 @@ const ProfilePage = () => {
       setActiveTab(tab);
     }
 
-    fetchProfile();
-    fetchKYCStatus();
-  }, []);
+    // ✅ Only fetch once on mount
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchProfile();
+      fetchKYCStatus();
+    }
+  }, [navigate]); // ✅ Removed searchParams from dependencies
 
   const fetchProfile = async () => {
     try {
@@ -74,7 +81,7 @@ const ProfilePage = () => {
   };
 
   const handleTabChange = (tab) => {
-    // ✅ FIXED: Only block bank accounts if KYC not approved
+    // ✅ Only block bank accounts if not fully verified
     if (tab === 'bank-accounts') {
       if (!user?.verified) {
         toast.error('Please verify your email first');
@@ -91,6 +98,8 @@ const ProfilePage = () => {
   };
 
   const handleProfileUpdate = () => {
+    // ✅ Reset fetch flag to allow manual refresh
+    hasFetched.current = false;
     fetchProfile();
     fetchKYCStatus();
   };
@@ -173,7 +182,7 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* ✅ FIXED: Email Verification Warning (First Priority) */}
+          {/* ✅ Email Verification Warning (First Priority) */}
           {!isEmailVerified && (
             <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
               <div className="flex items-center gap-3">
@@ -186,12 +195,6 @@ const ProfilePage = () => {
                     Check your inbox for the verification email we sent you. You must verify your email before you can complete KYC verification.
                   </p>
                 </div>
-                <button
-                  onClick={() => {/* TODO: Resend verification email */}}
-                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition whitespace-nowrap"
-                >
-                  Resend Email
-                </button>
               </div>
             </div>
           )}
@@ -238,7 +241,7 @@ const ProfilePage = () => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 
-                // ✅ FIXED: Disable logic
+                // ✅ Disable logic
                 let isDisabled = false;
                 let disabledReason = '';
                 

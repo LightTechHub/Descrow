@@ -24,14 +24,10 @@ router.put('/change-password', userController.changePassword);
 // ======================= KYC ==========================
 // ======================================================
 
-router.post(
-  '/upload-kyc',
-  uploadMultiple('documents', 5),
-  (req, res) => {
-    req.body.documentUrls = req.fileUrls || [];
-    userController.uploadKYC(req, res);
-  }
-);
+
+// didit route
+router.post('/kyc/start', userController.startKYCVerification);
+router.get('/kyc/status', userController.checkKYCStatus);
 
 // ======================================================
 // ================== TIER UPGRADE ======================

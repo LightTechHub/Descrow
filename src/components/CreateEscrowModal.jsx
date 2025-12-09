@@ -6,35 +6,168 @@ import toast from 'react-hot-toast';
 import { verifyService } from '../services/verifyService';
 
 const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
+  // 1. ALL HOOKS CALLS AT THE TOP - No conditions allowed
+  const { 
+    register, 
+    handleSubmit, 
+    watch, 
+    control, 
+    setError, 
+    formState: { errors } 
+  } = useForm({
+    defaultValues: {
+      title: '',
+      description: '',
+      amount: '',
+      currency: 'USD',
+      sellerEmail: '',
+      category: 'other',
+      deliveryMethod: 'physical',
+      attachments: []
+    }
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [feeLoading, setFeeLoading] = useState(false);
+  const [feeBreakdown, setFeeBreakdown] = useState(null);
+  const [filePreviews, setFilePreviews] = useState([]);
+  const [resending, setResending] = useState(false); // State for resending verification
+
   // ✅ Check verification status
   const isEmailVerified = user?.verified;
   const isKYCVerified = user?.isKYCVerified;
   const canCreateEscrow = isEmailVerified && isKYCVerified;
   
-  // ✅ State for resending verification
-  const [resending, setResending] = useState(false);
+  // Currency symbols mapping
+  const currencySymbols = {
+    USD: '$',
+    NGN: '₦',
+    EUR: '€',
+    GBP: '£',
+    CAD: 'C$',
+    AUD: 'A$',
+    KES: 'KSh',
+    GHS: 'GH₵',
+    ZAR: 'R',
+    XOF: 'CFA',
+    XAF: 'FCFA'
+  };
 
-  // ✅ Show verification warning if not fully verified
-  if (!canCreateEscrow) {
-    const handleResendVerification = async () => {
-      try {
-        setResending(true);
-        const response = await verifyService.resendVerificationEmail(user.email);
-        
-        if (response.success) {
-          toast.success('Verification email sent! Check your inbox.', {
-            duration: 5000,
-            icon: '📧'
-          });
-        }
-      } catch (error) {
-        console.error('Resend verification error:', error);
-        toast.error('Failed to send verification email. Please try again.');
-      } finally {
-        setResending(false);
+  const currencies = [
+    { code: 'USD', name: 'US Dollar', symbol: '$' },
+    { code: 'NGN', name: 'Nigerian Naira', symbol: '₦' },
+    { code: 'EUR', name: 'Euro', symbol: '€' },
+    { code: 'GBP', name: 'British Pound', symbol: '£' },
+    { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$' },
+    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
+    { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh' },
+    { code: 'GHS', name: 'Ghanaian Cedi', symbol: 'GH₵' },
+    { code: 'ZAR', name: 'South African Rand', symbol: 'R' },
+    { code: 'XOF', name: 'West African CFA', symbol: 'CFA' },
+    { code: 'XAF', name: 'Central African CFA', symbol: 'FCFA' }
+  ];
+
+  // Calculate fees when amount changes
+  const amount = watch('amount');
+  const currency = watch('currency');
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      if (amount && parseFloat(amount) > 0) {
+        fetchFeeBreakdown();
+      } else {
+        setFeeBreakdown(null);
       }
-    };
+    }, 500);
+    return () => clearTimeout(debounce);
+  }, [amount, currency]);
 
+  const fetchFeeBreakdown = async () => {
+    try {
+      setFeeLoading(true);
+      const response = await escrowService.calculateFees(amount, currency);
+      if (response.success) setFeeBreakdown(response.data);
+    } catch (err) {
+      console.error('Failed to calculate fees:', err);
+    } finally {
+      setFeeLoading(false);
+    }
+  };
+
+  // Handle file selection and preview
+  const handleFilesChange = (e, onChange) => {
+    const files = Array.from(e.target.files);
+    onChange(files);
+    const previews = files.map(file => ({
+      name: file.name,
+      url: URL.createObjectURL(file),
+      type: file.type
+    }));
+    setFilePreviews(previews);
+  };
+
+  const onSubmit = async (data) => {
+    if (data.sellerEmail === user.email) {
+      setError('sellerEmail', { type: 'manual', message: 'Cannot create escrow with yourself' });
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append('title', data.title);
+      formData.append('description', data.description);
+      formData.append('amount', parseFloat(data.amount));
+      formData.append('currency', data.currency);
+      formData.append('sellerEmail', data.sellerEmail);
+      formData.append('category', data.category);
+      formData.append('deliveryMethod', data.deliveryMethod);
+      
+      // Attach files
+      if (data.attachments && data.attachments.length > 0) {
+        data.attachments.forEach(file => formData.append('attachments', file));
+      }
+
+      const response = await escrowService.createEscrow(formData);
+
+      if (response.success) {
+        toast.success('Escrow created successfully!');
+        onSuccess && onSuccess();
+        onClose();
+      } else {
+        toast.error(response.message || 'Failed to create escrow');
+      }
+    } catch (err) {
+      console.error('Create escrow error:', err);
+      toast.error(err.response?.data?.message || 'Failed to create escrow');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Handle resend verification - This must be defined BEFORE any conditional returns
+  const handleResendVerification = async () => {
+    try {
+      setResending(true);
+      const response = await verifyService.resendVerificationEmail(user.email);
+      
+      if (response.success) {
+        toast.success('Verification email sent! Check your inbox.', {
+          duration: 5000,
+          icon: '📧'
+        });
+      }
+    } catch (error) {
+      console.error('Resend verification error:', error);
+      toast.error('Failed to send verification email. Please try again.');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // 2. CONDITIONAL RENDER LOGIC - AFTER ALL HOOKS
+  if (!canCreateEscrow) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -189,140 +322,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
     );
   }
 
-  // ✅ Rest of your existing CreateEscrowModal code continues here...
-  const { 
-    register, 
-    handleSubmit, 
-    watch, 
-    control, 
-    setError, 
-    formState: { errors } 
-  } = useForm({
-    defaultValues: {
-      title: '',
-      description: '',
-      amount: '',
-      currency: 'USD',
-      sellerEmail: '',
-      category: 'other',
-      deliveryMethod: 'physical',
-      attachments: []
-    }
-  });
-
-  const [loading, setLoading] = useState(false);
-  const [feeLoading, setFeeLoading] = useState(false);
-  const [feeBreakdown, setFeeBreakdown] = useState(null);
-  const [filePreviews, setFilePreviews] = useState([]);
-
-  // Currency symbols mapping
-  const currencySymbols = {
-    USD: '$',
-    NGN: '₦',
-    EUR: '€',
-    GBP: '£',
-    CAD: 'C$',
-    AUD: 'A$',
-    KES: 'KSh',
-    GHS: 'GH₵',
-    ZAR: 'R',
-    XOF: 'CFA',
-    XAF: 'FCFA'
-  };
-
-  const currencies = [
-    { code: 'USD', name: 'US Dollar', symbol: '$' },
-    { code: 'NGN', name: 'Nigerian Naira', symbol: '₦' },
-    { code: 'EUR', name: 'Euro', symbol: '€' },
-    { code: 'GBP', name: 'British Pound', symbol: '£' },
-    { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$' },
-    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
-    { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh' },
-    { code: 'GHS', name: 'Ghanaian Cedi', symbol: 'GH₵' },
-    { code: 'ZAR', name: 'South African Rand', symbol: 'R' },
-    { code: 'XOF', name: 'West African CFA', symbol: 'CFA' },
-    { code: 'XAF', name: 'Central African CFA', symbol: 'FCFA' }
-  ];
-
-  // Calculate fees when amount changes
-  const amount = watch('amount');
-  const currency = watch('currency');
-
-  useEffect(() => {
-    const debounce = setTimeout(() => {
-      if (amount && parseFloat(amount) > 0) {
-        fetchFeeBreakdown();
-      } else {
-        setFeeBreakdown(null);
-      }
-    }, 500);
-    return () => clearTimeout(debounce);
-  }, [amount, currency]);
-
-  const fetchFeeBreakdown = async () => {
-    try {
-      setFeeLoading(true);
-      const response = await escrowService.calculateFees(amount, currency);
-      if (response.success) setFeeBreakdown(response.data);
-    } catch (err) {
-      console.error('Failed to calculate fees:', err);
-    } finally {
-      setFeeLoading(false);
-    }
-  };
-
-  // Handle file selection and preview
-  const handleFilesChange = (e, onChange) => {
-    const files = Array.from(e.target.files);
-    onChange(files);
-    const previews = files.map(file => ({
-      name: file.name,
-      url: URL.createObjectURL(file),
-      type: file.type
-    }));
-    setFilePreviews(previews);
-  };
-
-  const onSubmit = async (data) => {
-    if (data.sellerEmail === user.email) {
-      setError('sellerEmail', { type: 'manual', message: 'Cannot create escrow with yourself' });
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const formData = new FormData();
-      formData.append('title', data.title);
-      formData.append('description', data.description);
-      formData.append('amount', parseFloat(data.amount));
-      formData.append('currency', data.currency);
-      formData.append('sellerEmail', data.sellerEmail);
-      formData.append('category', data.category);
-      formData.append('deliveryMethod', data.deliveryMethod);
-      
-      // Attach files
-      if (data.attachments && data.attachments.length > 0) {
-        data.attachments.forEach(file => formData.append('attachments', file));
-      }
-
-      const response = await escrowService.createEscrow(formData);
-
-      if (response.success) {
-        toast.success('Escrow created successfully!');
-        onSuccess && onSuccess();
-        onClose();
-      } else {
-        toast.error(response.message || 'Failed to create escrow');
-      }
-    } catch (err) {
-      console.error('Create escrow error:', err);
-      toast.error(err.response?.data?.message || 'Failed to create escrow');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ✅ REST OF YOUR COMPONENT (for verified users)
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">

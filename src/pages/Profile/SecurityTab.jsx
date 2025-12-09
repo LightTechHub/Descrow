@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield, 
   Key, 
@@ -10,13 +10,13 @@ import {
   Copy,
   Download,
   AlertCircle,
-  Lock,
   Eye,
   EyeOff
 } from 'lucide-react';
 import securityService from 'services/securityService';
 import profileService from 'services/profileService';
 import toast from 'react-hot-toast';
+
 const SecurityTab = ({ user, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [twoFAStatus, setTwoFAStatus] = useState({ enabled: false });
@@ -36,9 +36,15 @@ const SecurityTab = ({ user, onUpdate }) => {
     confirm: false
   });
 
+  // ✅ Prevent duplicate fetches
+  const hasFetchedSecurity = useRef(false);
+
   useEffect(() => {
-    fetch2FAStatus();
-    fetchSessions();
+    if (!hasFetchedSecurity.current) {
+      hasFetchedSecurity.current = true;
+      fetch2FAStatus();
+      fetchSessions();
+    }
   }, []);
 
   const fetch2FAStatus = async () => {
@@ -95,6 +101,7 @@ const SecurityTab = ({ user, onUpdate }) => {
         setShow2FASetup(false);
         setTwoFAData(null);
         setVerificationCode('');
+        hasFetchedSecurity.current = false; // ✅ Allow refetch
         fetch2FAStatus();
       }
     } catch (error) {
@@ -118,6 +125,7 @@ const SecurityTab = ({ user, onUpdate }) => {
 
       if (response.success) {
         toast.success('2FA disabled successfully');
+        hasFetchedSecurity.current = false; // ✅ Allow refetch
         fetch2FAStatus();
       }
     } catch (error) {
@@ -137,6 +145,7 @@ const SecurityTab = ({ user, onUpdate }) => {
       const response = await securityService.revokeSession(sessionId);
       if (response.success) {
         toast.success('Session revoked');
+        hasFetchedSecurity.current = false; // ✅ Allow refetch
         fetchSessions();
       }
     } catch (error) {
@@ -154,6 +163,7 @@ const SecurityTab = ({ user, onUpdate }) => {
       const response = await securityService.revokeAllSessions();
       if (response.success) {
         toast.success('All sessions revoked');
+        hasFetchedSecurity.current = false; // ✅ Allow refetch
         fetchSessions();
       }
     } catch (error) {

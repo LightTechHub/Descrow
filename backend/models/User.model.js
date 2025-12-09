@@ -49,6 +49,56 @@ const userSchema = new mongoose.Schema({
   },
   
   // ✅ FIXED: Simplified KYC Status object
+kycStatus: {
+  status: {
+    type: String,
+    enum: ['unverified', 'pending', 'in_progress', 'approved', 'rejected', 'expired'],
+    default: 'unverified'
+  },
+  // ✅ ADD DIDIT FIELDS
+  diditSessionId: {
+    type: String,
+    sparse: true
+  },
+  diditVerificationUrl: String,
+  diditSessionExpiresAt: Date,
+  verifiedAt: Date,
+  verificationResult: {
+    identity: {
+      verified: Boolean,
+      firstName: String,
+      lastName: String,
+      dateOfBirth: String,
+      nationality: String
+    },
+    document: {
+      verified: Boolean,
+      type: String, // passport, drivers_license, national_id
+      number: String,
+      country: String,
+      expiryDate: String
+    },
+    liveness: {
+      verified: Boolean,
+      score: Number
+    },
+    address: {
+      verified: Boolean,
+      street: String,
+      city: String,
+      state: String,
+      country: String,
+      postalCode: String
+    }
+  },
+  rejectionReason: String,
+  tier: {
+    type: String,
+    enum: ['basic', 'advanced', 'premium'],
+    default: 'basic'
+  },
+  // ... rest of your existing fields
+}
   kycStatus: {
     status: {
       type: String,

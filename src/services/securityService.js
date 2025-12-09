@@ -1,6 +1,7 @@
+// File: src/services/securityService.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
@@ -13,70 +14,128 @@ const getAuthHeaders = () => {
 };
 
 const securityService = {
-  // 2FA Setup
-  setup2FA: async () => {
-    const response = await axios.post(
-      `${API_URL}/security/2fa/setup`,
-      {},
-      getAuthHeaders()
-    );
-    return response.data;
-  },
-
-  // Verify 2FA
-  verify2FA: async (code) => {
-    const response = await axios.post(
-      `${API_URL}/security/2fa/verify`,
-      { code },
-      getAuthHeaders()
-    );
-    return response.data;
-  },
-
-  // Disable 2FA
-  disable2FA: async (code, password) => {
-    const response = await axios.post(
-      `${API_URL}/security/2fa/disable`,
-      { code, password },
-      getAuthHeaders()
-    );
-    return response.data;
-  },
-
-  // Get 2FA status
+  // 2FA Methods
   get2FAStatus: async () => {
-    const response = await axios.get(
-      `${API_URL}/security/2fa/status`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await axios.get(
+        `${API_URL}/profile/2fa-status`,
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Get 2FA status error:', error);
+      return {
+        success: false,
+        data: { enabled: false }
+      };
+    }
   },
 
-  // Get sessions
+  setup2FA: async () => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/profile/setup-2fa`,
+        {},
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Setup 2FA error:', error);
+      throw error;
+    }
+  },
+
+  verify2FA: async (code) => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/profile/verify-2fa`,
+        { code },
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Verify 2FA error:', error);
+      throw error;
+    }
+  },
+
+  disable2FA: async (code, password) => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/profile/disable-2fa`,
+        { code, password },
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Disable 2FA error:', error);
+      throw error;
+    }
+  },
+
+  // Session Methods
   getSessions: async () => {
-    const response = await axios.get(
-      `${API_URL}/security/sessions`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await axios.get(
+        `${API_URL}/profile/sessions`,
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Get sessions error:', error);
+      return {
+        success: false,
+        data: []
+      };
+    }
   },
 
-  // Revoke session
   revokeSession: async (sessionId) => {
-    const response = await axios.delete(
-      `${API_URL}/security/sessions/${sessionId}`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await axios.post(
+        `${API_URL}/profile/revoke-session`,
+        { sessionId },
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Revoke session error:', error);
+      throw error;
+    }
   },
 
-  // Revoke all sessions
   revokeAllSessions: async () => {
-    const response = await axios.delete(
-      `${API_URL}/security/sessions`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await axios.post(
+        `${API_URL}/profile/revoke-all-sessions`,
+        {},
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Revoke all sessions error:', error);
+      throw error;
+    }
+  },
+
+  // Security Logs
+  getSecurityLogs: async (params = {}) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/profile/security-logs`,
+        {
+          ...getAuthHeaders(),
+          params
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Get security logs error:', error);
+      return {
+        success: false,
+        data: []
+      };
+    }
   }
 };
 

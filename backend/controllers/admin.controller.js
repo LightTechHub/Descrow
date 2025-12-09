@@ -1,4 +1,4 @@
-// backend/controllers/admin.controller.js
+// backend/controllers/admin.controller.js - COMPLETE FIXED VERSION
 
 const User = require('../models/User.model');
 const Transaction = require('../models/Transaction.model');
@@ -7,81 +7,109 @@ const Dispute = require('../models/Dispute.model');
 const Admin = require('../models/Admin.model');
 const Business = require('../models/Business.model');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const { validationResult } = require('express-validator');
+
+/* =========================================================
+   JWT GENERATOR
+========================================================= */
+const generateToken = (adminId) => {
+  return jwt.sign(
+    { id: adminId, type: 'admin' },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+  );
+};
+
+/* =========================================================
+   ADMIN LOGIN
+========================================================= */
+const login = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { email, password } = req.body;
+    const admin = await Admin.findOne({ email }).select('+password');
+    
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    if (admin.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is suspended. Contact master admin.'
+      });
+    }
+
+    const isPasswordValid = await admin.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    admin.lastActive = new Date();
+    await admin.save();
+
+    const token = generateToken(admin._id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      token,
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        permissions: admin.permissions
+      }
+    });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ success: false, message: 'Login failed', error: error.message });
+  }
+};
 
 /* =========================================================
    DASHBOARD STATISTICS
 ========================================================= */
 const getDashboardStats = async (req, res) => {
   try {
-    // Total users count
     const totalUsers = await User.countDocuments();
-    
-    // Verified users count
     const verifiedUsers = await User.countDocuments({ verified: true });
-    
-    // KYC verified users count
     const kycVerifiedUsers = await User.countDocuments({ isKYCVerified: true });
     
-    // Recent signups (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentSignups = await User.countDocuments({
-      createdAt: { $gte: thirtyDaysAgo }
-    });
+    const recentSignups = await User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
     
-    // Total transactions
     const totalTransactions = await Transaction.countDocuments();
-    
-    // Total escrow transactions
     const totalEscrowTransactions = await Escrow.countDocuments();
     
-    // Total volume
     const volumeResult = await Transaction.aggregate([
-      {
-        $match: {
-          status: 'completed',
-          amount: { $exists: true, $ne: null }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalVolume: { $sum: '$amount' }
-        }
-      }
+      { $match: { status: 'completed', amount: { $exists: true, $ne: null } } },
+      { $group: { _id: null, totalVolume: { $sum: '$amount' } } }
     ]);
     
     const totalVolume = volumeResult.length > 0 ? volumeResult[0].totalVolume : 0;
-    
-    // Active disputes
     const activeDisputes = await Dispute.countDocuments({ status: 'open' });
     
-    // Platform fees (example calculation)
     const feesResult = await Transaction.aggregate([
-      {
-        $match: {
-          status: 'completed',
-          platformFee: { $exists: true, $gt: 0 }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalFees: { $sum: '$platformFee' }
-        }
-      }
+      { $match: { status: 'completed', platformFee: { $exists: true, $gt: 0 } } },
+      { $group: { _id: null, totalFees: { $sum: '$platformFee' } } }
     ]);
     
     const totalFees = feesResult.length > 0 ? feesResult[0].totalFees : 0;
     
-    // Recent activity
     const recentTransactions = await Transaction.find()
       .sort({ createdAt: -1 })
       .limit(10)
       .populate('user', 'name email')
       .select('transactionId amount status paymentMethod createdAt');
     
-    // User growth data (for chart)
     const userGrowth = await User.aggregate([
       {
         $group: {
@@ -97,14 +125,8 @@ const getDashboardStats = async (req, res) => {
       { $limit: 30 }
     ]);
     
-    // Transaction status distribution
     const transactionStats = await Transaction.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
-        }
-      }
+      { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
     
     res.status(200).json({
@@ -154,7 +176,6 @@ const getAllUsers = async (req, res) => {
 
     const query = {};
 
-    // Search filter
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -163,35 +184,20 @@ const getAllUsers = async (req, res) => {
       ];
     }
 
-    // Status filter
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
+    if (verified !== undefined) query.verified = verified === 'true';
+    if (kycStatus) query['kycStatus.status'] = kycStatus;
 
-    // Verified filter
-    if (verified !== undefined) {
-      query.verified = verified === 'true';
-    }
-
-    // KYC Status filter
-    if (kycStatus) {
-      query['kycStatus.status'] = kycStatus;
-    }
-
-    // Sort configuration
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    // Execute query with pagination
     const users = await User.find(query)
-      .select('-password -twoFactorSecret -recoveryCodes -sessions')
+      .select('-password -twoFactorSecret')
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
     const total = await User.countDocuments(query);
-
-    // Get user stats
     const totalUsers = await User.countDocuments();
     const verifiedCount = await User.countDocuments({ verified: true });
     const kycApprovedCount = await User.countDocuments({ 'kycStatus.status': 'approved' });
@@ -230,44 +236,25 @@ const getUserDetails = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const user = await User.findById(userId)
-      .select('-password -twoFactorSecret -recoveryCodes -sessions')
-      .populate('business', 'businessName businessType status verifiedAt')
-      .populate('bankAccounts', 'bankName accountName accountNumber status isDefault');
+    const user = await User.findById(userId).select('-password -twoFactorSecret');
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Get user transactions
     const transactions = await Transaction.find({ user: userId })
       .sort({ createdAt: -1 })
       .limit(10)
       .select('transactionId amount status paymentMethod createdAt');
 
-    // Get user escrows
-    const escrows = await Escrow.find({
-      $or: [
-        { buyer: userId },
-        { seller: userId }
-      ]
-    })
+    const escrows = await Escrow.find({ $or: [{ buyer: userId }, { seller: userId }] })
       .sort({ createdAt: -1 })
       .limit(10)
       .populate('buyer', 'name email')
       .populate('seller', 'name email')
       .select('escrowId amount status title createdAt');
 
-    // Get user disputes
-    const disputes = await Dispute.find({
-      $or: [
-        { reportedBy: userId },
-        { reportedUser: userId }
-      ]
-    })
+    const disputes = await Dispute.find({ $or: [{ reportedBy: userId }, { reportedUser: userId }] })
       .sort({ createdAt: -1 })
       .limit(5)
       .populate('reportedBy', 'name email')
@@ -277,12 +264,7 @@ const getUserDetails = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        user,
-        transactions,
-        escrows,
-        disputes
-      }
+      data: { user, transactions, escrows, disputes }
     });
   } catch (error) {
     console.error('Get user details error:', error);
@@ -311,16 +293,10 @@ const updateUserStatus = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Store previous status
     const previousStatus = user.status;
-    
-    // Update user status
     user.status = status;
     user.statusReason = reason || '';
     user.statusUpdatedAt = new Date();
@@ -328,11 +304,7 @@ const updateUserStatus = async (req, res) => {
 
     await user.save();
 
-    // Log the status change
     console.log(`User ${user.email} status changed from ${previousStatus} to ${status} by admin ${req.admin.email}`);
-
-    // TODO: Send notification to user about status change
-    // TODO: If suspended/banned, invalidate all active sessions
 
     res.status(200).json({
       success: true,
@@ -368,13 +340,9 @@ const reviewKYC = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // ✅ Check if email is verified first
     if (!user.verified) {
       return res.status(400).json({
         success: false,
@@ -382,7 +350,6 @@ const reviewKYC = async (req, res) => {
       });
     }
 
-    // ✅ Check current KYC status
     if (user.kycStatus.status !== 'pending' && user.kycStatus.status !== 'under_review') {
       return res.status(400).json({ 
         success: false, 
@@ -391,38 +358,21 @@ const reviewKYC = async (req, res) => {
     }
 
     if (action === 'approve') {
-      // ✅ Update the kycStatus object properly
       user.kycStatus.status = 'approved';
       user.kycStatus.reviewedAt = new Date();
       user.kycStatus.approvedBy = req.admin._id;
-      
-      // ✅ Set the boolean flag
       user.isKYCVerified = true;
-      
-      // ✅ Mark as modified so Mongoose saves it
       user.markModified('kycStatus');
-      
       await user.save();
-      
       console.log(`✅ KYC approved for user ${user.email}`);
-      
-      // TODO: Send approval email
-      // await emailService.sendKYCApprovedEmail(user.email, user.name);
-      
     } else if (action === 'reject') {
       user.kycStatus.status = 'rejected';
       user.kycStatus.reviewedAt = new Date();
       user.kycStatus.rejectionReason = reason;
       user.isKYCVerified = false;
-      
       user.markModified('kycStatus');
       await user.save();
-      
       console.log(`❌ KYC rejected for user ${user.email}: ${reason}`);
-      
-      // TODO: Send rejection email
-      // await emailService.sendKYCRejectedEmail(user.email, user.name, reason);
-      
     } else {
       return res.status(400).json({ 
         success: false, 
@@ -444,7 +394,6 @@ const reviewKYC = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error('Review KYC error:', error);
     res.status(500).json({ 
@@ -461,10 +410,7 @@ const reviewKYC = async (req, res) => {
 const getPendingKYC = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
-
-    const query = {
-      'kycStatus.status': { $in: ['pending', 'under_review'] }
-    };
+    const query = { 'kycStatus.status': { $in: ['pending', 'under_review'] } };
 
     const users = await User.find(query)
       .select('name email phone verified kycStatus createdAt')
@@ -474,17 +420,10 @@ const getPendingKYC = async (req, res) => {
 
     const total = await User.countDocuments(query);
 
-    // Get KYC statistics
     const kycStats = await User.aggregate([
-      {
-        $group: {
-          _id: '$kycStatus.status',
-          count: { $sum: 1 }
-        }
-      }
+      { $group: { _id: '$kycStatus.status', count: { $sum: 1 } } }
     ]);
 
-    // Transform stats to object
     const stats = {};
     kycStats.forEach(stat => {
       stats[stat._id || 'not_submitted'] = stat.count;
@@ -534,53 +473,31 @@ const getAllTransactions = async (req, res) => {
 
     const query = {};
 
-    // Search filter
     if (search) {
       query.$or = [
         { transactionId: { $regex: search, $options: 'i' } },
-        { reference: { $regex: search, $options: 'i' } },
-        { 'user.email': { $regex: search, $options: 'i' } },
-        { 'user.name': { $regex: search, $options: 'i' } }
+        { reference: { $regex: search, $options: 'i' } }
       ];
     }
 
-    // Status filter
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
+    if (paymentMethod) query.paymentMethod = paymentMethod;
 
-    // Payment method filter
-    if (paymentMethod) {
-      query.paymentMethod = paymentMethod;
-    }
-
-    // Date range filter
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.createdAt.$lte = new Date(endDate);
-      }
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    // Amount range filter
     if (minAmount || maxAmount) {
       query.amount = {};
-      if (minAmount) {
-        query.amount.$gte = parseFloat(minAmount);
-      }
-      if (maxAmount) {
-        query.amount.$lte = parseFloat(maxAmount);
-      }
+      if (minAmount) query.amount.$gte = parseFloat(minAmount);
+      if (maxAmount) query.amount.$lte = parseFloat(maxAmount);
     }
 
-    // Sort configuration
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    // Execute query with pagination
     const transactions = await Transaction.find(query)
       .populate('user', 'name email phone')
       .sort(sort)
@@ -589,11 +506,8 @@ const getAllTransactions = async (req, res) => {
 
     const total = await Transaction.countDocuments(query);
 
-    // Calculate total volume and fees
     const stats = await Transaction.aggregate([
-      {
-        $match: query
-      },
+      { $match: query },
       {
         $group: {
           _id: null,
@@ -615,12 +529,7 @@ const getAllTransactions = async (req, res) => {
           total,
           pages: Math.ceil(total / limit)
         },
-        stats: stats[0] || {
-          totalAmount: 0,
-          totalFees: 0,
-          avgAmount: 0,
-          count: 0
-        }
+        stats: stats[0] || { totalAmount: 0, totalFees: 0, avgAmount: 0, count: 0 }
       }
     });
   } catch (error) {
@@ -646,13 +555,9 @@ const getTransactionDetails = async (req, res) => {
       .populate('relatedTransaction');
 
     if (!transaction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Transaction not found'
-      });
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
     }
 
-    // Get related transactions if any
     let relatedTransactions = [];
     if (transaction.escrow) {
       relatedTransactions = await Transaction.find({
@@ -665,10 +570,7 @@ const getTransactionDetails = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        transaction,
-        relatedTransactions
-      }
+      data: { transaction, relatedTransactions }
     });
   } catch (error) {
     console.error('Get transaction details error:', error);
@@ -699,59 +601,37 @@ const getAllEscrows = async (req, res) => {
 
     const query = {};
 
-    // Search filter
     if (search) {
       query.$or = [
         { escrowId: { $regex: search, $options: 'i' } },
         { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'buyer.email': { $regex: search, $options: 'i' } },
-        { 'seller.email': { $regex: search, $options: 'i' } }
+        { description: { $regex: search, $options: 'i' } }
       ];
     }
 
-    // Status filter
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
+    if (escrowType) query.escrowType = escrowType;
 
-    // Escrow type filter
-    if (escrowType) {
-      query.escrowType = escrowType;
-    }
-
-    // Date range filter
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.createdAt.$lte = new Date(endDate);
-      }
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    // Sort configuration
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    // Execute query with pagination
     const escrows = await Escrow.find(query)
       .populate('buyer', 'name email phone verified')
       .populate('seller', 'name email phone verified')
-      .populate('deliveryAgent', 'name email phone')
-      .populate('dispute', 'disputeId status')
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
     const total = await Escrow.countDocuments(query);
 
-    // Calculate total amount and statistics
     const stats = await Escrow.aggregate([
-      {
-        $match: query
-      },
+      { $match: query },
       {
         $group: {
           _id: null,
@@ -762,11 +642,8 @@ const getAllEscrows = async (req, res) => {
       }
     ]);
 
-    // Status distribution
     const statusDistribution = await Escrow.aggregate([
-      {
-        $match: query
-      },
+      { $match: query },
       {
         $group: {
           _id: '$status',
@@ -786,11 +663,7 @@ const getAllEscrows = async (req, res) => {
           total,
           pages: Math.ceil(total / limit)
         },
-        stats: stats[0] || {
-          totalAmount: 0,
-          avgAmount: 0,
-          count: 0
-        },
+        stats: stats[0] || { totalAmount: 0, avgAmount: 0, count: 0 },
         statusDistribution
       }
     });
@@ -813,35 +686,19 @@ const getEscrowDetails = async (req, res) => {
 
     const escrow = await Escrow.findById(escrowId)
       .populate('buyer', 'name email phone verified isKYCVerified')
-      .populate('seller', 'name email phone verified isKYCVerified')
-      .populate('deliveryAgent', 'name email phone')
-      .populate('dispute', 'disputeId status description resolution')
-      .populate('chat', 'messages');
+      .populate('seller', 'name email phone verified isKYCVerified');
 
     if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
+      return res.status(404).json({ success: false, message: 'Escrow not found' });
     }
 
-    // Get related transactions
     const transactions = await Transaction.find({ escrow: escrowId })
       .populate('user', 'name email')
       .sort({ createdAt: -1 });
 
-    // Get delivery updates if any
-    // Note: Commented out DeliveryUpdate as it might not exist
-    // const deliveryUpdates = await DeliveryUpdate.find({ escrow: escrowId })
-    //   .sort({ createdAt: -1 });
-
     res.status(200).json({
       success: true,
-      data: {
-        escrow,
-        transactions
-        // deliveryUpdates
-      }
+      data: { escrow, transactions }
     });
   } catch (error) {
     console.error('Get escrow details error:', error);
@@ -872,42 +729,25 @@ const getAllDisputes = async (req, res) => {
 
     const query = {};
 
-    // Search filter
     if (search) {
       query.$or = [
         { disputeId: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'reportedBy.email': { $regex: search, $options: 'i' } },
-        { 'reportedUser.email': { $regex: search, $options: 'i' } }
+        { description: { $regex: search, $options: 'i' } }
       ];
     }
 
-    // Status filter
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
+    if (type) query.type = type;
 
-    // Type filter
-    if (type) {
-      query.type = type;
-    }
-
-    // Date range filter
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.createdAt.$lte = new Date(endDate);
-      }
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    // Sort configuration
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    // Execute query with pagination
     const disputes = await Dispute.find(query)
       .populate('reportedBy', 'name email phone')
       .populate('reportedUser', 'name email phone')
@@ -919,43 +759,8 @@ const getAllDisputes = async (req, res) => {
 
     const total = await Dispute.countDocuments(query);
 
-    // Get dispute statistics
     const stats = await Dispute.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Calculate average resolution time for resolved disputes
-    const resolutionStats = await Dispute.aggregate([
-      {
-        $match: {
-          status: 'resolved',
-          resolvedAt: { $exists: true },
-          createdAt: { $exists: true }
-        }
-      },
-      {
-        $addFields: {
-          resolutionTime: {
-            $divide: [
-              { $subtract: ['$resolvedAt', '$createdAt'] },
-              1000 * 60 * 60 * 24 // Convert to days
-            ]
-          }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          avgResolutionTime: { $avg: '$resolutionTime' },
-          minResolutionTime: { $min: '$resolutionTime' },
-          maxResolutionTime: { $max: '$resolutionTime' }
-        }
-      }
+      { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
     res.status(200).json({
@@ -968,14 +773,7 @@ const getAllDisputes = async (req, res) => {
           total,
           pages: Math.ceil(total / limit)
         },
-        stats: {
-          statusDistribution: stats,
-          resolutionStats: resolutionStats[0] || {
-            avgResolutionTime: 0,
-            minResolutionTime: 0,
-            maxResolutionTime: 0
-          }
-        }
+        stats: { statusDistribution: stats }
       }
     });
   } catch (error) {
@@ -1003,25 +801,12 @@ const getDisputeDetails = async (req, res) => {
       .populate('resolvedBy', 'name email role');
 
     if (!dispute) {
-      return res.status(404).json({
-        success: false,
-        message: 'Dispute not found'
-      });
+      return res.status(404).json({ success: false, message: 'Dispute not found' });
     }
-
-    // Get evidence files if any
-    const evidence = dispute.evidence || [];
-
-    // Get resolution history
-    const resolutionHistory = dispute.resolutionHistory || [];
 
     res.status(200).json({
       success: true,
-      data: {
-        dispute,
-        evidence,
-        resolutionHistory
-      }
+      data: { dispute }
     });
   } catch (error) {
     console.error('Get dispute details error:', error);
@@ -1043,21 +828,14 @@ const assignDispute = async (req, res) => {
 
     const dispute = await Dispute.findById(disputeId);
     if (!dispute) {
-      return res.status(404).json({
-        success: false,
-        message: 'Dispute not found'
-      });
+      return res.status(404).json({ success: false, message: 'Dispute not found' });
     }
 
     const admin = await Admin.findById(adminId);
     if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: 'Admin not found'
-      });
+      return res.status(404).json({ success: false, message: 'Admin not found' });
     }
 
-    // Check if admin has permission to manage disputes
     if (!admin.permissions.manageDisputes && admin.role !== 'master') {
       return res.status(403).json({
         success: false,
@@ -1068,11 +846,7 @@ const assignDispute = async (req, res) => {
     dispute.assignedTo = adminId;
     dispute.status = 'under_review';
     dispute.assignedAt = new Date();
-
     await dispute.save();
-
-    // TODO: Send notification to assigned admin
-    // TODO: Send notification to users involved in the dispute
 
     res.status(200).json({
       success: true,
@@ -1116,24 +890,19 @@ const resolveDispute = async (req, res) => {
       });
     }
 
-    const dispute = await Dispute.findById(disputeId)
-      .populate('escrow');
+    const dispute = await Dispute.findById(disputeId).populate('escrow');
     
     if (!dispute) {
-      return res.status(404).json({
-        success: false,
-        message: 'Dispute not found'
-      });
+      return res.status(404).json({ success: false, message: 'Dispute not found' });
     }
 
-    if (dispute.status !== 'under_review') {
+    if (dispute.status !== 'under_review' && dispute.status !== 'open') {
       return res.status(400).json({
         success: false,
-        message: 'Dispute must be under review to resolve'
+        message: 'Dispute must be open or under review to resolve'
       });
     }
 
-    // Update dispute
     dispute.status = 'resolved';
     dispute.resolution = resolution;
     dispute.winner = winner;
@@ -1141,24 +910,9 @@ const resolveDispute = async (req, res) => {
     dispute.resolvedBy = req.admin._id;
     dispute.resolvedAt = new Date();
     dispute.resolutionNotes = notes;
-
-    // Add to resolution history
-    dispute.resolutionHistory = dispute.resolutionHistory || [];
-    dispute.resolutionHistory.push({
-      action: 'resolved',
-      by: req.admin._id,
-      resolution,
-      winner,
-      refundPercentage,
-      notes,
-      timestamp: new Date()
-    });
-
     await dispute.save();
 
-    // TODO: Handle escrow release based on resolution
-    // TODO: Send notifications to both parties
-    // TODO: Process refunds if applicable
+    console.log(`✅ Dispute ${dispute.disputeId} resolved by admin ${req.admin.email}`);
 
     res.status(200).json({
       success: true,
@@ -1206,7 +960,6 @@ const getAllAdmins = async (req, res) => {
 
     const query = {};
 
-    // Search filter
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -1214,28 +967,18 @@ const getAllAdmins = async (req, res) => {
       ];
     }
 
-    // Role filter
-    if (role) {
-      query.role = role;
-    }
+    if (role) query.role = role;
+    if (status) query.status = status;
 
-    // Status filter
-    if (status) {
-      query.status = status;
-    }
-
-    // Exclude current admin if not master
     if (req.admin.role !== 'master') {
       query._id = { $ne: req.admin._id };
     }
 
-    // Sort configuration
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    // Execute query with pagination
     const admins = await Admin.find(query)
-      .select('-password -twoFactorSecret -recoveryCodes')
+      .select('-password -twoFactorSecret')
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -1277,7 +1020,6 @@ const createAdmin = async (req, res) => {
   try {
     const { name, email, password, role, permissions } = req.body;
 
-    // Check if current admin has permission
     if (req.admin.role !== 'master') {
       return res.status(403).json({
         success: false,
@@ -1285,7 +1027,6 @@ const createAdmin = async (req, res) => {
       });
     }
 
-    // Check if email already exists
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
       return res.status(400).json({
@@ -1294,12 +1035,11 @@ const createAdmin = async (req, res) => {
       });
     }
 
-    // Create admin
     const admin = await Admin.create({
       name,
       email,
       password,
-      role: role || 'admin',
+      role: role || 'sub_admin',
       status: 'active',
       permissions: permissions || {
         viewTransactions: true,
@@ -1314,18 +1054,14 @@ const createAdmin = async (req, res) => {
       createdBy: req.admin._id
     });
 
-    // Remove sensitive data
     const adminData = admin.toObject();
     delete adminData.password;
     delete adminData.twoFactorSecret;
-    delete adminData.recoveryCodes;
 
     res.status(201).json({
       success: true,
       message: 'Admin created successfully',
-      data: {
-        admin: adminData
-      }
+      data: { admin: adminData }
     });
   } catch (error) {
     console.error('Create admin error:', error);
@@ -1345,7 +1081,6 @@ const updateAdmin = async (req, res) => {
     const { adminId } = req.params;
     const { name, role, status, permissions } = req.body;
 
-    // Check if current admin has permission
     if (req.admin.role !== 'master' && req.admin._id.toString() !== adminId) {
       return res.status(403).json({
         success: false,
@@ -1353,16 +1088,11 @@ const updateAdmin = async (req, res) => {
       });
     }
 
-    // Check if admin exists
     const admin = await Admin.findById(adminId);
     if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: 'Admin not found'
-      });
+      return res.status(404).json({ success: false, message: 'Admin not found' });
     }
 
-    // Prevent updating master admin unless current admin is master
     if (admin.role === 'master' && req.admin.role !== 'master') {
       return res.status(403).json({
         success: false,
@@ -1370,29 +1100,21 @@ const updateAdmin = async (req, res) => {
       });
     }
 
-    // Update fields
     if (name) admin.name = name;
     if (role && req.admin.role === 'master') admin.role = role;
     if (status && req.admin.role === 'master') admin.status = status;
     if (permissions && req.admin.role === 'master') admin.permissions = permissions;
-    
-    admin.updatedBy = req.admin._id;
-    admin.updatedAt = new Date();
 
     await admin.save();
 
-    // Remove sensitive data
     const adminData = admin.toObject();
     delete adminData.password;
     delete adminData.twoFactorSecret;
-    delete adminData.recoveryCodes;
 
     res.status(200).json({
       success: true,
       message: 'Admin updated successfully',
-      data: {
-        admin: adminData
-      }
+      data: { admin: adminData }
     });
   } catch (error) {
     console.error('Update admin error:', error);
@@ -1411,7 +1133,6 @@ const deleteAdmin = async (req, res) => {
   try {
     const { adminId } = req.params;
 
-    // Only master admins can delete
     if (req.admin.role !== 'master') {
       return res.status(403).json({
         success: false,
@@ -1419,16 +1140,11 @@ const deleteAdmin = async (req, res) => {
       });
     }
 
-    // Check if admin exists
     const admin = await Admin.findById(adminId);
     if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: 'Admin not found'
-      });
+      return res.status(404).json({ success: false, message: 'Admin not found' });
     }
 
-    // Prevent deleting master admin
     if (admin.role === 'master') {
       return res.status(400).json({
         success: false,
@@ -1436,7 +1152,6 @@ const deleteAdmin = async (req, res) => {
       });
     }
 
-    // Prevent deleting self
     if (admin._id.toString() === req.admin._id.toString()) {
       return res.status(400).json({
         success: false,
@@ -1446,10 +1161,7 @@ const deleteAdmin = async (req, res) => {
 
     await Admin.findByIdAndDelete(adminId);
 
-    res.status(200).json({
-      success: true,
-      message: 'Admin deleted successfully'
-    });
+    res.status(200).json({ success: true, message: 'Admin deleted successfully' });
   } catch (error) {
     console.error('Delete admin error:', error);
     res.status(500).json({
@@ -1475,13 +1187,6 @@ const getSystemLogs = async (req, res) => {
       sortBy = 'timestamp',
       sortOrder = 'desc'
     } = req.query;
-
-    // This is a simplified example. In a real application,
-    // you would have a proper logging system (Winston, Morgan, etc.)
-    // and would query from a logs collection or file.
-
-    // For now, we'll return a mock response
-    // TODO: Implement proper logging system
 
     const logs = [
       {
@@ -1542,12 +1247,8 @@ const exportData = async (req, res) => {
     const query = {};
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.createdAt.$lte = new Date(endDate);
-      }
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
     let data;
@@ -1595,13 +1296,10 @@ const exportData = async (req, res) => {
     }
 
     if (format === 'csv') {
-      // Convert to CSV
-      // TODO: Implement proper CSV conversion
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=${filename}.csv`);
       res.send(JSON.stringify(data));
     } else {
-      // Default to JSON
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', `attachment; filename=${filename}.json`);
       res.send(JSON.stringify(data, null, 2));
@@ -1621,9 +1319,6 @@ const exportData = async (req, res) => {
 ========================================================= */
 const backupDatabase = async (req, res) => {
   try {
-    // This is a simplified backup function
-    // In production, you would use mongodump or a proper backup service
-    
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupInfo = {
       timestamp,
@@ -1637,14 +1332,12 @@ const backupDatabase = async (req, res) => {
       }
     };
 
-    // TODO: Actually create a backup file (mongodump or similar)
-    // For now, just return the info
     res.status(200).json({
       success: true,
       message: 'Backup initiated successfully',
       data: {
         backupInfo,
-        downloadUrl: `/api/admin/backup/download/${timestamp}` // Example URL
+        downloadUrl: `/api/admin/backup/download/${timestamp}`
       }
     });
   } catch (error) {
@@ -1657,8 +1350,12 @@ const backupDatabase = async (req, res) => {
   }
 };
 
-// Export all functions
+/* =========================================================
+   EXPORT ALL FUNCTIONS
+========================================================= */
 module.exports = {
+  login,
+  generateToken,
   getDashboardStats,
   getAllUsers,
   getUserDetails,

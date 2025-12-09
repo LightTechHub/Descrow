@@ -1,4 +1,4 @@
-// backend/routes/admin.routes.js - COMPLETE FIXED VERSION
+// backend/routes/admin.routes.js - FIXED VERSION
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');

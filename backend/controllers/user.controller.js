@@ -4,9 +4,6 @@ const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
 const feeConfig = require('../config/fee.config');
 const mongoose = require('mongoose');
-
-
-// Add this at the top with other imports
 const diditService = require('../services/didit.service');
 
 // ... your existing methods ...
@@ -75,6 +72,16 @@ exports.startKYCVerification = async (req, res) => {
 
     if (!diditResponse.success) {
       console.error('❌ Failed to create Didit session:', diditResponse);
+      
+      // Check if it's an API key error
+      if (diditResponse.error?.includes('401') || diditResponse.error?.includes('authenticated')) {
+        return res.status(500).json({
+          success: false,
+          message: 'KYC service configuration error. Please contact support.',
+          error: 'Invalid Didit API key'
+        });
+      }
+      
       return res.status(500).json({
         success: false,
         message: diditResponse.message || 'Failed to start verification. Please try again.',
@@ -225,7 +232,7 @@ exports.checkKYCStatus = async (req, res) => {
   }
 };
 
-// ... rest of your existing controller methods ...
+// ... other methods (KEEP THESE, REMOVE DUPLICATES BELOW) ...
 
 // Get User Profile
 exports.getProfile = async (req, res) => {
@@ -364,136 +371,7 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// ✅ NEW: Start Didit Verification
-exports.startKYCVerification = async (req, res) => {
-  try {
-    const diditService = require('../services/didit.service');
-    
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Check if email is verified
-    if (!user.verified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please verify your email before starting KYC',
-        requiresEmailVerification: true
-      });
-    }
-
-    // Check if already verified
-    if (user.kycStatus.status === 'approved') {
-      return res.status(400).json({
-        success: false,
-        message: 'Your KYC is already approved'
-      });
-    }
-
-    // Check if there's an active session
-    if (user.kycStatus.diditSessionId && user.kycStatus.diditSessionExpiresAt > new Date()) {
-      return res.status(200).json({
-        success: true,
-        message: 'Active verification session found',
-        data: {
-          sessionId: user.kycStatus.diditSessionId,
-          verificationUrl: user.kycStatus.diditVerificationUrl,
-          expiresAt: user.kycStatus.diditSessionExpiresAt
-        }
-      });
-    }
-
-    // Create new Didit verification session
-    const sessionResult = await diditService.createVerificationSession(user._id.toString(), {
-      email: user.email,
-      name: user.name,
-      tier: user.tier
-    });
-
-    if (!sessionResult.success) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create verification session',
-        error: sessionResult.error
-      });
-    }
-
-    // Update user with session info
-    user.kycStatus.status = 'pending';
-    user.kycStatus.diditSessionId = sessionResult.data.sessionId;
-    user.kycStatus.diditVerificationUrl = sessionResult.data.verificationUrl;
-    user.kycStatus.diditSessionExpiresAt = new Date(sessionResult.data.expiresAt);
-    user.markModified('kycStatus');
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Verification session created successfully',
-      data: {
-        sessionId: sessionResult.data.sessionId,
-        verificationUrl: sessionResult.data.verificationUrl,
-        expiresAt: sessionResult.data.expiresAt
-      }
-    });
-
-  } catch (error) {
-    console.error('Start KYC verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to start KYC verification',
-      error: error.message
-    });
-  }
-};
-
-// ✅ NEW: Check Verification Status
-exports.checkKYCStatus = async (req, res) => {
-  try {
-    const diditService = require('../services/didit.service');
-    
-    const user = await User.findById(req.user._id);
-    if (!user || !user.kycStatus.diditSessionId) {
-      return res.status(404).json({
-        success: false,
-        message: 'No verification session found'
-      });
-    }
-
-    const statusResult = await diditService.getVerificationStatus(user.kycStatus.diditSessionId);
-
-    if (!statusResult.success) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to check verification status',
-        error: statusResult.error
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        status: user.kycStatus.status,
-        diditStatus: statusResult.data.status,
-        verificationResult: statusResult.data.verificationResult,
-        isKYCVerified: user.isKYCVerified
-      }
-    });
-
-  } catch (error) {
-    console.error('Check KYC status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check KYC status',
-      error: error.message
-    });
-  }
-};
-
-// ✅ NEW: Get Tier Information
+// ✅ Get Tier Information
 exports.getTierInfo = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -529,7 +407,7 @@ exports.getTierInfo = async (req, res) => {
   }
 };
 
-// ✅ NEW: Calculate Upgrade Benefits
+// ✅ Calculate Upgrade Benefits
 exports.calculateUpgradeBenefits = async (req, res) => {
   try {
     const { targetTier } = req.query;
@@ -566,7 +444,7 @@ exports.calculateUpgradeBenefits = async (req, res) => {
   }
 };
 
-// ✅ NEW: Initialize Tier Upgrade Payment
+// ✅ Initialize Tier Upgrade Payment
 exports.initiateTierUpgrade = async (req, res) => {
   try {
     const { targetTier, currency, paymentMethod } = req.body;
@@ -637,7 +515,7 @@ exports.initiateTierUpgrade = async (req, res) => {
   }
 };
 
-// ✅ NEW: Complete Tier Upgrade (after payment)
+// ✅ Complete Tier Upgrade (after payment)
 exports.completeTierUpgrade = async (req, res) => {
   try {
     const { paymentReference, targetTier } = req.body;
@@ -702,7 +580,7 @@ exports.completeTierUpgrade = async (req, res) => {
   }
 };
 
-// ✅ NEW: Cancel Subscription
+// ✅ Cancel Subscription
 exports.cancelSubscription = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -746,7 +624,7 @@ exports.cancelSubscription = async (req, res) => {
   }
 };
 
-// ✅ NEW: Renew Subscription
+// ✅ Renew Subscription
 exports.renewSubscription = async (req, res) => {
   try {
     const { paymentReference } = req.body;

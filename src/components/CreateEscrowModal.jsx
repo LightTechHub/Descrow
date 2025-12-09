@@ -1,10 +1,195 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader, AlertCircle, DollarSign } from 'lucide-react';
+import { X, Loader, AlertCircle, DollarSign, Mail, FileCheck, Shield } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import escrowService from '../services/escrowService';
 import toast from 'react-hot-toast';
+import { verifyService } from '../services/verifyService';
 
 const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
+  // ✅ Check verification status
+  const isEmailVerified = user?.verified;
+  const isKYCVerified = user?.isKYCVerified;
+  const canCreateEscrow = isEmailVerified && isKYCVerified;
+  
+  // ✅ State for resending verification
+  const [resending, setResending] = useState(false);
+
+  // ✅ Show verification warning if not fully verified
+  if (!canCreateEscrow) {
+    const handleResendVerification = async () => {
+      try {
+        setResending(true);
+        const response = await verifyService.resendVerificationEmail(user.email);
+        
+        if (response.success) {
+          toast.success('Verification email sent! Check your inbox.', {
+            duration: 5000,
+            icon: '📧'
+          });
+        }
+      } catch (error) {
+        console.error('Resend verification error:', error);
+        toast.error('Failed to send verification email. Please try again.');
+      } finally {
+        setResending(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          {/* Header */}
+          <div className="border-b border-gray-200 dark:border-gray-800 p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Verification Required</h2>
+              <button 
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+              >
+                <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {!isEmailVerified ? (
+              <div className="text-center">
+                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-red-500 to-orange-500 rounded-full flex items-center justify-center mb-6">
+                  <Mail className="w-10 h-10 text-white" />
+                </div>
+                
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+                  Email Verification Required
+                </h3>
+                
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Please verify your email address to create secure escrow transactions.
+                  This helps protect your account and prevents fraud.
+                </p>
+                
+                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Verification email sent to:
+                  </p>
+                  <p className="font-medium text-gray-900 dark:text-white break-all">
+                    {user.email}
+                  </p>
+                </div>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={resending}
+                    className="w-full px-6 py-3.5 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl font-semibold hover:from-red-700 hover:to-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                  >
+                    {resending ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader className="w-5 h-5 animate-spin" />
+                        Sending...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <Mail className="w-5 h-5" />
+                        Resend Verification Email
+                      </span>
+                    )}
+                  </button>
+                  
+                  <a
+                    href={`mailto:support@dealcross.net?subject=Email%20Verification%20Help&body=My%20email%20is%3A%20${user.email}`}
+                    className="block w-full px-6 py-3.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition text-center"
+                  >
+                    Contact Support
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-full flex items-center justify-center mb-6">
+                  <FileCheck className="w-10 h-10 text-white" />
+                </div>
+                
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <Shield className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-sm font-medium">
+                    Email Verified ✓
+                  </span>
+                </div>
+                
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+                  KYC Verification Required
+                </h3>
+                
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Complete KYC verification to create escrows and access higher transaction limits.
+                  This is required for secure trading and compliance with financial regulations.
+                </p>
+                
+                <div className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/10 dark:to-amber-900/10 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-900 dark:text-yellow-200 mb-1">
+                        Without KYC Verification:
+                      </p>
+                      <ul className="text-xs text-yellow-800 dark:text-yellow-300 space-y-1">
+                        <li className="flex items-center gap-1">
+                          <div className="w-1 h-1 bg-yellow-500 rounded-full"></div>
+                          Cannot create escrow transactions
+                        </li>
+                        <li className="flex items-center gap-1">
+                          <div className="w-1 h-1 bg-yellow-500 rounded-full"></div>
+                          Limited to basic account features
+                        </li>
+                        <li className="flex items-center gap-1">
+                          <div className="w-1 h-1 bg-yellow-500 rounded-full"></div>
+                          Lower transaction limits
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      // Navigate to KYC tab in profile
+                      window.location.href = '/profile?tab=kyc';
+                    }}
+                    className="w-full px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition shadow-lg hover:shadow-xl"
+                  >
+                    <span className="flex items-center justify-center gap-2">
+                      <FileCheck className="w-5 h-5" />
+                      Complete KYC Verification
+                    </span>
+                  </button>
+                  
+                  <button
+                    onClick={onClose}
+                    className="w-full px-6 py-3.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                  >
+                    Back to Dashboard
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-gray-200 dark:border-gray-800 p-6 bg-gray-50 dark:bg-gray-900/50">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <Shield className="w-4 h-4" />
+              <span>Secure verification process • Your data is protected</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Rest of your existing CreateEscrowModal code continues here...
   const { 
     register, 
     handleSubmit, 
@@ -143,13 +328,35 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Escrow</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Start a secure transaction with a seller</p>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Escrow</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Start a secure transaction with a seller</p>
+            </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
             <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
           </button>
+        </div>
+
+        {/* Verification Status Banner */}
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border-b border-green-200 dark:border-green-800 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <FileCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
+              </div>
+              <span className="text-sm font-medium text-green-800 dark:text-green-300">
+                ✓ Fully Verified Account
+              </span>
+            </div>
+            <span className="text-xs text-green-700 dark:text-green-400">
+              {user.kycStatus?.tier ? `Tier: ${user.kycStatus.tier}` : 'Ready to transact'}
+            </span>
+          </div>
         </div>
 
         {/* Form */}

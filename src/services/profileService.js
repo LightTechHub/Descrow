@@ -52,17 +52,24 @@ const profileService = {
     return response.data;
   },
 
-// ✅ Start KYC Verification
-startKYCVerification: async () => {
-  const response = await api.post('/users/kyc/start');
-  return response.data;
-},
+  // ✅ Start KYC Verification
+  startKYCVerification: async () => {
+    const response = await axios.post(
+      `${API_URL}/users/kyc/start`,
+      {},
+      getAuthHeaders()
+    );
+    return response.data;
+  },
 
-// ✅ Check KYC Status
-checkKYCStatus: async () => {
-  const response = await api.get('/users/kyc/status');
-  return response.data;
-}
+  // ✅ Check KYC Status
+  checkKYCStatus: async () => {
+    const response = await axios.get(
+      `${API_URL}/users/kyc/status`,
+      getAuthHeaders()
+    );
+    return response.data;
+  },
 
   // ✅ NEW: Submit KYC
   submitKYC: async (kycData) => {

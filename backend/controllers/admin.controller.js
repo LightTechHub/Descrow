@@ -831,7 +831,7 @@ const getEscrowDetails = async (req, res) => {
       .sort({ createdAt: -1 });
 
     // Get delivery updates if any
-    // Note: DeliveryUpdate model might not exist. If needed, create it or remove this line
+    // Note: Commented out DeliveryUpdate as it might not exist
     // const deliveryUpdates = await DeliveryUpdate.find({ escrow: escrowId })
     //   .sort({ createdAt: -1 });
 
@@ -839,7 +839,7 @@ const getEscrowDetails = async (req, res) => {
       success: true,
       data: {
         escrow,
-        transactions,
+        transactions
         // deliveryUpdates
       }
     });
@@ -1654,40 +1654,6 @@ const backupDatabase = async (req, res) => {
       message: 'Failed to backup database',
       error: error.message
     });
-  }
-};
-
-/* =========================================================
-   ADD THESE MISSING FUNCTIONS
-========================================================= */
-
-// Placeholder function - You can add actual implementation later
-const DeliveryUpdate = {
-  find: () => ({ sort: () => [] })
-};
-
-// Add these functions that were referenced but not defined
-const getTransactionDetails = async (req, res) => {
-  try {
-    // Your implementation
-  } catch (error) {
-    // Error handling
-  }
-};
-
-const getEscrowDetails = async (req, res) => {
-  try {
-    // Your implementation
-  } catch (error) {
-    // Error handling
-  }
-};
-
-const getDisputeDetails = async (req, res) => {
-  try {
-    // Your implementation
-  } catch (error) {
-    // Error handling
   }
 };
 

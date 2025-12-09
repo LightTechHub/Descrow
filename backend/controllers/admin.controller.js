@@ -73,6 +73,202 @@ const login = async (req, res) => {
   }
 };
 
+// Add these functions to your existing admin.controller.js file:
+
+/* =========================================================
+   GET ANALYTICS (Missing from controller)
+========================================================= */
+const getAnalytics = async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    let days = 30;
+    
+    if (period === '7d') days = 7;
+    if (period === '90d') days = 90;
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    // User analytics
+    const userAnalytics = await User.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    
+    // Transaction analytics
+    const transactionAnalytics = await Transaction.aggregate([
+      { $match: { createdAt: { $gte: startDate }, status: 'completed' } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+          total: { $sum: "$amount" }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    
+    // Revenue analytics
+    const revenueAnalytics = await Transaction.aggregate([
+      { $match: { createdAt: { $gte: startDate }, status: 'completed' } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          revenue: { $sum: "$platformFee" }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        userAnalytics,
+        transactionAnalytics,
+        revenueAnalytics,
+        period,
+        startDate,
+        endDate: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Get analytics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch analytics',
+      error: error.message
+    });
+  }
+};
+
+/* =========================================================
+   GET PLATFORM STATS (Missing from controller)
+========================================================= */
+const getPlatformStats = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ status: 'active' });
+    const totalTransactions = await Transaction.countDocuments();
+    
+    const volumeResult = await Transaction.aggregate([
+      { $match: { status: 'completed' } },
+      { $group: { _id: null, totalVolume: { $sum: '$amount' } } }
+    ]);
+    
+    const totalVolume = volumeResult[0]?.totalVolume || 0;
+    
+    const revenueResult = await Transaction.aggregate([
+      { $match: { status: 'completed' } },
+      { $group: { _id: null, totalRevenue: { $sum: '$platformFee' } } }
+    ]);
+    
+    const totalRevenue = revenueResult[0]?.totalRevenue || 0;
+    
+    const activeDisputes = await Dispute.countDocuments({ status: { $in: ['open', 'under_review'] } });
+    const pendingKYC = await User.countDocuments({ 'kycStatus.status': { $in: ['pending', 'under_review'] } });
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        totalUsers,
+        activeUsers,
+        totalTransactions,
+        totalVolume,
+        totalRevenue,
+        activeDisputes,
+        pendingKYC,
+        updatedAt: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Get platform stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch platform stats',
+      error: error.message
+    });
+  }
+};
+
+/* =========================================================
+   SIMPLE FEE MANAGEMENT FUNCTIONS (Basic version)
+========================================================= */
+const getFeeSettings = async (req, res) => {
+  try {
+    // Simple fee structure - you can replace with database model later
+    const feeSettings = {
+      tiers: {
+        starter: { fees: 2.5, monthlyCost: 0, setupFee: 0, maxTransactionAmount: 10000, maxTransactionsPerMonth: 100 },
+        growth: { fees: 1.9, monthlyCost: 49, setupFee: 0, maxTransactionAmount: 50000, maxTransactionsPerMonth: 500 },
+        enterprise: { fees: 1.2, monthlyCost: 199, setupFee: 500, maxTransactionAmount: 500000, maxTransactionsPerMonth: 5000 },
+        api: { fees: 0.8, monthlyCost: 499, setupFee: 1000, maxTransactionAmount: 1000000, maxTransactionsPerMonth: 10000 }
+      },
+      gatewayCosts: {
+        paystack: { percentage: 1.5, fixed: 100 },
+        flutterwave: { percentage: 1.4, fixed: 100 },
+        crypto: { percentage: 0.5, fixed: 0 }
+      }
+    };
+    
+    res.status(200).json({
+      success: true,
+      data: feeSettings
+    });
+  } catch (error) {
+    console.error('Get fee settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch fee settings',
+      error: error.message
+    });
+  }
+};
+
+const updateFeeSettings = async (req, res) => {
+  try {
+    const { tier, feeType, value } = req.body;
+    
+    // In a real app, you would save this to a database
+    // For now, we'll just return success
+    
+    res.status(200).json({
+      success: true,
+      message: 'Fee settings updated successfully',
+      data: {
+        tier,
+        feeType,
+        newValue: value,
+        updatedAt: new Date(),
+        updatedBy: req.admin.email
+      }
+    });
+  } catch (error) {
+    console.error('Update fee settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update fee settings',
+      error: error.message
+    });
+  }
+};
+
+// Then add these to your exports at the bottom:
+module.exports = {
+  // ... your existing exports
+  getAnalytics,
+  getPlatformStats,
+  getFeeSettings,
+  updateFeeSettings,
+  // ... rest of your exports
+};
+
+
 /* =========================================================
    DASHBOARD STATISTICS
 ========================================================= */

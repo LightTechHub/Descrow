@@ -52,6 +52,18 @@ const profileService = {
     return response.data;
   },
 
+// ✅ Start KYC Verification
+startKYCVerification: async () => {
+  const response = await api.post('/users/kyc/start');
+  return response.data;
+},
+
+// ✅ Check KYC Status
+checkKYCStatus: async () => {
+  const response = await api.get('/users/kyc/status');
+  return response.data;
+}
+
   // ✅ NEW: Submit KYC
   submitKYC: async (kycData) => {
     const response = await axios.post(

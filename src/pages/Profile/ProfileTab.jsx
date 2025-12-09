@@ -1,5 +1,5 @@
-// File: src/pages/Profile/ProfilePage.jsx - CORRECTED IMPORTS
-import React, { useState, useEffect, useCallback } from 'react';
+// File: src/pages/Profile/ProfilePage.jsx - COMPLETE FIXED VERSION
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   User, 
@@ -13,7 +13,7 @@ import {
   Mail
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
-import KYCTab from './KYCTab'; // ✅ KEEP this import
+import KYCTab from './KYCTab';
 import SecurityTab from './SecurityTab';
 import SettingsTab from './SettingsTab';
 import BankAccountTab from '../../components/Profile/BankAccountTab';
@@ -28,8 +28,31 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState(null);
+  
+  // ✅ Prevent duplicate API calls
+  const hasFetched = useRef(false);
 
-  const fetchProfile = useCallback(async () => {
+  useEffect(() => {
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    const tab = searchParams.get('tab');
+    if (tab && ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab)) {
+      setActiveTab(tab);
+    }
+
+    // ✅ Only fetch once on mount
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchProfile();
+      fetchKYCStatus();
+    }
+  }, [navigate]); // ✅ Removed searchParams from dependencies
+
+  const fetchProfile = async () => {
     try {
       setLoading(true);
       const response = await profileService.getProfile();
@@ -44,9 +67,9 @@ const ProfilePage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  const fetchKYCStatus = useCallback(async () => {
+  const fetchKYCStatus = async () => {
     try {
       const response = await profileService.getKYCStatus();
       if (response.success) {
@@ -55,32 +78,16 @@ const ProfilePage = () => {
     } catch (error) {
       console.error('Failed to fetch KYC status:', error);
     }
-  }, []);
-
-  useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      navigate('/login');
-      return;
-    }
-
-    const tab = searchParams.get('tab');
-    if (tab && ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab)) {
-      setActiveTab(tab);
-    }
-
-    fetchProfile();
-    fetchKYCStatus();
-  }, [fetchProfile, fetchKYCStatus, navigate, searchParams]);
+  };
 
   const handleTabChange = (tab) => {
-    // ✅ FIXED: Only block bank accounts if KYC not approved
+    // ✅ Only block bank accounts if not fully verified
     if (tab === 'bank-accounts') {
       if (!user?.verified) {
         toast.error('Please verify your email first');
         return;
       }
-      if (!kycStatus?.isKYCVerified || kycStatus?.status !== 'approved') {
+      if (!user?.isKYCVerified || kycStatus?.status !== 'approved') {
         toast.error('Complete KYC verification to add bank accounts');
         return;
       }
@@ -91,6 +98,8 @@ const ProfilePage = () => {
   };
 
   const handleProfileUpdate = () => {
+    // ✅ Reset fetch flag to allow manual refresh
+    hasFetched.current = false;
     fetchProfile();
     fetchKYCStatus();
   };
@@ -117,7 +126,7 @@ const ProfilePage = () => {
 
   // ✅ Check full verification status
   const isEmailVerified = user?.verified;
-  const isKYCVerified = kycStatus?.isKYCVerified && kycStatus?.status === 'approved';
+  const isKYCVerified = user?.isKYCVerified && kycStatus?.status === 'approved';
   const canAccessEscrowFeatures = isEmailVerified && isKYCVerified;
 
   return (
@@ -173,7 +182,7 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* ✅ FIXED: Email Verification Warning (First Priority) */}
+          {/* ✅ Email Verification Warning (First Priority) */}
           {!isEmailVerified && (
             <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
               <div className="flex items-center gap-3">
@@ -186,12 +195,6 @@ const ProfilePage = () => {
                     Check your inbox for the verification email we sent you. You must verify your email before you can complete KYC verification.
                   </p>
                 </div>
-                <button
-                  onClick={() => {/* TODO: Resend verification email */}}
-                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition whitespace-nowrap"
-                >
-                  Resend Email
-                </button>
               </div>
             </div>
           )}
@@ -238,7 +241,7 @@ const ProfilePage = () => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 
-                // ✅ FIXED: Disable logic
+                // ✅ Disable logic
                 let isDisabled = false;
                 let disabledReason = '';
                 

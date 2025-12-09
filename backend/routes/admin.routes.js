@@ -1,4 +1,4 @@
-// backend/routes/admin.routes.js - COMPLETE MERGED VERSION
+// backend/routes/admin.routes.js - COMPLETE FIXED VERSION
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
@@ -31,6 +31,7 @@ router.get(
 );
 
 // ----------------- Transactions -----------------
+// Get all transactions/escrows
 router.get(
   '/transactions',
   protectAdmin,
@@ -38,7 +39,16 @@ router.get(
   adminController.getTransactions
 );
 
+// Get transaction details
+router.get(
+  '/transactions/:transactionId',
+  protectAdmin,
+  checkPermission('viewTransactions'),
+  adminController.getTransactionDetails
+);
+
 // ----------------- Disputes -----------------
+// Get all disputes
 router.get(
   '/disputes',
   protectAdmin,
@@ -46,6 +56,15 @@ router.get(
   adminController.getDisputes
 );
 
+// Assign dispute to admin
+router.put(
+  '/disputes/:disputeId/assign',
+  protectAdmin,
+  checkPermission('manageDisputes'),
+  adminController.assignDispute
+);
+
+// Resolve dispute
 router.put(
   '/disputes/:disputeId/resolve',
   protectAdmin,
@@ -54,6 +73,7 @@ router.put(
 );
 
 // ----------------- Users -----------------
+// Get all users
 router.get(
   '/users',
   protectAdmin,
@@ -61,6 +81,15 @@ router.get(
   adminController.getUsers
 );
 
+// Get user details
+router.get(
+  '/users/:userId',
+  protectAdmin,
+  checkPermission('verifyUsers'),
+  adminController.getUserDetails
+);
+
+// Change user tier
 router.put(
   '/users/:userId/tier',
   protectAdmin,
@@ -68,6 +97,7 @@ router.put(
   adminController.changeUserTier
 );
 
+// Review KYC
 router.put(
   '/users/:userId/kyc',
   protectAdmin,
@@ -75,6 +105,7 @@ router.put(
   adminController.reviewKYC
 );
 
+// Toggle user status (activate/suspend)
 router.put(
   '/users/:userId/toggle-status',
   protectAdmin,
@@ -83,6 +114,7 @@ router.put(
 );
 
 // ----------------- Analytics & Stats -----------------
+// Get analytics data
 router.get(
   '/analytics',
   protectAdmin,
@@ -90,6 +122,7 @@ router.get(
   adminController.getAnalytics
 );
 
+// Get platform statistics
 router.get(
   '/platform-stats',
   protectAdmin,
@@ -117,7 +150,8 @@ router.post(
   [
     body('name').notEmpty().withMessage('Name required'),
     body('email').isEmail().withMessage('Valid email required'),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('permissions').optional().isObject().withMessage('Permissions must be an object')
   ],
   adminController.createSubAdmin
 );
@@ -127,6 +161,9 @@ router.put(
   '/admins/:adminId/permissions',
   protectAdmin,
   masterOnly,
+  [
+    body('permissions').isObject().withMessage('Permissions must be an object')
+  ],
   adminController.updateSubAdminPermissions
 );
 
@@ -166,6 +203,8 @@ router.put(
   [
     body('tier').isIn(['starter', 'growth', 'enterprise', 'api']).withMessage('Invalid tier'),
     body('feeType').isIn(['fees', 'monthlyCost', 'setupFee', 'maxTransactionAmount', 'maxTransactionsPerMonth']).withMessage('Invalid fee type'),
+    body('field').optional().isString().withMessage('Field must be a string'),
+    body('currency').optional().isIn(['NGN', 'USD', 'crypto']).withMessage('Invalid currency'),
     body('value').notEmpty().withMessage('Value required')
   ],
   adminController.updateFeeSettings
@@ -190,6 +229,7 @@ router.put(
   masterOnly,
   [
     body('gateway').isIn(['paystack', 'flutterwave', 'crypto']).withMessage('Invalid gateway'),
+    body('currency').optional().isIn(['NGN', 'USD']).withMessage('Invalid currency'),
     body('field').notEmpty().withMessage('Field required'),
     body('value').notEmpty().withMessage('Value required')
   ],

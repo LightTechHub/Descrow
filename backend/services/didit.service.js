@@ -1,14 +1,13 @@
-// backend/services/didit.service.js
+// backend/services/didit.service.js - Corrected for Didit API v2
 const axios = require('axios');
 const crypto = require('crypto');
 
 class DiditService {
   constructor() {
     this.apiKey = process.env.DIDIT_API_KEY;
-    this.appId = process.env.DIDIT_APP_ID;
     this.webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
-    this.webhookVersion = process.env.DIDIT_WEBHOOK_VERSION || 'v2';
-    this.baseUrl = process.env.DIDIT_API_URL || 'https://api.didit.me/v1';
+    this.workflowId = process.env.DIDIT_WORKFLOW_ID; // You need to add this
+    this.baseUrl = process.env.DIDIT_API_URL || 'https://verification.didit.me';
     
     // Log configuration on startup (safely)
     this.logConfiguration();
@@ -21,31 +20,29 @@ class DiditService {
     console.log('🔑 Didit Service Configuration:');
     console.log('   Base URL:', this.baseUrl);
     console.log('   API Key:', this.apiKey ? `${this.apiKey.substring(0, 10)}...` : '❌ NOT SET');
-    console.log('   App ID:', this.appId ? `${this.appId.substring(0, 10)}...` : '❌ NOT SET');
+    console.log('   Workflow ID:', this.workflowId ? `${this.workflowId.substring(0, 10)}...` : '❌ NOT SET');
     console.log('   Webhook Secret:', this.webhookSecret ? 'SET ✅' : '❌ NOT SET');
-    console.log('   Webhook Version:', this.webhookVersion);
     
-    if (!this.apiKey || !this.appId) {
-      console.error('❌ CRITICAL: Didit API credentials are missing!');
-      console.error('   Please set DIDIT_API_KEY and DIDIT_APP_ID in your environment variables');
+    if (!this.apiKey) {
+      console.error('❌ CRITICAL: DIDIT_API_KEY is missing!');
+    }
+    
+    if (!this.workflowId) {
+      console.error('❌ CRITICAL: DIDIT_WORKFLOW_ID is missing!');
+      console.error('   Get this from Didit Business Console > Workflows');
     }
   }
 
   /**
-   * Generate authentication headers for Didit API
+   * Generate authentication headers for Didit API v2
    */
   getHeaders() {
     if (!this.apiKey) {
       throw new Error('DIDIT_API_KEY is not configured');
     }
-    
-    if (!this.appId) {
-      throw new Error('DIDIT_APP_ID is not configured');
-    }
 
     return {
-      'Authorization': `Bearer ${this.apiKey}`,
-      'X-App-Id': this.appId,
+      'X-Api-Key': this.apiKey, // Changed from Authorization: Bearer
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
@@ -61,8 +58,8 @@ class DiditService {
       errors.push('DIDIT_API_KEY is not set');
     }
     
-    if (!this.appId) {
-      errors.push('DIDIT_APP_ID is not set');
+    if (!this.workflowId) {
+      errors.push('DIDIT_WORKFLOW_ID is not set - get this from Didit Business Console');
     }
     
     if (errors.length > 0) {
@@ -96,33 +93,33 @@ class DiditService {
       console.log('🔄 Creating Didit verification session for user:', userId);
 
       const requestBody = {
-        reference_id: userId,
-        email: userData.email,
-        name: userData.name,
-        success_url: `${process.env.FRONTEND_URL}/profile?tab=kyc&status=success`,
-        cancel_url: `${process.env.FRONTEND_URL}/profile?tab=kyc&status=cancelled`,
-        webhook_url: `${process.env.BACKEND_URL}/api/webhooks/didit`,
-        verification_type: 'full',
+        workflow_id: this.workflowId,
+        callback: `${process.env.BACKEND_URL}/api/webhooks/didit`,
+        vendor_data: userId.toString(), // Your user identifier
         metadata: {
-          user_id: userId,
-          tier: userData.tier || 'free',
+          user_id: userId.toString(),
+          tier: userData.tier || 'starter',
           platform: 'dealcross',
           timestamp: new Date().toISOString()
+        },
+        contact_details: {
+          email: userData.email,
+          email_lang: 'en',
+          phone: userData.phone || null
         }
       };
 
       console.log('📤 Request details:', {
-        url: `${this.baseUrl}/verifications`,
+        url: `${this.baseUrl}/v2/session/`,
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer ***',
-          'X-App-Id': this.appId ? `${this.appId.substring(0, 10)}...` : 'NOT SET',
+          'X-Api-Key': '***',
           'Content-Type': 'application/json'
         }
       });
 
       const response = await axios.post(
-        `${this.baseUrl}/verifications`,
+        `${this.baseUrl}/v2/session/`,
         requestBody,
         {
           headers: this.getHeaders(),
@@ -130,12 +127,14 @@ class DiditService {
         }
       );
 
-      console.log('✅ Didit session created:', response.data.id);
+      console.log('✅ Didit session created:', response.data.session_id);
 
       return {
         success: true,
         data: {
-          sessionId: response.data.id,
+          sessionId: response.data.session_id,
+          sessionToken: response.data.session_token,
+          sessionNumber: response.data.session_number,
           verificationUrl: response.data.url,
           expiresAt: response.data.expires_at || new Date(Date.now() + 24 * 60 * 60 * 1000)
         }
@@ -146,15 +145,7 @@ class DiditService {
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
-        message: error.message,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: {
-            ...error.config?.headers,
-            'Authorization': error.config?.headers?.Authorization ? 'Bearer ***' : undefined
-          }
-        }
+        message: error.message
       });
 
       // Provide specific error messages based on status code
@@ -163,10 +154,13 @@ class DiditService {
 
       if (error.response?.status === 401) {
         errorMessage = 'Authentication failed with KYC provider';
-        errorDetail = 'Invalid API credentials. Please contact support.';
+        errorDetail = 'Invalid API key. Please contact support.';
       } else if (error.response?.status === 403) {
         errorMessage = 'Access forbidden';
         errorDetail = 'Your API key does not have permission for this action.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Workflow not found';
+        errorDetail = 'The configured workflow ID does not exist. Please contact support.';
       } else if (error.response?.status === 429) {
         errorMessage = 'Rate limit exceeded';
         errorDetail = 'Too many requests. Please try again later.';
@@ -184,7 +178,7 @@ class DiditService {
   }
 
   /**
-   * Get verification session status
+   * Get verification session status and decision
    */
   async getVerificationStatus(sessionId) {
     try {
@@ -201,7 +195,7 @@ class DiditService {
       console.log('🔍 Checking Didit verification status:', sessionId);
 
       const response = await axios.get(
-        `${this.baseUrl}/verifications/${sessionId}`,
+        `${this.baseUrl}/v2/session/${sessionId}/decision/`,
         {
           headers: this.getHeaders(),
           timeout: 15000
@@ -210,42 +204,39 @@ class DiditService {
 
       const data = response.data;
 
+      // Map Didit v2 status
+      let status = 'pending';
+      let verified = false;
+
+      if (data.status === 'Verified' || data.status === 'Approved') {
+        status = 'completed';
+        verified = true;
+      } else if (data.status === 'Rejected' || data.status === 'Failed') {
+        status = 'failed';
+        verified = false;
+      } else if (data.status === 'Expired') {
+        status = 'expired';
+        verified = false;
+      } else if (data.status === 'In Progress' || data.status === 'Pending') {
+        status = 'processing';
+        verified = false;
+      }
+
       return {
         success: true,
         data: {
-          status: data.status,
-          verified: data.verification_result?.verified === true,
-          userId: data.reference_id,
+          status: status,
+          verified: verified,
+          userId: data.vendor_data,
           verificationResult: {
-            identity: {
-              verified: data.verification_result?.identity?.verified || false,
-              firstName: data.verification_result?.identity?.first_name,
-              lastName: data.verification_result?.identity?.last_name,
-              dateOfBirth: data.verification_result?.identity?.date_of_birth,
-              nationality: data.verification_result?.identity?.nationality
-            },
-            document: {
-              verified: data.verification_result?.document?.verified || false,
-              type: data.verification_result?.document?.type,
-              number: data.verification_result?.document?.number,
-              country: data.verification_result?.document?.country,
-              expiryDate: data.verification_result?.document?.expiry_date
-            },
-            liveness: {
-              verified: data.verification_result?.liveness?.verified || false,
-              score: data.verification_result?.liveness?.score
-            },
-            address: {
-              verified: data.verification_result?.address?.verified || false,
-              street: data.verification_result?.address?.street,
-              city: data.verification_result?.address?.city,
-              state: data.verification_result?.address?.state,
-              country: data.verification_result?.address?.country,
-              postalCode: data.verification_result?.address?.postal_code
-            }
+            identity: data.identity_verification || {},
+            document: data.document_verification || {},
+            liveness: data.liveness_check || {},
+            address: data.address_verification || {},
+            aml: data.aml_screening || {}
           },
           completedAt: data.completed_at,
-          failureReason: data.failure_reason
+          failureReason: data.rejection_reason || data.failure_reason
         }
       };
     } catch (error) {
@@ -264,7 +255,7 @@ class DiditService {
   }
 
   /**
-   * Verify webhook signature (v2)
+   * Verify webhook signature from Didit
    */
   verifyWebhookSignature(rawBody, signature) {
     try {
@@ -273,6 +264,7 @@ class DiditService {
         return false;
       }
 
+      // Didit webhook signature verification
       const expectedSignature = crypto
         .createHmac('sha256', this.webhookSecret)
         .update(rawBody)
@@ -293,115 +285,45 @@ class DiditService {
   }
 
   /**
-   * Process webhook event from Didit v2
+   * Process webhook event from Didit
    */
   async processWebhookEvent(event) {
     try {
-      const { type, data } = event;
+      const { status, vendor_data, session_id, workflow_id } = event;
 
-      console.log('📥 Processing Didit webhook:', type);
+      console.log('📥 Processing Didit webhook:', status);
 
-      switch (type) {
-        case 'verification.completed':
-        case 'verification.success':
-          return {
-            type: 'completed',
-            userId: data.reference_id || data.metadata?.user_id,
-            sessionId: data.id,
-            verified: data.verification_result?.verified === true,
-            verificationData: {
-              identity: data.verification_result?.identity || {},
-              document: data.verification_result?.document || {},
-              liveness: data.verification_result?.liveness || {},
-              address: data.verification_result?.address || {}
-            }
-          };
+      let eventType = 'unknown';
+      let verified = false;
 
-        case 'verification.failed':
-        case 'verification.rejected':
-          return {
-            type: 'failed',
-            userId: data.reference_id || data.metadata?.user_id,
-            sessionId: data.id,
-            reason: data.failure_reason || data.rejection_reason || 'Verification failed'
-          };
-
-        case 'verification.expired':
-          return {
-            type: 'expired',
-            userId: data.reference_id || data.metadata?.user_id,
-            sessionId: data.id
-          };
-
-        case 'verification.processing':
-        case 'verification.pending':
-          return {
-            type: 'in_progress',
-            userId: data.reference_id || data.metadata?.user_id,
-            sessionId: data.id
-          };
-
-        default:
-          console.warn('⚠️ Unknown Didit webhook event type:', type);
-          return {
-            type: 'unknown',
-            event: type,
-            userId: data.reference_id || data.metadata?.user_id
-          };
+      if (status === 'Verified' || status === 'Approved') {
+        eventType = 'completed';
+        verified = true;
+      } else if (status === 'Rejected' || status === 'Failed') {
+        eventType = 'failed';
+      } else if (status === 'Expired') {
+        eventType = 'expired';
+      } else if (status === 'In Progress' || status === 'Pending') {
+        eventType = 'in_progress';
       }
+
+      return {
+        type: eventType,
+        userId: vendor_data,
+        sessionId: session_id,
+        verified: verified,
+        verificationData: {
+          identity: event.identity_verification || {},
+          document: event.document_verification || {},
+          liveness: event.liveness_check || {},
+          address: event.address_verification || {}
+        },
+        failureReason: event.rejection_reason || event.failure_reason
+      };
+
     } catch (error) {
       console.error('❌ Process webhook error:', error);
       throw error;
-    }
-  }
-
-  /**
-   * Cancel verification session
-   */
-  async cancelVerification(sessionId) {
-    try {
-      await axios.delete(
-        `${this.baseUrl}/verifications/${sessionId}`,
-        {
-          headers: this.getHeaders(),
-          timeout: 15000
-        }
-      );
-
-      console.log('✅ Didit session cancelled:', sessionId);
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Didit cancel session error:', error.response?.data || error.message);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
-    }
-  }
-
-  /**
-   * Get supported countries
-   */
-  async getSupportedCountries() {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/countries`,
-        {
-          headers: this.getHeaders(),
-          timeout: 10000
-        }
-      );
-
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('❌ Get countries error:', error.response?.data || error.message);
-      return {
-        success: false,
-        error: error.message
-      };
     }
   }
 
@@ -410,11 +332,13 @@ class DiditService {
    */
   async healthCheck() {
     try {
+      // Try to create a test session to verify credentials
       const response = await axios.get(
-        `${this.baseUrl}/health`,
+        `${this.baseUrl}/v2/session/`,
         {
           headers: this.getHeaders(),
-          timeout: 5000
+          timeout: 5000,
+          params: { limit: 1 } // Just fetch 1 session to test
         }
       );
 

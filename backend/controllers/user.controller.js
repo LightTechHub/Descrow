@@ -1745,5 +1745,4 @@ exports.clearActivityLog = async (req, res) => {
     });
   }
 };
-
 module.exports = exports;

@@ -1,4 +1,23 @@
 // File: src/pages/Profile/ProfilePage.jsx - UPDATED WITH DEBOUNCE AND ERROR HANDLING
+
+// EMERGENCY THROTTLE
+const FETCH_COOLDOWN = 3000; // 3 seconds
+let lastFetch = 0;
+
+const ProfilePage = () => {
+  // ... existing code
+  
+  const fetchData = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastFetch < FETCH_COOLDOWN) {
+      console.warn('🛑 Throttled: Too fast!');
+      return;
+    }
+    lastFetch = now;
+    
+    // ... rest of your fetch logic
+  }, [navigate]);
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 

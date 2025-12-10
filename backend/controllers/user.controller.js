@@ -73,18 +73,33 @@ exports.startKYCVerification = async (req, res) => {
     if (!diditResponse.success) {
       console.error('❌ Failed to create Didit session:', diditResponse);
       
-      // Check if it's an API key error
-      if (diditResponse.error?.includes('401') || diditResponse.error?.includes('authenticated')) {
-        return res.status(500).json({
-          success: false,
-          message: 'KYC service configuration error. Please contact support.',
-          error: 'Invalid Didit API key'
-        });
+      // ✅ FIX: Check if error is an object and has detail property
+      let errorMessage = 'Failed to start verification. Please try again.';
+      
+      if (diditResponse.error) {
+        // If error is an object with detail
+        if (typeof diditResponse.error === 'object' && diditResponse.error.detail) {
+          errorMessage = diditResponse.error.detail;
+          
+          // Check for API key error
+          if (errorMessage.includes('authenticated') || errorMessage.includes('access token')) {
+            errorMessage = 'KYC service configuration error. Please contact support.';
+          }
+        } 
+        // If error is a string
+        else if (typeof diditResponse.error === 'string') {
+          errorMessage = diditResponse.error;
+          
+          // Check for common error patterns
+          if (errorMessage.includes('401') || errorMessage.includes('authenticated')) {
+            errorMessage = 'KYC service configuration error. Please contact support.';
+          }
+        }
       }
       
       return res.status(500).json({
         success: false,
-        message: diditResponse.message || 'Failed to start verification. Please try again.',
+        message: errorMessage,
         error: process.env.NODE_ENV === 'development' ? diditResponse.error : undefined
       });
     }
@@ -119,8 +134,6 @@ exports.startKYCVerification = async (req, res) => {
     });
   }
 };
-
-/**
  * Check KYC status from Didit API and update user
  */
 exports.checkKYCStatus = async (req, res) => {

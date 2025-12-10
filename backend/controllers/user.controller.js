@@ -1019,13 +1019,15 @@ function calculateEscrowStats(escrows, totalAmount, isSelling = false) {
     if (stats.hasOwnProperty(escrow.status)) {
       stats[escrow.status]++;
     }
-  });
+ });
 
   if (isSelling) {
     stats.totalEarned = totalAmount;
   } else {
     stats.totalSpent = totalAmount;
-  }​​​​​​​​​​​​​​​​  return stats;
+  }
+
+  return stats;
 }
 
 // ======================================================

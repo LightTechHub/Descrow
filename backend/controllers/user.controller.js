@@ -1025,7 +1025,7 @@ function calculateEscrowStats(escrows, totalAmount, isSelling = false) {
     stats.totalEarned = totalAmount;
   } else {
     stats.totalSpent = totalAmount;
-  return stats;
+  }​​​​​​​​​​​​​​​​  return stats;
 }
 
 // ======================================================
@@ -1166,7 +1166,7 @@ exports.getPrivacySettings = async (req, res) => {
       success: true,
       data: {
         privacy: user.privacySettings || {
-          profileVisibility: 'public', // public, private, contacts
+          profileVisibility: 'public',
           showEmail: false,
           showPhone: false,
           showTransactionHistory: false,
@@ -1239,13 +1239,14 @@ exports.updatePrivacySettings = async (req, res) => {
       }
     });
 
-  }  catch (error) {
+  } catch (error) {
     console.error('Update privacy settings error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update privacy settings',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
 };
 
 /**
@@ -1442,7 +1443,7 @@ exports.requestAccountDeletion = async (req, res) => {
     user.accountStatus = 'pending_deletion';
     user.deletionRequestedAt = new Date();
     user.deletionReason = reason;
-    user.scheduledDeletionDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    user.scheduledDeletionDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     await user.save();
 
@@ -1745,4 +1746,5 @@ exports.clearActivityLog = async (req, res) => {
     });
   }
 };
+
 module.exports = exports;

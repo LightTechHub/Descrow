@@ -1,4 +1,4 @@
-// backend/services/didit.service.js - Corrected for Real Didit API
+// backend/services/didit.service.js
 const axios = require('axios');
 const crypto = require('crypto');
 
@@ -9,12 +9,40 @@ class DiditService {
     this.webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
     this.webhookVersion = process.env.DIDIT_WEBHOOK_VERSION || 'v2';
     this.baseUrl = process.env.DIDIT_API_URL || 'https://api.didit.me/v1';
+    
+    // Log configuration on startup (safely)
+    this.logConfiguration();
+  }
+
+  /**
+   * Log configuration without exposing secrets
+   */
+  logConfiguration() {
+    console.log('🔑 Didit Service Configuration:');
+    console.log('   Base URL:', this.baseUrl);
+    console.log('   API Key:', this.apiKey ? `${this.apiKey.substring(0, 10)}...` : '❌ NOT SET');
+    console.log('   App ID:', this.appId ? `${this.appId.substring(0, 10)}...` : '❌ NOT SET');
+    console.log('   Webhook Secret:', this.webhookSecret ? 'SET ✅' : '❌ NOT SET');
+    console.log('   Webhook Version:', this.webhookVersion);
+    
+    if (!this.apiKey || !this.appId) {
+      console.error('❌ CRITICAL: Didit API credentials are missing!');
+      console.error('   Please set DIDIT_API_KEY and DIDIT_APP_ID in your environment variables');
+    }
   }
 
   /**
    * Generate authentication headers for Didit API
    */
   getHeaders() {
+    if (!this.apiKey) {
+      throw new Error('DIDIT_API_KEY is not configured');
+    }
+    
+    if (!this.appId) {
+      throw new Error('DIDIT_APP_ID is not configured');
+    }
+
     return {
       'Authorization': `Bearer ${this.apiKey}`,
       'X-App-Id': this.appId,
@@ -24,20 +52,57 @@ class DiditService {
   }
 
   /**
+   * Validate configuration before making requests
+   */
+  validateConfiguration() {
+    const errors = [];
+    
+    if (!this.apiKey) {
+      errors.push('DIDIT_API_KEY is not set');
+    }
+    
+    if (!this.appId) {
+      errors.push('DIDIT_APP_ID is not set');
+    }
+    
+    if (errors.length > 0) {
+      console.error('❌ Didit configuration errors:', errors);
+      return {
+        valid: false,
+        errors
+      };
+    }
+    
+    return { valid: true };
+  }
+
+  /**
    * Create a verification session for a user
    */
   async createVerificationSession(userId, userData) {
     try {
+      // Validate configuration first
+      const configCheck = this.validateConfiguration();
+      if (!configCheck.valid) {
+        return {
+          success: false,
+          message: 'KYC service is not properly configured',
+          error: {
+            detail: `Missing configuration: ${configCheck.errors.join(', ')}. Please contact support.`
+          }
+        };
+      }
+
       console.log('🔄 Creating Didit verification session for user:', userId);
 
       const requestBody = {
-        reference_id: userId, // Your internal user ID
+        reference_id: userId,
         email: userData.email,
         name: userData.name,
         success_url: `${process.env.FRONTEND_URL}/profile?tab=kyc&status=success`,
         cancel_url: `${process.env.FRONTEND_URL}/profile?tab=kyc&status=cancelled`,
         webhook_url: `${process.env.BACKEND_URL}/api/webhooks/didit`,
-        verification_type: 'full', // Options: 'basic', 'standard', 'full'
+        verification_type: 'full',
         metadata: {
           user_id: userId,
           tier: userData.tier || 'free',
@@ -45,6 +110,16 @@ class DiditService {
           timestamp: new Date().toISOString()
         }
       };
+
+      console.log('📤 Request details:', {
+        url: `${this.baseUrl}/verifications`,
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ***',
+          'X-App-Id': this.appId ? `${this.appId.substring(0, 10)}...` : 'NOT SET',
+          'Content-Type': 'application/json'
+        }
+      });
 
       const response = await axios.post(
         `${this.baseUrl}/verifications`,
@@ -65,17 +140,45 @@ class DiditService {
           expiresAt: response.data.expires_at || new Date(Date.now() + 24 * 60 * 60 * 1000)
         }
       };
+
     } catch (error) {
       console.error('❌ Didit create session error:', {
         status: error.response?.status,
+        statusText: error.response?.statusText,
         data: error.response?.data,
-        message: error.message
+        message: error.message,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: {
+            ...error.config?.headers,
+            'Authorization': error.config?.headers?.Authorization ? 'Bearer ***' : undefined
+          }
+        }
       });
+
+      // Provide specific error messages based on status code
+      let errorMessage = 'Failed to create verification session';
+      let errorDetail = error.response?.data?.detail || error.response?.data?.message || error.message;
+
+      if (error.response?.status === 401) {
+        errorMessage = 'Authentication failed with KYC provider';
+        errorDetail = 'Invalid API credentials. Please contact support.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Access forbidden';
+        errorDetail = 'Your API key does not have permission for this action.';
+      } else if (error.response?.status === 429) {
+        errorMessage = 'Rate limit exceeded';
+        errorDetail = 'Too many requests. Please try again later.';
+      }
       
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to create verification session',
-        error: error.response?.data || error.message
+        message: errorMessage,
+        error: {
+          detail: errorDetail,
+          status: error.response?.status
+        }
       };
     }
   }
@@ -85,6 +188,16 @@ class DiditService {
    */
   async getVerificationStatus(sessionId) {
     try {
+      // Validate configuration first
+      const configCheck = this.validateConfiguration();
+      if (!configCheck.valid) {
+        return {
+          success: false,
+          message: 'KYC service is not properly configured',
+          error: configCheck.errors
+        };
+      }
+
       console.log('🔍 Checking Didit verification status:', sessionId);
 
       const response = await axios.get(
@@ -100,7 +213,7 @@ class DiditService {
       return {
         success: true,
         data: {
-          status: data.status, // pending, processing, completed, failed, expired
+          status: data.status,
           verified: data.verification_result?.verified === true,
           userId: data.reference_id,
           verificationResult: {
@@ -160,7 +273,6 @@ class DiditService {
         return false;
       }
 
-      // Didit v2 webhook signature format
       const expectedSignature = crypto
         .createHmac('sha256', this.webhookSecret)
         .update(rawBody)

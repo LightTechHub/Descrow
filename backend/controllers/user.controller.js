@@ -1240,14 +1240,13 @@ exports.updatePrivacySettings = async (req, res) => {
       }
     });
 
-  } catch (error) {
+  }  catch (error) {
     console.error('Update privacy settings error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update privacy settings',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  }
 };
 
 /**

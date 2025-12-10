@@ -1,17 +1,10 @@
-// File: src/pages/Profile/ProfilePage.jsx - AGGRESSIVE FIX FOR 429 ERRORS
+// File: src/pages/Profile/ProfilePage.jsx - FINAL SIMPLIFIED VERSION
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  User, 
-  Shield, 
-  Settings, 
-  FileCheck, 
-  CreditCard,
-  ArrowLeft,
-  Loader,
-  AlertTriangle,
-  Mail
+  User, Shield, Settings, FileCheck, CreditCard,
+  ArrowLeft, Loader, AlertTriangle, Mail
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
 import KYCTab from './KYCTab';
@@ -22,132 +15,69 @@ import profileService from 'services/profileService';
 import { authService } from 'services/authService';
 import toast from 'react-hot-toast';
 
-// 🚨 GLOBAL LOCK - Prevents ANY ProfilePage instance from fetching simultaneously
-const GLOBAL_FETCH_LOCK = {
-  isLocked: false,
-  lastFetchTime: 0,
-  COOLDOWN: 3000 // 3 seconds minimum between fetches
-};
-
 const ProfilePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get('tab');
+    return ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab) ? tab : 'profile';
+  });
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
-  
-  // Component-level mounted check
-  const isMounted = useRef(true);
-  const hasInitialized = useRef(false);
 
-  // 🚨 SUPER AGGRESSIVE fetch with global lock and cooldown
-  const fetchData = useCallback(async () => {
-    const now = Date.now();
-    
-    // Check if already initialized
-    if (hasInitialized.current) {
-      console.log('⏸️ Already initialized, skipping fetch');
+  useEffect(() => {
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      navigate('/login');
       return;
     }
 
-    // Check global lock
-    if (GLOBAL_FETCH_LOCK.isLocked) {
-      console.log('🔒 Global fetch lock active, skipping...');
-      return;
-    }
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Service layer handles deduplication
+        const [profileResponse, kycResponse] = await Promise.all([
+          profileService.getProfile(),
+          profileService.getKYCStatus()
+        ]);
 
-    // Check cooldown
-    if (now - GLOBAL_FETCH_LOCK.lastFetchTime < GLOBAL_FETCH_LOCK.COOLDOWN) {
-      console.log('⏸️ Cooldown active, skipping fetch...');
-      return;
-    }
+        if (profileResponse.success) {
+          setUser(profileResponse.data);
+        }
 
-    try {
-      // Acquire lock
-      GLOBAL_FETCH_LOCK.isLocked = true;
-      GLOBAL_FETCH_LOCK.lastFetchTime = now;
-      hasInitialized.current = true;
-      
-      setLoading(true);
-      
-      const currentUser = authService.getCurrentUser();
-      if (!currentUser) {
-        navigate('/login');
-        return;
-      }
-
-      console.log('🔄 Fetching profile data (LOCKED)...');
-
-      const [profileResponse, kycResponse] = await Promise.allSettled([
-        profileService.getProfile(),
-        profileService.getKYCStatus()
-      ]);
-
-      if (!isMounted.current) return;
-
-      if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
-        setUser(profileResponse.value.data);
-        console.log('✅ Profile loaded');
-      }
-
-      if (kycResponse.status === 'fulfilled' && kycResponse.value.success) {
-        setKycStatus(kycResponse.value.data);
-        console.log('✅ KYC status loaded');
-      } else {
-        console.warn('⚠️ KYC fetch failed, using default');
-        setKycStatus({ status: 'unverified', isKYCVerified: false });
-      }
-    } catch (error) {
-      console.error('❌ Profile fetch error:', error);
-      if (error.response?.status === 429) {
-        toast.error('Too many requests. Please wait a moment.');
-      } else {
-        toast.error('Failed to load profile data');
-      }
-    } finally {
-      if (isMounted.current) {
+        if (kycResponse.success) {
+          setKycStatus(kycResponse.data);
+        } else {
+          setKycStatus({ status: 'unverified', isKYCVerified: false });
+        }
+      } catch (error) {
+        console.error('Fetch error:', error);
+        if (error.response?.status !== 429) {
+          toast.error('Failed to load profile data');
+        }
+      } finally {
         setLoading(false);
       }
-      // Release lock after 1 second
-      setTimeout(() => {
-        GLOBAL_FETCH_LOCK.isLocked = false;
-      }, 1000);
-    }
+    };
+
+    fetchData();
   }, [navigate]);
 
-  // ✅ Mount effect - STRICT single initialization
-  useEffect(() => {
-    isMounted.current = true;
-    
-    console.log('🎬 ProfilePage mounted');
-    fetchData();
-
-    return () => {
-      console.log('👋 ProfilePage unmounting');
-      isMounted.current = false;
-    };
-  }, []); // ONLY on mount
-
-  // ✅ Handle tab from URL - NO fetching
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab && ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab)) {
-      console.log('📍 Tab from URL:', tab);
       setActiveTab(tab);
     }
   }, [searchParams]);
 
-  // ✅ Tab change - NO fetching
-  const handleTabChange = useCallback((tab) => {
-    console.log('🔀 Tab changed to:', tab);
-    
+  const handleTabChange = (tab) => {
     setActiveTab(tab);
-    
     const url = new URL(window.location);
     url.searchParams.set('tab', tab);
     window.history.replaceState({}, '', url);
-    
+
     if (tab === 'bank-accounts') {
       const isEmailVerified = user?.verified;
       const isKYCApproved = kycStatus?.isKYCVerified && kycStatus?.status === 'approved';
@@ -161,21 +91,11 @@ const ProfilePage = () => {
         return;
       }
     }
-  }, [user, kycStatus]);
+  };
 
-  // ✅ Manual refresh with cooldown protection
   const handleProfileUpdate = () => {
-    const now = Date.now();
-    
-    if (now - GLOBAL_FETCH_LOCK.lastFetchTime < GLOBAL_FETCH_LOCK.COOLDOWN) {
-      toast.error('Please wait before refreshing again');
-      return;
-    }
-    
-    console.log('🔄 Manual profile update triggered');
-    hasInitialized.current = false;
-    GLOBAL_FETCH_LOCK.isLocked = false;
-    fetchData();
+    profileService.clearCache();
+    window.location.reload();
   };
 
   if (loading) {
@@ -222,7 +142,6 @@ const ProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      {/* Header */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <button
@@ -262,7 +181,6 @@ const ProfilePage = () => {
           </div>
 
           {!isEmailVerified && <EmailVerificationWarning />}
-          
           {isEmailVerified && !isKYCApproved && (
             <KYCVerificationWarning 
               kycStatus={kycStatus} 
@@ -272,7 +190,6 @@ const ProfilePage = () => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-1">
@@ -283,7 +200,6 @@ const ProfilePage = () => {
               isEmailVerified={isEmailVerified}
               isKYCApproved={isKYCApproved}
             />
-            
             {canAccessEscrowFeatures && <PayoutInfo />}
           </div>
 
@@ -302,7 +218,7 @@ const ProfilePage = () => {
   );
 };
 
-// Components remain the same...
+// Rest of components remain the same...
 const EmailVerificationWarning = () => (
   <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
     <div className="flex items-center gap-3">

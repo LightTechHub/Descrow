@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, 
@@ -21,15 +21,23 @@ import toast from 'react-hot-toast';
 import VolumeChart from 'components/Dashboard/Charts/VolumeChart';
 import PieChartComponent from 'components/Dashboard/Charts/PieChartComponent';
 import StatusDonutChart from 'components/Dashboard/Charts/StatusDonutChart';
+
 const OverviewTab = ({ user }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [recentTransactions, setRecentTransactions] = useState([]);
+  
+  // ✅ Add ref to prevent duplicate fetches
+  const hasFetchedData = useRef(false);
 
   useEffect(() => {
-    fetchOverviewData();
-  }, []);
+    // ✅ Only fetch once
+    if (!hasFetchedData.current) {
+      hasFetchedData.current = true;
+      fetchOverviewData();
+    }
+  }, []); // ✅ Empty dependency array is fine now
 
   const fetchOverviewData = async () => {
     try {

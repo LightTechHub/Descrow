@@ -90,6 +90,28 @@ app.use(cors({
 
 app.options('*', cors());
 
+
+// ==================== REQUEST LOGGING FOR DEBUGGING ====================
+const requestCounts = new Map();
+
+app.use((req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const key = `${ip}:${req.path}`;
+  
+  const count = requestCounts.get(key) || 0;
+  requestCounts.set(key, count + 1);
+  
+  // Log if same IP makes more than 5 requests to same endpoint in 10 seconds
+  if (count > 5 && count % 5 === 0) {
+    console.log(`⚠️ HIGH FREQUENCY: ${ip} → ${req.method} ${req.path} (${count} times)`);
+  }
+  
+  // Clear counts every 10 seconds
+  setTimeout(() => requestCounts.delete(key), 10000);
+  
+  next();
+});
+
 // ==================== BODY PARSERS ====================
 app.use(express.json({
   limit: '2mb',

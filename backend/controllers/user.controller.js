@@ -1025,7 +1025,6 @@ function calculateEscrowStats(escrows, totalAmount, isSelling = false) {
     stats.totalEarned = totalAmount;
   } else {
     stats.totalSpent = totalAmount;
-  }​​​​​​​​​​​​​​​​
   return stats;
 }
 

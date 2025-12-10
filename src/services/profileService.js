@@ -1,4 +1,4 @@
-// File: src/services/profileService.js - UPDATED WITH KYC AND BANK ACCOUNT METHODS
+// File: src/services/profileService.js - FIXED WITH REQUEST DEDUPLICATION
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
@@ -13,14 +13,67 @@ const getAuthHeaders = () => {
   };
 };
 
+// 🚨 REQUEST CACHE - Prevents duplicate API calls
+const REQUEST_CACHE = {
+  profile: { promise: null, data: null, timestamp: 0 },
+  kycStatus: { promise: null, data: null, timestamp: 0 },
+  bankAccounts: { promise: null, data: null, timestamp: 0 }
+};
+
+const CACHE_DURATION = 5000; // 5 seconds cache
+
+// Helper function to handle cached requests
+const cachedRequest = async (cacheKey, requestFn) => {
+  const now = Date.now();
+  const cache = REQUEST_CACHE[cacheKey];
+
+  // Return cached data if fresh
+  if (cache.data && (now - cache.timestamp) < CACHE_DURATION) {
+    console.log(`✅ Using cached ${cacheKey} data`);
+    return cache.data;
+  }
+
+  // Return existing promise if request in flight
+  if (cache.promise) {
+    console.log(`⏸️ ${cacheKey} request already in flight, waiting...`);
+    return cache.promise;
+  }
+
+  // Make new request
+  console.log(`🔄 Making new ${cacheKey} request`);
+  cache.promise = requestFn()
+    .then(response => {
+      cache.data = response;
+      cache.timestamp = now;
+      cache.promise = null;
+      return response;
+    })
+    .catch(error => {
+      cache.promise = null;
+      throw error;
+    });
+
+  return cache.promise;
+};
+
 const profileService = {
-  // Get profile
+  // Clear cache - useful for manual refresh
+  clearCache: () => {
+    console.log('🧹 Clearing profile cache');
+    REQUEST_CACHE.profile = { promise: null, data: null, timestamp: 0 };
+    REQUEST_CACHE.kycStatus = { promise: null, data: null, timestamp: 0 };
+    REQUEST_CACHE.bankAccounts = { promise: null, data: null, timestamp: 0 };
+  },
+
+  // Get profile - WITH CACHING
   getProfile: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile`,
-      getAuthHeaders()
-    );
-    return response.data;
+    return cachedRequest('profile', async () => {
+      const response = await axios.get(
+        `${API_URL}/profile`,
+        getAuthHeaders()
+      );
+      return response.data;
+    });
   },
 
   // Update profile
@@ -30,6 +83,8 @@ const profileService = {
       data,
       getAuthHeaders()
     );
+    // Clear cache after update
+    REQUEST_CACHE.profile = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
@@ -49,6 +104,8 @@ const profileService = {
         }
       }
     );
+    // Clear cache after avatar update
+    REQUEST_CACHE.profile = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
@@ -59,6 +116,8 @@ const profileService = {
       {},
       getAuthHeaders()
     );
+    // Clear KYC cache after starting verification
+    REQUEST_CACHE.kycStatus = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
@@ -71,69 +130,71 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Submit KYC
+  // ✅ Submit KYC
   submitKYC: async (kycData) => {
     const response = await axios.post(
       `${API_URL}/users/upload-kyc`,
       kycData,
       getAuthHeaders()
     );
+    // Clear KYC cache after submission
+    REQUEST_CACHE.kycStatus = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
-  // ✅ NEW: Get KYC Status
+  // ✅ Get KYC Status - WITH CACHING
   getKYCStatus: async () => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/users/profile`,
-        getAuthHeaders()
-      );
-      
-      if (response.data.success) {
+    return cachedRequest('kycStatus', async () => {
+      try {
+        const response = await axios.get(
+          `${API_URL}/users/profile`,
+          getAuthHeaders()
+        );
+        
+        if (response.data.success) {
+          return {
+            success: true,
+            data: {
+              status: response.data.data?.user?.kycStatus?.status || 'unverified',
+              tier: response.data.data?.user?.kycStatus?.tier || 'basic',
+              submittedAt: response.data.data?.user?.kycStatus?.submittedAt,
+              reviewedAt: response.data.data?.user?.kycStatus?.reviewedAt,
+              rejectionReason: response.data.data?.user?.kycStatus?.rejectionReason,
+              resubmissionAllowed: response.data.data?.user?.kycStatus?.resubmissionAllowed,
+              personalInfo: response.data.data?.user?.kycStatus?.personalInfo,
+              businessInfo: response.data.data?.user?.kycStatus?.businessInfo,
+              approvedBy: response.data.data?.user?.kycStatus?.approvedBy,
+              isKYCVerified: response.data.data?.user?.isKYCVerified || false
+            }
+          };
+        }
+        
         return {
           success: true,
           data: {
-            status: response.data.data?.user?.kycStatus?.status || 'unverified',
-            tier: response.data.data?.user?.kycStatus?.tier || 'basic',
-            submittedAt: response.data.data?.user?.kycStatus?.submittedAt,
-            reviewedAt: response.data.data?.user?.kycStatus?.reviewedAt,
-            rejectionReason: response.data.data?.user?.kycStatus?.rejectionReason,
-            resubmissionAllowed: response.data.data?.user?.kycStatus?.resubmissionAllowed,
-            personalInfo: response.data.data?.user?.kycStatus?.personalInfo,
-            businessInfo: response.data.data?.user?.kycStatus?.businessInfo,
-            approvedBy: response.data.data?.user?.kycStatus?.approvedBy,
-            isKYCVerified: response.data.data?.user?.isKYCVerified || false
+            status: 'unverified',
+            tier: 'basic',
+            isKYCVerified: false
           }
         };
+        
+      } catch (error) {
+        console.error('Get KYC status error:', error);
+        
+        return {
+          success: false,
+          data: {
+            status: 'unverified',
+            tier: 'basic',
+            isKYCVerified: false
+          },
+          error: error.message
+        };
       }
-      
-      // Fallback response
-      return {
-        success: true,
-        data: {
-          status: 'unverified',
-          tier: 'basic',
-          isKYCVerified: false
-        }
-      };
-      
-    } catch (error) {
-      console.error('Get KYC status error:', error);
-      
-      // Return default response on error
-      return {
-        success: false,
-        data: {
-          status: 'unverified',
-          tier: 'basic',
-          isKYCVerified: false
-        },
-        error: error.message
-      };
-    }
+    });
   },
 
-  // ✅ NEW: Get Tier Information
+  // Get Tier Information
   getTierInfo: async () => {
     const response = await axios.get(
       `${API_URL}/profile/tier-info`,
@@ -142,7 +203,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Calculate Upgrade Benefits
+  // Calculate Upgrade Benefits
   calculateUpgradeBenefits: async (targetTier) => {
     const response = await axios.get(
       `${API_URL}/profile/upgrade-benefits`,
@@ -154,7 +215,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Initialize Tier Upgrade Payment
+  // Initialize Tier Upgrade Payment
   initiateTierUpgrade: async (upgradeData) => {
     const response = await axios.post(
       `${API_URL}/profile/initiate-upgrade`,
@@ -164,37 +225,44 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Complete Tier Upgrade
+  // Complete Tier Upgrade
   completeTierUpgrade: async (paymentData) => {
     const response = await axios.post(
       `${API_URL}/profile/complete-upgrade`,
       paymentData,
       getAuthHeaders()
     );
+    // Clear profile cache after upgrade
+    REQUEST_CACHE.profile = { promise: null, data: null, timestamp: 0 };
+    REQUEST_CACHE.kycStatus = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
-  // ✅ NEW: Cancel Subscription
+  // Cancel Subscription
   cancelSubscription: async () => {
     const response = await axios.post(
       `${API_URL}/profile/cancel-subscription`,
       {},
       getAuthHeaders()
     );
+    // Clear profile cache
+    REQUEST_CACHE.profile = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
-  // ✅ NEW: Renew Subscription
+  // Renew Subscription
   renewSubscription: async (paymentReference) => {
     const response = await axios.post(
       `${API_URL}/profile/renew-subscription`,
       { paymentReference },
       getAuthHeaders()
     );
+    // Clear profile cache
+    REQUEST_CACHE.profile = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
-  // ✅ NEW: Get User Statistics
+  // Get User Statistics
   getUserStatistics: async () => {
     const response = await axios.get(
       `${API_URL}/profile/statistics`,
@@ -203,7 +271,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Enable 2FA
+  // Enable 2FA
   enable2FA: async () => {
     const response = await axios.post(
       `${API_URL}/profile/enable-2fa`,
@@ -213,7 +281,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Verify 2FA Token
+  // Verify 2FA Token
   verify2FA: async (token) => {
     const response = await axios.post(
       `${API_URL}/profile/verify-2fa`,
@@ -223,7 +291,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Disable 2FA
+  // Disable 2FA
   disable2FA: async (password) => {
     const response = await axios.post(
       `${API_URL}/profile/disable-2fa`,
@@ -255,13 +323,15 @@ const profileService = {
 
   // ==================== BANK ACCOUNT METHODS ====================
 
-  // Get user's bank accounts
+  // Get user's bank accounts - WITH CACHING
   getBankAccounts: async () => {
-    const response = await axios.get(
-      `${API_URL}/bank/list`,
-      getAuthHeaders()
-    );
-    return response.data;
+    return cachedRequest('bankAccounts', async () => {
+      const response = await axios.get(
+        `${API_URL}/bank/list`,
+        getAuthHeaders()
+      );
+      return response.data;
+    });
   },
 
   // Get banks list
@@ -283,6 +353,8 @@ const profileService = {
       data,
       getAuthHeaders()
     );
+    // Clear bank accounts cache
+    REQUEST_CACHE.bankAccounts = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
@@ -292,6 +364,8 @@ const profileService = {
       `${API_URL}/bank/${accountId}`,
       getAuthHeaders()
     );
+    // Clear bank accounts cache
+    REQUEST_CACHE.bankAccounts = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
@@ -302,6 +376,8 @@ const profileService = {
       {},
       getAuthHeaders()
     );
+    // Clear bank accounts cache
+    REQUEST_CACHE.bankAccounts = { promise: null, data: null, timestamp: 0 };
     return response.data;
   },
 
@@ -315,7 +391,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Get user's wallet balance
+  // Get user's wallet balance
   getWalletBalance: async () => {
     const response = await axios.get(
       `${API_URL}/profile/wallet`,
@@ -324,7 +400,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Get user's transaction history
+  // Get user's transaction history
   getTransactionHistory: async (params = {}) => {
     const response = await axios.get(
       `${API_URL}/profile/transactions`,
@@ -336,7 +412,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Withdraw funds
+  // Withdraw funds
   withdrawFunds: async (withdrawalData) => {
     const response = await axios.post(
       `${API_URL}/profile/withdraw`,
@@ -346,7 +422,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Get user's escrow stats
+  // Get user's escrow stats
   getEscrowStats: async () => {
     const response = await axios.get(
       `${API_URL}/profile/escrow-stats`,
@@ -355,7 +431,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Get user's dispute history
+  // Get user's dispute history
   getDisputeHistory: async (params = {}) => {
     const response = await axios.get(
       `${API_URL}/profile/disputes`,
@@ -367,7 +443,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Get user's security settings
+  // Get user's security settings
   getSecuritySettings: async () => {
     const response = await axios.get(
       `${API_URL}/profile/security-settings`,
@@ -376,7 +452,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Update security settings
+  // Update security settings
   updateSecuritySettings: async (settings) => {
     const response = await axios.put(
       `${API_URL}/profile/security-settings`,
@@ -386,7 +462,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Get user's API keys
+  // Get user's API keys
   getAPIKeys: async () => {
     const response = await axios.get(
       `${API_URL}/profile/api-keys`,
@@ -395,7 +471,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Create API key
+  // Create API key
   createAPIKey: async (keyData) => {
     const response = await axios.post(
       `${API_URL}/profile/api-keys`,
@@ -405,7 +481,7 @@ const profileService = {
     return response.data;
   },
 
-  // ✅ NEW: Delete API key
+  // Delete API key
   deleteAPIKey: async (keyId) => {
     const response = await axios.delete(
       `${API_URL}/profile/api-keys/${keyId}`,

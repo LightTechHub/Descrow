@@ -1,10 +1,16 @@
-// File: src/pages/Profile/ProfilePage.jsx - ADD DEBUG PANEL
-
-import React, { useState, useEffect } from 'react';
+// File: src/pages/Profile/ProfilePage.jsx
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  User, Shield, Settings, FileCheck, CreditCard,
-  ArrowLeft, Loader, AlertTriangle, Mail, Bug
+  User, 
+  Shield, 
+  Settings, 
+  FileCheck, 
+  CreditCard,
+  ArrowLeft,
+  Loader,
+  AlertTriangle,
+  Mail
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
 import KYCTab from './KYCTab';
@@ -15,73 +21,55 @@ import profileService from 'services/profileService';
 import { authService } from 'services/authService';
 import toast from 'react-hot-toast';
 
-// 🚨 DEBUG TRACKER - Visible on mobile
-const DEBUG_LOG = {
-  calls: [],
-  log: function(endpoint, source) {
-    const timestamp = new Date().toLocaleTimeString();
-    this.calls.push({ endpoint, source, timestamp });
-    console.log(`📞 API Call #${this.calls.length}: ${endpoint} from ${source} at ${timestamp}`);
-  },
-  getReport: function() {
-    return this.calls;
-  },
-  clear: function() {
-    this.calls = [];
-  }
-};
-
 const ProfilePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => {
-    const tab = searchParams.get('tab');
-    return ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab) ? tab : 'profile';
-  });
+  const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
-  const [showDebug, setShowDebug] = useState(false); // Debug panel toggle
+  
+  const hasFetched = useRef(false);
 
-  // 🚨 SINGLE FETCH WITH TRACKING
-  useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      navigate('/login');
-      return;
-    }
-
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        DEBUG_LOG.log('/profile', 'ProfilePage.useEffect');
-        const profileResponse = await profileService.getProfile();
-
-        DEBUG_LOG.log('/users/profile', 'ProfilePage.useEffect');
-        const kycResponse = await profileService.getKYCStatus();
-
-        if (profileResponse.success) {
-          setUser(profileResponse.data);
-        }
-
-        if (kycResponse.success) {
-          setKycStatus(kycResponse.data);
-        } else {
-          setKycStatus({ status: 'unverified', isKYCVerified: false });
-        }
-      } catch (error) {
-        console.error('Fetch error:', error);
-        if (error.response?.status !== 429) {
-          toast.error('Failed to load profile data');
-        }
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser) {
+        navigate('/login');
+        return;
       }
-    };
 
-    fetchData();
+      const [profileResponse, kycResponse] = await Promise.allSettled([
+        profileService.getProfile(),
+        profileService.getKYCStatus()
+      ]);
+
+      if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
+        setUser(profileResponse.value.data);
+      }
+
+      if (kycResponse.status === 'fulfilled' && kycResponse.value.success) {
+        setKycStatus(kycResponse.value.data);
+      } else if (kycResponse.status === 'rejected') {
+        console.warn('KYC fetch failed:', kycResponse.reason);
+        setKycStatus({ status: 'unverified', isKYCVerified: false });
+      }
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
   }, [navigate]);
+
+  useEffect(() => {
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchData();
+    }
+  }, [fetchData]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -92,10 +80,11 @@ const ProfilePage = () => {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    
     const url = new URL(window.location);
     url.searchParams.set('tab', tab);
-    window.history.replaceState({}, '', url);
-
+    window.history.pushState({}, '', url);
+    
     if (tab === 'bank-accounts') {
       const isEmailVerified = user?.verified;
       const isKYCApproved = kycStatus?.isKYCVerified && kycStatus?.status === 'approved';
@@ -112,7 +101,8 @@ const ProfilePage = () => {
   };
 
   const handleProfileUpdate = () => {
-    window.location.reload();
+    hasFetched.current = false;
+    fetchData();
   };
 
   if (loading) {
@@ -159,75 +149,6 @@ const ProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      {/* 🚨 DEBUG BUTTON - Fixed bottom right */}
-      <button
-        onClick={() => setShowDebug(!showDebug)}
-        className="fixed bottom-4 right-4 z-50 p-3 bg-red-600 text-white rounded-full shadow-lg"
-      >
-        <Bug className="w-6 h-6" />
-      </button>
-
-      {/* 🚨 DEBUG PANEL - Shows API calls */}
-      {showDebug && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-end">
-          <div className="bg-white dark:bg-gray-900 w-full max-h-[80vh] overflow-y-auto rounded-t-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">API Call Log</h3>
-              <button
-                onClick={() => setShowDebug(false)}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-800 rounded-lg"
-              >
-                Close
-              </button>
-            </div>
-            
-            <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <p className="text-sm font-bold text-red-800 dark:text-red-200">
-                Total API Calls: {DEBUG_LOG.calls.length}
-              </p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                {DEBUG_LOG.calls.length > 10 ? '⚠️ TOO MANY CALLS!' : '✅ Normal'}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {DEBUG_LOG.calls.map((call, index) => (
-                <div
-                  key={index}
-                  className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-sm font-mono text-blue-600 dark:text-blue-400">
-                      #{index + 1}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {call.timestamp}
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {call.endpoint}
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Source: {call.source}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => {
-                DEBUG_LOG.clear();
-                setShowDebug(false);
-              }}
-              className="w-full mt-4 px-4 py-2 bg-red-600 text-white rounded-lg"
-            >
-              Clear Log
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Rest of your ProfilePage UI */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <button
@@ -304,7 +225,6 @@ const ProfilePage = () => {
   );
 };
 
-// Keep all your existing components below...
 const EmailVerificationWarning = () => (
   <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
     <div className="flex items-center gap-3">

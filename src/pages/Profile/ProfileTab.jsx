@@ -1,6 +1,4 @@
 ‎src/pages/Profile/ProfileTab.jsx‎
-Original file line number	Diff line number	Diff line change
-@@ -1,321 +1,277 @@
 import React, { useState } from 'react';
 import { Camera, Loader, Save } from 'lucide-react';
 // File: src/pages/Profile/ProfilePage.jsx - FIXED VERSION

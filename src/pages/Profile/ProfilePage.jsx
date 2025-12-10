@@ -1,4 +1,4 @@
-// File: src/pages/Profile/ProfilePage.jsx - FIXED
+// File: src/pages/Profile/ProfilePage.jsx - FIXED WITH EMERGENCY THROTTLE
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -21,6 +21,10 @@ import profileService from 'services/profileService';
 import { authService } from 'services/authService';
 import toast from 'react-hot-toast';
 
+// 🚨 EMERGENCY THROTTLE - Prevents rapid-fire requests
+const FETCH_COOLDOWN = 3000; // 3 seconds minimum between fetches
+let lastFetchTime = 0;
+
 const ProfilePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -32,8 +36,16 @@ const ProfilePage = () => {
   // Track if we've fetched data to prevent multiple calls
   const hasFetched = useRef(false);
 
-  // Fetch data function - NOT in useEffect dependencies
+  // Fetch data function with throttle protection
   const fetchData = useCallback(async () => {
+    // 🚨 EMERGENCY BRAKE: Check cooldown
+    const now = Date.now();
+    if (now - lastFetchTime < FETCH_COOLDOWN) {
+      console.warn('🛑 THROTTLED: Fetch blocked - too fast! Waiting...');
+      return;
+    }
+    lastFetchTime = now;
+
     try {
       setLoading(true);
       
@@ -43,6 +55,8 @@ const ProfilePage = () => {
         return;
       }
 
+      console.log('🔄 Fetching profile data...');
+
       // Fetch profile and KYC status in parallel
       const [profileResponse, kycResponse] = await Promise.allSettled([
         profileService.getProfile(),
@@ -51,10 +65,12 @@ const ProfilePage = () => {
 
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         setUser(profileResponse.value.data);
+        console.log('✅ Profile data loaded');
       }
 
       if (kycResponse.status === 'fulfilled' && kycResponse.value.success) {
         setKycStatus(kycResponse.value.data);
+        console.log('✅ KYC status loaded');
       } else if (kycResponse.status === 'rejected') {
         console.warn('KYC fetch failed:', kycResponse.reason);
         setKycStatus({ status: 'unverified', isKYCVerified: false });
@@ -71,19 +87,28 @@ const ProfilePage = () => {
   useEffect(() => {
     if (!hasFetched.current) {
       hasFetched.current = true;
+      console.log('🎬 ProfilePage mounted - fetching data');
       fetchData();
     }
+
+    // Cleanup
+    return () => {
+      console.log('👋 ProfilePage unmounting');
+    };
   }, [fetchData]);
 
   // Effect 2: Handle tab changes from URL - separate effect
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab && ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab)) {
+      console.log('📍 Tab changed from URL:', tab);
       setActiveTab(tab);
     }
   }, [searchParams]);
 
   const handleTabChange = (tab) => {
+    console.log('🔀 Switching tab to:', tab);
+    
     // Update state
     setActiveTab(tab);
     
@@ -109,6 +134,7 @@ const ProfilePage = () => {
   };
 
   const handleProfileUpdate = () => {
+    console.log('🔄 Manual profile update triggered');
     // Reset fetch flag and refetch data
     hasFetched.current = false;
     fetchData();

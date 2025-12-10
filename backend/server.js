@@ -113,11 +113,15 @@ if (process.env.NODE_ENV === 'development') {
 // ==================== RATE LIMITING ====================
 
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 30, // ⚠️ Reduced from 100 to 30 per minute
   message: { success: false, message: 'Too many requests, please try again later.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for webhook routes
+    return req.path.includes('/webhook');
+  }
 });
 
 const authLimiter = rateLimit({
@@ -139,12 +143,21 @@ const webhookLimiter = rateLimit({
   skipFailedRequests: true
 });
 
+// ⚠️ ADD THIS - Aggressive rate limit for profile endpoints
+const profileLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 10, // Only 10 requests per minute for profile
+  message: { success: false, message: 'Too many profile requests. Please refresh the page.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/payments/initialize', paymentLimiter);
 app.use('/api/payments/webhook', webhookLimiter);
-
+app.use('/api/profile', profileLimiter); // ⚠️ ADD THIS LINE
 // ==================== STATIC FILES ====================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: '7d',

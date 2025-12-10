@@ -1,3 +1,5 @@
+// File: src/pages/Profile/ProfilePage.jsx - AGGRESSIVE FIX FOR 429 ERRORS
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -20,27 +22,53 @@ import profileService from 'services/profileService';
 import { authService } from 'services/authService';
 import toast from 'react-hot-toast';
 
+// 🚨 GLOBAL LOCK - Prevents ANY ProfilePage instance from fetching simultaneously
+const GLOBAL_FETCH_LOCK = {
+  isLocked: false,
+  lastFetchTime: 0,
+  COOLDOWN: 3000 // 3 seconds minimum between fetches
+};
+
 const ProfilePage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams(); // ✅ Removed setSearchParams
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
   
-  // ✅ Single fetch control lock
-  const fetchLock = useRef(false);
+  // Component-level mounted check
+  const isMounted = useRef(true);
+  const hasInitialized = useRef(false);
 
-  // ✅ Fetch function with lock mechanism
+  // 🚨 SUPER AGGRESSIVE fetch with global lock and cooldown
   const fetchData = useCallback(async () => {
-    if (fetchLock.current) {
-      console.log('⏸️ Fetch already in progress, skipping...');
+    const now = Date.now();
+    
+    // Check if already initialized
+    if (hasInitialized.current) {
+      console.log('⏸️ Already initialized, skipping fetch');
       return;
     }
-    
-    fetchLock.current = true;
-    
+
+    // Check global lock
+    if (GLOBAL_FETCH_LOCK.isLocked) {
+      console.log('🔒 Global fetch lock active, skipping...');
+      return;
+    }
+
+    // Check cooldown
+    if (now - GLOBAL_FETCH_LOCK.lastFetchTime < GLOBAL_FETCH_LOCK.COOLDOWN) {
+      console.log('⏸️ Cooldown active, skipping fetch...');
+      return;
+    }
+
     try {
+      // Acquire lock
+      GLOBAL_FETCH_LOCK.isLocked = true;
+      GLOBAL_FETCH_LOCK.lastFetchTime = now;
+      hasInitialized.current = true;
+      
       setLoading(true);
       
       const currentUser = authService.getCurrentUser();
@@ -49,12 +77,14 @@ const ProfilePage = () => {
         return;
       }
 
-      console.log('🔄 Fetching profile data...');
+      console.log('🔄 Fetching profile data (LOCKED)...');
 
       const [profileResponse, kycResponse] = await Promise.allSettled([
         profileService.getProfile(),
         profileService.getKYCStatus()
       ]);
+
+      if (!isMounted.current) return;
 
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         setUser(profileResponse.value.data);
@@ -70,20 +100,36 @@ const ProfilePage = () => {
       }
     } catch (error) {
       console.error('❌ Profile fetch error:', error);
-      toast.error('Failed to load profile data');
+      if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait a moment.');
+      } else {
+        toast.error('Failed to load profile data');
+      }
     } finally {
-      setLoading(false);
-      fetchLock.current = false;
+      if (isMounted.current) {
+        setLoading(false);
+      }
+      // Release lock after 1 second
+      setTimeout(() => {
+        GLOBAL_FETCH_LOCK.isLocked = false;
+      }, 1000);
     }
   }, [navigate]);
 
-  // ✅ SINGLE useEffect - fetch once on mount only
+  // ✅ Mount effect - STRICT single initialization
   useEffect(() => {
-    console.log('🎬 ProfilePage mounted - fetching data once');
+    isMounted.current = true;
+    
+    console.log('🎬 ProfilePage mounted');
     fetchData();
-  }, []); // Empty deps - only runs on mount
 
-  // ✅ Handle tab from URL - separate effect, NO fetching
+    return () => {
+      console.log('👋 ProfilePage unmounting');
+      isMounted.current = false;
+    };
+  }, []); // ONLY on mount
+
+  // ✅ Handle tab from URL - NO fetching
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab && ['profile', 'kyc', 'bank-accounts', 'security', 'settings'].includes(tab)) {
@@ -92,18 +138,16 @@ const ProfilePage = () => {
     }
   }, [searchParams]);
 
-  // ✅ Tab change handler - NO fetching, just URL update
+  // ✅ Tab change - NO fetching
   const handleTabChange = useCallback((tab) => {
     console.log('🔀 Tab changed to:', tab);
     
     setActiveTab(tab);
     
-    // Update URL without triggering navigation
     const url = new URL(window.location);
     url.searchParams.set('tab', tab);
-    window.history.replaceState({}, '', url); // ✅ Use replaceState
+    window.history.replaceState({}, '', url);
     
-    // Permission checks
     if (tab === 'bank-accounts') {
       const isEmailVerified = user?.verified;
       const isKYCApproved = kycStatus?.isKYCVerified && kycStatus?.status === 'approved';
@@ -119,10 +163,18 @@ const ProfilePage = () => {
     }
   }, [user, kycStatus]);
 
-  // ✅ Manual refresh only when explicitly needed
+  // ✅ Manual refresh with cooldown protection
   const handleProfileUpdate = () => {
+    const now = Date.now();
+    
+    if (now - GLOBAL_FETCH_LOCK.lastFetchTime < GLOBAL_FETCH_LOCK.COOLDOWN) {
+      toast.error('Please wait before refreshing again');
+      return;
+    }
+    
     console.log('🔄 Manual profile update triggered');
-    fetchLock.current = false; // Reset lock
+    hasInitialized.current = false;
+    GLOBAL_FETCH_LOCK.isLocked = false;
     fetchData();
   };
 
@@ -250,7 +302,7 @@ const ProfilePage = () => {
   );
 };
 
-// Email Verification Warning Component
+// Components remain the same...
 const EmailVerificationWarning = () => (
   <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
     <div className="flex items-center gap-3">
@@ -267,7 +319,6 @@ const EmailVerificationWarning = () => (
   </div>
 );
 
-// KYC Verification Warning Component
 const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
   let message = 'You need to verify your identity to create escrows and add bank accounts for payouts.';
   let buttonText = 'Verify Now';
@@ -305,7 +356,6 @@ const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
   );
 };
 
-// Tab Sidebar Component
 const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApproved }) => (
   <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-2">
     {tabs.map((tab) => {
@@ -351,7 +401,6 @@ const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApprov
   </div>
 );
 
-// Payout Info Component
 const PayoutInfo = () => (
   <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
     <h4 className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">
@@ -368,7 +417,6 @@ const PayoutInfo = () => (
   </div>
 );
 
-// Tab Content Component
 const TabContent = ({ activeTab, user, kycStatus, onUpdate, kycVerified }) => {
   switch (activeTab) {
     case 'profile':

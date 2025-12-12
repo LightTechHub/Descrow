@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle, XCircle, Clock, Loader, AlertCircle, Mail, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Loader, AlertCircle, Mail, ExternalLink, RefreshCw } from 'lucide-react';
 import profileService from 'services/profileService';
 import toast from 'react-hot-toast';
 
 const KYCTab = ({ user, onUpdate }) => {
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [kycStatus, setKycStatus] = useState(null);
   const [verificationUrl, setVerificationUrl] = useState(null);
   
-  // ✅ Prevent duplicate fetches
   const hasFetchedKYC = useRef(false);
 
   useEffect(() => {
@@ -20,10 +20,9 @@ const KYCTab = ({ user, onUpdate }) => {
 
   const fetchKYCStatus = async () => {
     try {
-      const response = await profileService.getKYCStatus();
+      const response = await profileService.checkKYCStatus();
       if (response.success) {
         setKycStatus(response.data);
-        // If there's an existing verification URL, save it
         if (response.data.verificationUrl) {
           setVerificationUrl(response.data.verificationUrl);
         }
@@ -42,12 +41,17 @@ const KYCTab = ({ user, onUpdate }) => {
       if (response.success) {
         const url = response.data.verificationUrl;
         setVerificationUrl(url);
-        toast.success('Verification session created! Redirecting...');
         
-        // ✅ Redirect immediately in same tab
+        if (response.data.isExisting) {
+          toast.success('Continuing existing verification...');
+        } else {
+          toast.success('Verification session created! Redirecting...');
+        }
+        
+        // Redirect immediately
         window.location.href = url;
         
-        // Start polling for status updates (in case user comes back)
+        // Start polling (in case user comes back)
         startStatusPolling();
       }
     } catch (error) {
@@ -55,6 +59,29 @@ const KYCTab = ({ user, onUpdate }) => {
       toast.error(error.response?.data?.message || 'Failed to start verification');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetVerification = async () => {
+    if (!window.confirm('Are you sure you want to reset your KYC verification and start over?')) {
+      return;
+    }
+
+    try {
+      setResetting(true);
+      const response = await profileService.resetKYCVerification();
+      
+      if (response.success) {
+        toast.success('Verification reset! You can start fresh now.');
+        hasFetchedKYC.current = false;
+        fetchKYCStatus();
+        setVerificationUrl(null);
+      }
+    } catch (error) {
+      console.error('Reset verification error:', error);
+      toast.error(error.response?.data?.message || 'Failed to reset verification');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -66,22 +93,25 @@ const KYCTab = ({ user, onUpdate }) => {
           if (response.data.status === 'approved') {
             clearInterval(interval);
             toast.success('KYC Verification completed!');
-            hasFetchedKYC.current = false; // ✅ Allow refetch
+            hasFetchedKYC.current = false;
             fetchKYCStatus();
             onUpdate && onUpdate();
           } else if (response.data.status === 'rejected') {
             clearInterval(interval);
             toast.error('KYC Verification failed');
-            hasFetchedKYC.current = false; // ✅ Allow refetch
+            hasFetchedKYC.current = false;
+            fetchKYCStatus();
+          } else if (response.data.status === 'unverified') {
+            clearInterval(interval);
+            hasFetchedKYC.current = false;
             fetchKYCStatus();
           }
         }
       } catch (error) {
         console.error('Status polling error:', error);
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
 
-    // Stop polling after 10 minutes
     setTimeout(() => clearInterval(interval), 600000);
   };
 
@@ -128,36 +158,54 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  // Pending
+  // Pending/In Progress
   if (kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress') {
     return (
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
-        <div className="flex items-center gap-4 mb-4">
-          <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-pulse" />
-          <div>
-            <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-200">
-              Verification In Progress
-            </h3>
-            <p className="text-blue-700 dark:text-blue-300">
-              Please complete your verification with Didit
-            </p>
+      <div className="space-y-4">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
+          <div className="flex items-center gap-4 mb-4">
+            <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-pulse" />
+            <div>
+              <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-200">
+                Verification In Progress
+              </h3>
+              <p className="text-blue-700 dark:text-blue-300">
+                Complete your verification with Didit to unlock all features
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex gap-3">
+            {verificationUrl && (
+              <button
+                onClick={() => window.location.href = verificationUrl}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                <ExternalLink className="w-5 h-5" />
+                Continue Verification
+              </button>
+            )}
+            
+            <button
+              onClick={resetVerification}
+              disabled={resetting}
+              className="flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition disabled:opacity-50"
+            >
+              {resetting ? (
+                <Loader className="w-5 h-5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-5 h-5" />
+              )}
+              Start Over
+            </button>
           </div>
         </div>
-        {verificationUrl && (
-          <button
-            onClick={() => window.location.href = verificationUrl}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            <ExternalLink className="w-5 h-5" />
-            Continue Verification
-          </button>
-        )}
       </div>
     );
   }
 
   // Rejected
-  if (kycStatus?.status === 'rejected') {
+  if (kycStatus?.status === 'rejected' || kycStatus?.status === 'expired') {
     return (
       <div className="space-y-4">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
@@ -165,7 +213,7 @@ const KYCTab = ({ user, onUpdate }) => {
             <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
             <div>
               <h3 className="text-lg font-semibold text-red-900 dark:text-red-200">
-                Verification Failed
+                {kycStatus.status === 'expired' ? 'Verification Expired' : 'Verification Failed'}
               </h3>
               <p className="text-red-700 dark:text-red-300">
                 {kycStatus.rejectionReason || 'Your verification could not be completed'}

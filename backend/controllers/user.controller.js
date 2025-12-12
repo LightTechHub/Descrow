@@ -205,7 +205,20 @@ exports.getProfile = async (req, res) => {
       });
     }
 
-    const tierLimits = user.getTierLimits();
+    // Get tier limits - with error handling
+    let tierLimits;
+    try {
+      tierLimits = user.getTierLimits();
+    } catch (error) {
+      console.error('Error getting tier limits:', error);
+      // Fallback tier limits
+      tierLimits = {
+        name: 'Free',
+        maxTransactionsPerMonth: 3,
+        maxTransactionAmount: { USD: 500, NGN: 750000 },
+        escrowFee: { USD: 0.05, NGN: 0.05 }
+      };
+    }
 
     res.status(200).json({
       success: true,
@@ -347,7 +360,6 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
-
 // ======================================================
 // =================== TIER MANAGEMENT ==================
 // ======================================================

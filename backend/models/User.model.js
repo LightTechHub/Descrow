@@ -50,7 +50,7 @@ const userSchema = new mongoose.Schema({
   },
 
   // ==================================================================
-  // 🚀 **NEW KYC STATUS (Your Updated Schema) — CLEAN + OPTIMIZED**
+  // 🚀 KYC STATUS - CLEAN + OPTIMIZED
   // ==================================================================
   kycStatus: {
     status: {
@@ -72,13 +72,13 @@ const userSchema = new mongoose.Schema({
     diditVerificationUrl: String,
     diditSessionExpiresAt: Date,
 
-    // RESULTS (RAW OBJECTS)
+    // RESULTS (RAW OBJECTS) - OPTIONAL
     verificationResult: {
       type: Object,
       default: undefined
     },
 
-    // PERSONAL & BUSINESS INFO (RAW OBJECTS)
+    // PERSONAL & BUSINESS INFO (RAW OBJECTS) - OPTIONAL
     personalInfo: {
       type: Object,
       default: undefined
@@ -281,6 +281,70 @@ userSchema.pre('save', async function (next) {
 // Compare password
 userSchema.methods.comparePassword = function (candidate) {
   return bcrypt.compare(candidate, this.password);
+};
+
+// ======================================================
+// ✅ GET TIER LIMITS METHOD
+// ======================================================
+userSchema.methods.getTierLimits = function() {
+  const tierLimits = {
+    free: {
+      name: 'Free',
+      maxTransactionsPerMonth: 3,
+      maxTransactionAmount: { USD: 500, NGN: 750000 },
+      escrowFee: { USD: 0.05, NGN: 0.05 }, // 5%
+      disputeResolution: false,
+      prioritySupport: false,
+      apiAccess: false,
+      customBranding: false
+    },
+    starter: {
+      name: 'Starter',
+      maxTransactionsPerMonth: 5,
+      maxTransactionAmount: { USD: 1000, NGN: 1500000 },
+      escrowFee: { USD: 0.035, NGN: 0.035 }, // 3.5%
+      disputeResolution: false,
+      prioritySupport: false,
+      apiAccess: false,
+      customBranding: false
+    },
+    growth: {
+      name: 'Growth',
+      maxTransactionsPerMonth: 50,
+      maxTransactionAmount: { USD: 10000, NGN: 15000000 },
+      escrowFee: { USD: 0.025, NGN: 0.025 }, // 2.5%
+      disputeResolution: true,
+      prioritySupport: false,
+      apiAccess: false,
+      customBranding: false,
+      monthlyCost: { USD: 29, NGN: 45000 }
+    },
+    enterprise: {
+      name: 'Enterprise',
+      maxTransactionsPerMonth: -1, // Unlimited
+      maxTransactionAmount: { USD: 100000, NGN: 150000000 },
+      escrowFee: { USD: 0.015, NGN: 0.015 }, // 1.5%
+      disputeResolution: true,
+      prioritySupport: true,
+      apiAccess: true,
+      customBranding: true,
+      monthlyCost: { USD: 99, NGN: 150000 }
+    },
+    api: {
+      name: 'API',
+      maxTransactionsPerMonth: -1, // Unlimited
+      maxTransactionAmount: { USD: -1, NGN: -1 }, // Unlimited
+      escrowFee: { USD: 0.01, NGN: 0.01 }, // 1%
+      disputeResolution: true,
+      prioritySupport: true,
+      apiAccess: true,
+      customBranding: true,
+      monthlyCost: { USD: 299, NGN: 450000 },
+      setupFee: { USD: 500, NGN: 750000 }
+    }
+  };
+
+  return tierLimits[this.tier] || tierLimits.free;
 };
 
 // ======================================================

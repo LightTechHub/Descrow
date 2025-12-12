@@ -24,10 +24,12 @@ router.put('/change-password', userController.changePassword);
 // ======================= KYC ==========================
 // ======================================================
 
-
 // didit route
 router.post('/kyc/start', userController.startKYCVerification);
 router.get('/kyc/status', userController.checkKYCStatus);
+
+// 🔥 NEW: Reset KYC Route
+router.post('/kyc/reset', userController.resetKYCVerification);
 
 // ======================================================
 // ================== TIER UPGRADE ======================

@@ -8,7 +8,7 @@ const diditService = require('../services/didit.service');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
-// ======================================================
+/// ======================================================
 // ======================= KYC ==========================
 // ======================================================
 
@@ -42,21 +42,39 @@ exports.startKYCVerification = async (req, res) => {
       });
     }
 
-    // Check for existing pending verification
+    // ✅ CHECK IF EXISTING SESSION IS VALID
     if (['pending', 'in_progress'].includes(user.kycStatus.status) && user.kycStatus.diditSessionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'You already have a verification in progress',
-        data: {
-          verificationUrl: user.kycStatus.diditVerificationUrl,
-          sessionId: user.kycStatus.diditSessionId
-        }
-      });
+      // Check if session is expired
+      const sessionExpired = user.kycStatus.diditSessionExpiresAt && 
+                            new Date(user.kycStatus.diditSessionExpiresAt) < new Date();
+      
+      if (!sessionExpired && user.kycStatus.diditVerificationUrl) {
+        // Session still valid, return existing URL
+        console.log('✅ Returning existing valid session:', user.kycStatus.diditSessionId);
+        return res.json({
+          success: true,
+          message: 'Verification session already exists',
+          data: {
+            verificationUrl: user.kycStatus.diditVerificationUrl,
+            sessionId: user.kycStatus.diditSessionId,
+            expiresAt: user.kycStatus.diditSessionExpiresAt,
+            isExisting: true
+          }
+        });
+      } else {
+        // Session expired or invalid, clear it
+        console.log('⚠️ Previous session expired or invalid, creating new one');
+        user.kycStatus.status = 'unverified';
+        user.kycStatus.diditSessionId = undefined;
+        user.kycStatus.diditVerificationUrl = undefined;
+        user.kycStatus.diditSessionExpiresAt = undefined;
+        await user.save();
+      }
     }
 
-    console.log('🔄 Creating Didit verification session for user:', userId);
+    console.log('🔄 Creating NEW Didit verification session for user:', userId);
 
-    // Create Didit verification session
+    // Create NEW Didit verification session
     const diditResponse = await diditService.createVerificationSession(
       userId.toString(),
       {
@@ -79,19 +97,16 @@ exports.startKYCVerification = async (req, res) => {
       });
     }
 
-    // Update user with session info - ONLY set defined values
+    // Update user with NEW session info
     user.kycStatus.status = 'pending';
     user.kycStatus.diditSessionId = diditResponse.data.sessionId;
     user.kycStatus.diditVerificationUrl = diditResponse.data.verificationUrl;
     user.kycStatus.diditSessionExpiresAt = diditResponse.data.expiresAt;
     user.kycStatus.submittedAt = new Date();
     
-    // Don't set verificationResult, personalInfo, businessInfo to undefined
-    // Only update them when we actually have data
-    
     await user.save();
 
-    console.log('✅ KYC verification started for user:', userId);
+    console.log('✅ NEW KYC verification session created for user:', userId);
 
     res.json({
       success: true,
@@ -99,7 +114,8 @@ exports.startKYCVerification = async (req, res) => {
       data: {
         verificationUrl: diditResponse.data.verificationUrl,
         sessionId: diditResponse.data.sessionId,
-        expiresAt: diditResponse.data.expiresAt
+        expiresAt: diditResponse.data.expiresAt,
+        isExisting: false
       }
     });
 
@@ -112,6 +128,245 @@ exports.startKYCVerification = async (req, res) => {
     });
   }
 };
+
+/**
+ * Check KYC status from Didit API and update user
+ */
+exports.checkKYCStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // If no session ID, return current status
+    if (!user.kycStatus.diditSessionId) {
+      return res.json({
+        success: true,
+        data: {
+          status: user.kycStatus.status || 'unverified',
+          isVerified: user.isKYCVerified || false,
+          verifiedAt: user.kycStatus.verifiedAt,
+          rejectionReason: user.kycStatus.rejectionReason,
+          submittedAt: user.kycStatus.submittedAt,
+          verificationUrl: user.kycStatus.diditVerificationUrl
+        }
+      });
+    }
+
+    console.log('🔍 Checking Didit verification status for session:', user.kycStatus.diditSessionId);
+
+    // Get status from Didit API
+    const diditResponse = await diditService.getVerificationStatus(user.kycStatus.diditSessionId);
+
+    if (!diditResponse.success) {
+      console.error('❌ Failed to check Didit status:', diditResponse);
+      
+      // ✅ If session not found on Didit (404), clear local session
+      if (diditResponse.error?.status === 404 || 
+          diditResponse.message?.includes('not found') ||
+          diditResponse.message?.includes('does not exist')) {
+        console.log('⚠️ Session not found on Didit, clearing local session');
+        user.kycStatus.status = 'unverified';
+        user.kycStatus.diditSessionId = undefined;
+        user.kycStatus.diditVerificationUrl = undefined;
+        user.kycStatus.diditSessionExpiresAt = undefined;
+        await user.save();
+        
+        return res.json({
+          success: true,
+          data: {
+            status: 'unverified',
+            isVerified: false,
+            message: 'Previous session expired. Please start a new verification.'
+          }
+        });
+      }
+      
+      // Return cached status if API fails but session might still be valid
+      return res.json({
+        success: true,
+        data: {
+          status: user.kycStatus.status,
+          isVerified: user.isKYCVerified,
+          verifiedAt: user.kycStatus.verifiedAt,
+          rejectionReason: user.kycStatus.rejectionReason,
+          submittedAt: user.kycStatus.submittedAt,
+          verificationUrl: user.kycStatus.diditVerificationUrl
+        }
+      });
+    }
+
+    const { status, verified, verificationResult, failureReason } = diditResponse.data;
+
+    // Map Didit status to our status
+    const updatedStatus = mapDiditStatus(status, verified, failureReason);
+    const hasChanges = updateUserKYCStatus(user, updatedStatus, verificationResult, failureReason);
+
+    // Save if changes occurred
+    if (hasChanges) {
+      await user.save();
+      console.log(`📝 KYC status updated for user ${userId}: ${updatedStatus.kycStatus}`);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        status: user.kycStatus.status,
+        isVerified: user.isKYCVerified,
+        verifiedAt: user.kycStatus.verifiedAt,
+        rejectionReason: user.kycStatus.rejectionReason,
+        submittedAt: user.kycStatus.submittedAt,
+        verificationUrl: user.kycStatus.diditVerificationUrl
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Check KYC status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check KYC status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * ✅ NEW: Reset/Cancel KYC Verification
+ */
+exports.resetKYCVerification = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Only allow reset if not approved
+    if (user.kycStatus.status === 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot reset approved KYC verification'
+      });
+    }
+
+    console.log('🔄 Resetting KYC verification for user:', userId);
+
+    // Cancel on Didit if session exists
+    if (user.kycStatus.diditSessionId) {
+      await diditService.cancelVerification(user.kycStatus.diditSessionId);
+    }
+
+    // Clear KYC status
+    user.kycStatus.status = 'unverified';
+    user.kycStatus.diditSessionId = undefined;
+    user.kycStatus.diditVerificationUrl = undefined;
+    user.kycStatus.diditSessionExpiresAt = undefined;
+    user.kycStatus.submittedAt = undefined;
+    user.kycStatus.rejectionReason = undefined;
+    user.isKYCVerified = false;
+
+    await user.save();
+
+    console.log('✅ KYC verification reset for user:', userId);
+
+    res.json({
+      success: true,
+      message: 'KYC verification reset successfully. You can start a new verification.',
+      data: {
+        status: 'unverified',
+        isVerified: false
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Reset KYC verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reset KYC verification',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Helper function to extract error message
+function extractErrorMessage(error) {
+  let errorMessage = 'Failed to start verification. Please try again.';
+  
+  if (!error) return errorMessage;
+  
+  if (typeof error === 'object' && error.detail) {
+    errorMessage = error.detail;
+  } else if (typeof error === 'string') {
+    errorMessage = error;
+  }
+  
+  if (errorMessage.includes('authenticated') || 
+      errorMessage.includes('access token') || 
+      errorMessage.includes('401')) {
+    errorMessage = 'KYC service configuration error. Please contact support.';
+  }
+  
+  return errorMessage;
+}
+
+// Map Didit status to application KYC status
+function mapDiditStatus(status, verified, failureReason) {
+  let kycStatus = 'pending';
+  let isKYCVerified = false;
+  let logMessage = '';
+
+  if (status === 'completed' && verified) {
+    kycStatus = 'approved';
+    isKYCVerified = true;
+    logMessage = '✅ KYC approved';
+  } else if (status === 'failed') {
+    kycStatus = 'rejected';
+    logMessage = `❌ KYC rejected: ${failureReason}`;
+  } else if (status === 'expired') {
+    kycStatus = 'expired';
+    logMessage = '⏰ KYC expired';
+  } else if (status === 'processing' || status === 'pending') {
+    kycStatus = 'in_progress';
+  }
+
+  return { kycStatus, isKYCVerified, logMessage };
+}
+
+// Update user KYC status
+function updateUserKYCStatus(user, mappedStatus, verificationResult, failureReason) {
+  const { kycStatus, isKYCVerified, logMessage } = mappedStatus;
+  let hasChanges = false;
+
+  if (user.kycStatus.status !== kycStatus) {
+    user.kycStatus.status = kycStatus;
+    user.isKYCVerified = isKYCVerified;
+    hasChanges = true;
+
+    if (kycStatus === 'approved') {
+      user.kycStatus.verifiedAt = new Date();
+      user.kycStatus.verificationResult = verificationResult;
+    } else if (kycStatus === 'rejected') {
+      user.kycStatus.rejectionReason = failureReason || 'Verification failed';
+      user.kycStatus.reviewedAt = new Date();
+    } else if (kycStatus === 'expired') {
+      user.kycStatus.rejectionReason = 'Verification session expired';
+    }
+
+    if (logMessage) console.log(logMessage);
+  }
+
+  return hasChanges;
+}
 
 /**
  * Check KYC verification status

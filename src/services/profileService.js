@@ -129,6 +129,16 @@ const profileService = {
     return response.data;
   },
 
+  // 🔥 NEW: Reset KYC Verification
+  resetKYCVerification: async () => {
+    const response = await axios.post(
+      `${API_URL}/users/kyc/reset`,
+      {},
+      getAuthHeaders()
+    );
+    return response.data;
+  },
+
   submitKYC: async (kycData) => {
     const response = await axios.post(
       `${API_URL}/users/upload-kyc`,

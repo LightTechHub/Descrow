@@ -418,4 +418,4 @@ class DiditService {
 }
 
 // Export singleton instance
-module.exports = new DiditService()
+module.exports = new DiditService();

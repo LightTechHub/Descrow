@@ -23,6 +23,10 @@ const KYCTab = ({ user, onUpdate }) => {
       const response = await profileService.getKYCStatus();
       if (response.success) {
         setKycStatus(response.data);
+        // If there's an existing verification URL, save it
+        if (response.data.verificationUrl) {
+          setVerificationUrl(response.data.verificationUrl);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch KYC status:', error);
@@ -36,13 +40,14 @@ const KYCTab = ({ user, onUpdate }) => {
       const response = await profileService.startKYCVerification();
       
       if (response.success) {
-        setVerificationUrl(response.data.verificationUrl);
-        toast.success('Verification session created! Opening verification...');
+        const url = response.data.verificationUrl;
+        setVerificationUrl(url);
+        toast.success('Verification session created! Redirecting...');
         
-        // Open in new window
-        window.open(response.data.verificationUrl, '_blank', 'width=800,height=900');
+        // ✅ Redirect immediately in same tab
+        window.location.href = url;
         
-        // Poll for status updates
+        // Start polling for status updates (in case user comes back)
         startStatusPolling();
       }
     } catch (error) {
@@ -110,8 +115,13 @@ const KYCTab = ({ user, onUpdate }) => {
               ✅ Verification Complete!
             </h3>
             <p className="text-green-700 dark:text-green-300">
-              Your identity has been verified automatically via Didit
+              Your identity has been verified successfully via Didit
             </p>
+            {kycStatus.verifiedAt && (
+              <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                Verified on {new Date(kycStatus.verifiedAt).toLocaleDateString()}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -129,17 +139,17 @@ const KYCTab = ({ user, onUpdate }) => {
               Verification In Progress
             </h3>
             <p className="text-blue-700 dark:text-blue-300">
-              Please complete your verification in the Didit window
+              Please complete your verification with Didit
             </p>
           </div>
         </div>
         {verificationUrl && (
           <button
-            onClick={() => window.open(verificationUrl, '_blank')}
+            onClick={() => window.location.href = verificationUrl}
             className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
             <ExternalLink className="w-5 h-5" />
-            Resume Verification
+            Continue Verification
           </button>
         )}
       </div>
@@ -166,7 +176,7 @@ const KYCTab = ({ user, onUpdate }) => {
         <button
           onClick={startVerification}
           disabled={loading}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Starting...' : 'Try Again'}
         </button>

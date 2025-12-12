@@ -62,7 +62,8 @@ exports.startKYCVerification = async (req, res) => {
       {
         email: user.email,
         name: user.name,
-        tier: user.tier || 'starter'
+        tier: user.tier || 'starter',
+        phone: user.phone
       }
     );
 
@@ -78,15 +79,15 @@ exports.startKYCVerification = async (req, res) => {
       });
     }
 
-    // Update user with session info
-    user.kycStatus = {
-      ...user.kycStatus,
-      status: 'pending',
-      diditSessionId: diditResponse.data.sessionId,
-      diditVerificationUrl: diditResponse.data.verificationUrl,
-      diditSessionExpiresAt: diditResponse.data.expiresAt,
-      submittedAt: new Date()
-    };
+    // Update user with session info - ONLY set defined values
+    user.kycStatus.status = 'pending';
+    user.kycStatus.diditSessionId = diditResponse.data.sessionId;
+    user.kycStatus.diditVerificationUrl = diditResponse.data.verificationUrl;
+    user.kycStatus.diditSessionExpiresAt = diditResponse.data.expiresAt;
+    user.kycStatus.submittedAt = new Date();
+    
+    // Don't set verificationResult, personalInfo, businessInfo to undefined
+    // Only update them when we actually have data
     
     await user.save();
 
@@ -111,89 +112,6 @@ exports.startKYCVerification = async (req, res) => {
     });
   }
 };
-
-/**
- * Check KYC status from Didit API and update user
- */
-exports.checkKYCStatus = async (req, res) => {
-  try {
-    const userId = req.user._id;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Return current status if no session exists
-    if (!user.kycStatus.diditSessionId) {
-      return res.json({
-        success: true,
-        data: {
-          status: user.kycStatus.status || 'unverified',
-          isVerified: user.isKYCVerified || false,
-          verifiedAt: user.kycStatus.verifiedAt,
-          rejectionReason: user.kycStatus.rejectionReason,
-          submittedAt: user.kycStatus.submittedAt
-        }
-      });
-    }
-
-    console.log('🔍 Checking Didit verification status for session:', user.kycStatus.diditSessionId);
-
-    // Get status from Didit API
-    const diditResponse = await diditService.getVerificationStatus(user.kycStatus.diditSessionId);
-
-    if (!diditResponse.success) {
-      console.error('❌ Failed to check Didit status:', diditResponse);
-      // Return cached status if API fails
-      return res.json({
-        success: true,
-        data: {
-          status: user.kycStatus.status,
-          isVerified: user.isKYCVerified,
-          verifiedAt: user.kycStatus.verifiedAt,
-          rejectionReason: user.kycStatus.rejectionReason,
-          submittedAt: user.kycStatus.submittedAt
-        }
-      });
-    }
-
-    const { status, verified, verificationResult, failureReason } = diditResponse.data;
-
-    // Update user status based on Didit response
-    const updatedStatus = mapDiditStatus(status, verified, failureReason);
-    const hasChanges = updateUserKYCStatus(user, updatedStatus, verificationResult, failureReason);
-
-    // Save if changes occurred
-    if (hasChanges) {
-      await user.save();
-      console.log(`📝 KYC status updated for user ${userId}: ${updatedStatus.kycStatus}`);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        status: user.kycStatus.status,
-        isVerified: user.isKYCVerified,
-        verifiedAt: user.kycStatus.verifiedAt,
-        rejectionReason: user.kycStatus.rejectionReason,
-        submittedAt: user.kycStatus.submittedAt
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Check KYC status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check KYC status',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
 // ======================================================
 // =================== USER PROFILE =====================
 // ======================================================

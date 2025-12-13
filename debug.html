@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug KYC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            font-size: 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+        }
+        .check { background: #3b82f6; color: white; }
+        .fix { background: #10b981; color: white; }
+        pre {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 KYC Debug Tool</h1>
+    
+    <button class="check" onclick="checkStatus()">
+        Check Current Status
+    </button>
+    
+    <button class="fix" onclick="forceFixKYC()">
+        🔄 Force Fix KYC
+    </button>
+    
+    <div id="result"></div>
+    
+    <script>
+        const API_URL = 'https://descrow-backend-5ykg.onrender.com/api';
+        
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+        
+        async function checkStatus() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Checking...</p>';
+            
+            try {
+                const token = getToken();
+                if (!token) {
+                    result.innerHTML = '<pre>ERROR: Not logged in. Please login first.</pre>';
+                    return;
+                }
+                
+                // Check profile
+                const profileRes = await fetch(`${API_URL}/users/profile`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const profile = await profileRes.json();
+                
+                // Check KYC status
+                const kycRes = await fetch(`${API_URL}/users/kyc/status`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const kyc = await kycRes.json();
+                
+                const info = {
+                    email: profile.data?.user?.email,
+                    verified: profile.data?.user?.verified,
+                    isKYCVerified: profile.data?.user?.isKYCVerified,
+                    kycStatus: profile.data?.user?.kycStatus?.status,
+                    kycFromAPI: kyc.data?.status
+                };
+                
+                result.innerHTML = `
+                    <h3>Current Status:</h3>
+                    <pre>${JSON.stringify(info, null, 2)}</pre>
+                `;
+            } catch (error) {
+                result.innerHTML = `<pre>ERROR: ${error.message}</pre>`;
+            }
+        }
+        
+        async function forceFixKYC() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Fixing KYC status...</p>';
+            
+            try {
+                const token = getToken();
+                if (!token) {
+                    result.innerHTML = '<pre>ERROR: Not logged in. Please login first.</pre>';
+                    return;
+                }
+                
+                const response = await fetch(`${API_URL}/users/kyc/force-sync`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                result.innerHTML = `
+                    <h3>Fix Result:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                    ${data.success ? '<p style="color: #10b981;">✅ Success! Reload the app now.</p>' : '<p style="color: #ef4444;">❌ Failed</p>'}
+                `;
+            } catch (error) {
+                result.innerHTML = `<pre>ERROR: ${error.message}</pre>`;
+            }
+        }
+    </script>
+</body>
+</html>

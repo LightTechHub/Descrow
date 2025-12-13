@@ -237,6 +237,56 @@ exports.checkKYCStatus = async (req, res) => {
 };
 
 /**
+ * ✅ Force sync KYC status from DIDIT
+ */
+exports.forceSyncKYC = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    console.log('🔄 Force syncing KYC for user:', userId);
+
+    // If user has a DIDIT session, check it
+    if (user.kycStatus?.diditSessionId) {
+      const diditStatus = await diditService.getVerificationStatus(
+        user.kycStatus.diditSessionId
+      );
+
+      if (diditStatus.success && diditStatus.data) {
+        const { status, verified } = diditStatus.data;
+
+        if (status === 'completed' && verified) {
+          user.kycStatus.status = 'approved';
+          user.isKYCVerified = true;
+          user.kycStatus.verifiedAt = new Date();
+        }
+
+        await user.save();
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        verified: user.verified,
+        isKYCVerified: user.isKYCVerified,
+        kycStatus: user.kycStatus?.status
+      }
+    });
+  } catch (error) {
+    console.error('Force sync error:', error);
+    res.status(500).json({ success: false, message: 'Failed to sync' });
+  }
+};
+
+/**
  * ✅ NEW: Reset/Cancel KYC Verification
  */
 exports.resetKYCVerification = async (req, res) => {

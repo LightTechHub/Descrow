@@ -577,14 +577,14 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
               </div>
             )}
           </div>
-
-          {/* Info Box */}
+          
+             {/* Info Box */}
           <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <div className="flex gap-3">
               <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 <p className="font-medium mb-1">How it works:</p>
-                <ol className="list-decimal list-inside space-y-1 text-gray-600 dark:text-gray-400">
+                <ol className​​​​​​​​​​​​​​​​<ol className="list-decimal list-inside space-y-1 text-gray-600 dark:text-gray-400">
                   <li>You create the escrow request</li>
                   <li>Seller reviews and accepts</li>
                   <li>You pay and funds are held securely</li>
@@ -598,11 +598,30 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
 
           {/* Buttons */}
           <div className="flex gap-3 pt-4">
-            <button type="button" onClick={onClose} disabled={loading} className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              disabled={loading} 
+              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Cancel
             </button>
-            <button type="submit" disabled={loading || feeLoading} className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              {loading ? <><Loader className="w-5 h-5 animate-spin" /> Creating...</> : 'Create Escrow'}
+            <button 
+              type="submit" 
+              disabled={loading || feeLoading} 
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+            >
+              {loading ? (
+                <>
+                  <Loader className="w-5 h-5 animate-spin" /> 
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Shield className="w-5 h-5" />
+                  Create Escrow
+                </>
+              )}
             </button>
           </div>
         </form>

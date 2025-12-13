@@ -348,25 +348,80 @@ userSchema.methods.getTierLimits = function() {
 };
 
 // ======================================================
-// BUSINESS LOGIC METHODS
+// ✅ CHECK IF USER CAN CREATE TRANSACTION (TIER LIMITS)
 // ======================================================
-
-userSchema.methods.canAccessEscrow = function () {
-  if (!this.verified) {
-    return { allowed: false, reason: 'Email verification required', action: 'verify_email' };
+userSchema.methods.canCreateTransaction = function(amount, currency = 'USD') {
+  const tierLimits = this.getTierLimits();
+  
+  // Check monthly transaction limit
+  if (tierLimits.maxTransactionsPerMonth !== -1) {
+    if (this.monthlyUsage.transactionCount >= tierLimits.maxTransactionsPerMonth) {
+      return {
+        allowed: false,
+        reason: `Monthly transaction limit reached (${tierLimits.maxTransactionsPerMonth} transactions)`,
+        limit: tierLimits.maxTransactionsPerMonth,
+        current: this.monthlyUsage.transactionCount
+      };
+    }
   }
-  if (!this.isKYCVerified) {
-    return { allowed: false, reason: 'KYC verification required', action: 'complete_kyc' };
+  
+  // Check transaction amount limit
+  const maxAmount = tierLimits.maxTransactionAmount[currency];
+  if (maxAmount !== -1 && amount > maxAmount) {
+    return {
+      allowed: false,
+      reason: `Transaction amount exceeds ${currency} ${maxAmount.toLocaleString()} limit for ${tierLimits.name} tier`,
+      limit: maxAmount,
+      current: amount
+    };
   }
-  if (this.status !== 'active') {
-    return { allowed: false, reason: 'Account not active' };
-  }
-  if (!this.escrowAccess.canCreateEscrow) {
-    return { allowed: false, reason: 'Escrow restriction active' };
-  }
+  
   return { allowed: true };
 };
 
+// ======================================================
+// ✅ CHECK IF USER CAN ACCESS ESCROW (VERIFICATION)
+// ======================================================
+userSchema.methods.canAccessEscrow = function () {
+  if (!this.verified) {
+    return { 
+      allowed: false, 
+      reason: 'Email verification required', 
+      action: 'verify_email' 
+    };
+  }
+  
+  if (!this.isKYCVerified || this.kycStatus?.status !== 'approved') {
+    return { 
+      allowed: false, 
+      reason: 'KYC verification required', 
+      action: 'complete_kyc',
+      currentKYCStatus: this.kycStatus?.status || 'unverified'
+    };
+  }
+  
+  if (this.status !== 'active') {
+    return { 
+      allowed: false, 
+      reason: 'Account not active',
+      accountStatus: this.status
+    };
+  }
+  
+  if (!this.escrowAccess?.canCreateEscrow) {
+    return { 
+      allowed: false, 
+      reason: 'Escrow access restricted',
+      restriction: this.escrowAccess?.suspensionReason
+    };
+  }
+  
+  return { allowed: true };
+};
+
+// ======================================================
+// AUDIT LOG METHOD
+// ======================================================
 userSchema.methods.addAuditLog = function (action, description, ip, agent, metadata = {}) {
   this.auditLog.push({
     action,

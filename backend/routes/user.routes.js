@@ -88,6 +88,7 @@ router.get('/statistics', userController.getUserStatistics);
 // ======================== 2FA ==========================
 // ======================================================
 
+router.post('/kyc/force-sync', userController.forceSyncKYC);
 router.post('/2fa/enable', userController.enable2FA);
 router.post('/2fa/verify', userController.verify2FA);
 router.post('/2fa/disable', userController.disable2FA);

@@ -10,6 +10,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
   // ✅ State to hold refreshed user data
   const [user, setUser] = useState(initialUser);
   const [checkingVerification, setCheckingVerification] = useState(false);
+  const [verificationError, setVerificationError] = useState(false);
 
   const { 
     register, 
@@ -37,34 +38,42 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
   const [filePreviews, setFilePreviews] = useState([]);
   const [resending, setResending] = useState(false);
 
-  // ✅ Check verification status on mount
+  // ✅ Check verification status on mount with error handling
   useEffect(() => {
     checkVerificationStatus();
   }, []);
 
-  // ✅ Refresh verification status
+  // ✅ Refresh verification status with error handling
   const checkVerificationStatus = async () => {
     try {
       setCheckingVerification(true);
+      setVerificationError(false);
+      
       const response = await profileService.getProfile();
       
-      if (response.success) {
+      if (response.success && response.data?.user) {
         setUser(response.data.user);
-        console.log('Updated user verification status:', {
+        console.log('✅ Verification status updated:', {
           emailVerified: response.data.user.verified,
           kycVerified: response.data.user.isKYCVerified,
           kycStatus: response.data.user.kycStatus?.status
         });
+      } else {
+        // Fallback to initial user if API response is invalid
+        setUser(initialUser);
       }
     } catch (error) {
-      console.error('Failed to check verification status:', error);
+      console.error('❌ Failed to check verification status:', error);
+      setVerificationError(true);
+      // Fallback to initial user on error
+      setUser(initialUser);
     } finally {
       setCheckingVerification(false);
     }
   };
 
-  // ✅ Check verification status
-  const isEmailVerified = user?.verified;
+  // ✅ Safe verification checks with fallbacks
+  const isEmailVerified = user?.verified || false;
   const isKYCVerified = user?.isKYCVerified || user?.kycStatus?.status === 'approved';
   const canCreateEscrow = isEmailVerified && isKYCVerified;
   
@@ -116,7 +125,9 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
     try {
       setFeeLoading(true);
       const response = await escrowService.calculateFees(amount, currency);
-      if (response.success) setFeeBreakdown(response.data);
+      if (response.success) {
+        setFeeBreakdown(response.data);
+      }
     } catch (err) {
       console.error('Failed to calculate fees:', err);
     } finally {
@@ -137,7 +148,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
   };
 
   const onSubmit = async (data) => {
-    if (data.sellerEmail === user.email) {
+    if (data.sellerEmail === user?.email) {
       setError('sellerEmail', { type: 'manual', message: 'Cannot create escrow with yourself' });
       return;
     }
@@ -178,7 +189,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
   const handleResendVerification = async () => {
     try {
       setResending(true);
-      const response = await verifyService.resendVerificationEmail(user.email);
+      const response = await verifyService.resendVerificationEmail(user?.email);
       
       if (response.success) {
         toast.success('Verification email sent! Check your inbox.', {
@@ -194,13 +205,44 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
     }
   };
 
-  // ✅ Show loading while checking verification
-  if (checkingVerification) {
+  // ✅ Show loading while checking verification (only on first load)
+  if (checkingVerification && !verificationError) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 text-center">
           <Loader className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-700 dark:text-gray-300">Checking verification status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Show error state with retry option
+  if (verificationError) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+          <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            Connection Error
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Failed to check verification status. Please try again.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={checkVerificationStatus}
+              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+            >
+              Retry
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -245,7 +287,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                     Verification email sent to:
                   </p>
                   <p className="font-medium text-gray-900 dark:text-white break-all">
-                    {user.email}
+                    {user?.email || 'your email'}
                   </p>
                 </div>
                 
@@ -290,7 +332,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                   Complete KYC verification to create escrows and access higher transaction limits.
                 </p>
 
-                {/* ✅ Show current KYC status */}
+                {/* Show current KYC status */}
                 {user?.kycStatus?.status && user.kycStatus.status !== 'unverified' && (
                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
                     <p className="text-sm text-blue-800 dark:text-blue-300">
@@ -305,15 +347,15 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                 )}
                 
                 <div className="space-y-3">
-                  {/* ✅ Refresh button */}
+                  {/* Refresh button */}
                   <button
                     onClick={() => {
                       toast.promise(
                         checkVerificationStatus(),
                         {
-                          loading: 'Checking verification status...',
+                          loading: 'Checking status...',
                           success: 'Status refreshed!',
-                          error: 'Failed to refresh status'
+                          error: 'Failed to refresh'
                         }
                       );
                     }}
@@ -353,7 +395,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
           <div className="border-t border-gray-200 dark:border-gray-800 p-6 bg-gray-50 dark:bg-gray-900/50">
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
               <Shield className="w-4 h-4" />
-              <span>Secure verification process • Your data is protected</span>
+              <span>Secure verification • Your data is protected</span>
             </div>
           </div>
         </div>
@@ -361,19 +403,19 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
     );
   }
 
-  // ✅ REST OF YOUR COMPONENT (for verified users) - Form stays the same
+  // ✅ Main escrow form (for verified users)
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg">
               <Shield className="w-6 h-6 text-white" />
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Escrow</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Start a secure transaction with a seller</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Start a secure transaction</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
@@ -393,19 +435,18 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
               </span>
             </div>
             <span className="text-xs text-green-700 dark:text-green-400">
-              {user.tier ? `Tier: ${user.tier}` : 'Ready to transact'}
+              {user?.tier ? `Tier: ${user.tier}` : 'Ready to transact'}
             </span>
           </div>
         </div>
 
-        {/* Form - Keep all your existing form code here */}
+        {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
-          {/* All your existing form fields... */}
-          {/* (I'm keeping the form code the same as your original) */}
-          
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Title *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Title *
+            </label>
             <input
               type="text"
               {...register('title', { required: 'Title is required' })}
@@ -414,12 +455,16 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                 errors.title ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
-            {errors.title && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.title.message}</p>}
+            {errors.title && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.title.message}</p>
+            )}
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Description *
+            </label>
             <textarea
               {...register('description', { required: 'Description is required' })}
               placeholder="Describe what you're purchasing..."
@@ -428,17 +473,21 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                 errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
-            {errors.description && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.description.message}</p>}
+            {errors.description && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.description.message}</p>
+            )}
           </div>
 
           {/* Amount & Currency */}
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Amount *
+              </label>
               <div className="relative">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex gap-1 items-center pointer-events-none">
                   <span className="font-bold text-lg text-gray-500 dark:text-gray-300">
-                    {currencySymbols[currency]}
+                    {currencySymbols[currency] || '$'}
                   </span>
                   <span className="text-xs text-gray-400 dark:text-gray-500">
                     {currency}
@@ -447,20 +496,27 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                 <input
                   type="number"
                   step="0.01"
-                  {...register('amount', { required: 'Amount is required', min: { value: 0.01, message: 'Amount must be > 0' } })}
+                  {...register('amount', {
+                    required: 'Amount is required',
+                    min: { value: 0.01, message: 'Amount must be greater than 0' }
+                  })}
                   placeholder="0.00"
                   className={`w-full pl-20 pr-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white ${
                     errors.amount ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                   }`}
                 />
               </div>
-              {errors.amount && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.amount.message}</p>}
+              {errors.amount && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.amount.message}</p>
+              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Currency</label>
-              <select 
-                {...register('currency')} 
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Currency
+              </label>
+              <select
+                {...register('currency')}
                 className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-gray-900 dark:text-white"
               >
                 {currencies.map(curr => (
@@ -475,19 +531,27 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
           {/* Fee Breakdown */}
           {feeBreakdown && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3">Fee Breakdown</h3>
+              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3">
+                Fee Breakdown
+              </h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-gray-700 dark:text-gray-300">
                   <span>Transaction Amount:</span>
-                  <span className="font-medium">{currencySymbols[currency]}{feeBreakdown.amount?.toFixed(2)}</span>
+                  <span className="font-medium">
+                    {currencySymbols[currency]}{feeBreakdown.amount?.toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-gray-700 dark:text-gray-300">
                   <span>Your Fee ({feeBreakdown.buyerFeePercentage}%):</span>
-                  <span className="font-medium">{currencySymbols[currency]}{feeBreakdown.buyerFee?.toFixed(2)}</span>
+                  <span className="font-medium">
+                    {currencySymbols[currency]}{feeBreakdown.buyerFee?.toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-gray-700 dark:text-gray-300">
                   <span>Seller Fee ({feeBreakdown.sellerFeePercentage}%):</span>
-                  <span className="font-medium">{currencySymbols[currency]}{feeBreakdown.sellerFee?.toFixed(2)}</span>
+                  <span className="font-medium">
+                    {currencySymbols[currency]}{feeBreakdown.sellerFee?.toFixed(2)}
+                  </span>
                 </div>
                 <div className="pt-2 border-t border-blue-200 dark:border-blue-700">
                   <div className="flex justify-between font-semibold text-blue-900 dark:text-blue-200">
@@ -505,27 +569,38 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
 
           {/* Seller Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Seller Email *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Seller Email *
+            </label>
             <input
               type="email"
               {...register('sellerEmail', {
                 required: 'Seller email is required',
-                pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email format' },
+                pattern: {
+                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                  message: 'Invalid email format'
+                },
               })}
               placeholder="seller@example.com"
               className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white ${
                 errors.sellerEmail ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
-            {errors.sellerEmail && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.sellerEmail.message}</p>}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">The seller will receive a notification to accept this escrow</p>
+            {errors.sellerEmail && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.sellerEmail.message}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              The seller will receive a notification to accept this escrow
+            </p>
           </div>
 
           {/* Category */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
-            <select 
-              {...register('category')} 
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Category
+            </label>
+            <select
+              {...register('category')}
               className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-gray-900 dark:text-white"
             >
               <option value="electronics">Electronics</option>
@@ -540,20 +615,24 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
 
           {/* Delivery Method */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Delivery Method</label>
-            <select 
-              {...register('deliveryMethod')} 
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Delivery Method
+            </label>
+            <select
+              {...register('deliveryMethod')}
               className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-gray-900 dark:text-white"
             >
               <option value="physical">Physical Shipping</option>
               <option value="digital">Digital Delivery</option>
               <option value="service">Service/In-Person</option>
-            </select>
+              </select>
           </div>
 
           {/* File Upload */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Attachments (Optional)
+            </label>
             <Controller
               control={control}
               name="attachments"
@@ -570,21 +649,24 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
             {filePreviews.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {filePreviews.map((file, idx) => (
-                  <div key={idx} className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300">
-                    {file.name}
+                  <div
+                    key={idx}
+                    className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300 flex items-center gap-2"
+                  >
+                    <span className="truncate max-w-[150px]">{file.name}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          
-             {/* Info Box */}
+
+          {/* Info Box */}
           <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <div className="flex gap-3">
               <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 <p className="font-medium mb-1">How it works:</p>
-                <ol className​​​​​​​​​​​​​​​​<ol className="list-decimal list-inside space-y-1 text-gray-600 dark:text-gray-400">
+                <ol className="list-decimal list-inside space-y-1 text-gray-600 dark:text-gray-400">
                   <li>You create the escrow request</li>
                   <li>Seller reviews and accepts</li>
                   <li>You pay and funds are held securely</li>
@@ -597,23 +679,23 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 pt-4">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              disabled={loading} 
+          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
               className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
-              disabled={loading || feeLoading} 
+            <button
+              type="submit"
+              disabled={loading || feeLoading}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
-                  <Loader className="w-5 h-5 animate-spin" /> 
+                  <Loader className="w-5 h-5 animate-spin" />
                   Creating...
                 </>
               ) : (

@@ -9,6 +9,9 @@ const { uploadMultiple } = require('../middleware/upload.middleware');
 
 // ✅ PUBLIC ROUTES (No Authentication) - MUST COME FIRST BEFORE router.use(authenticate)
 
+// ✅ NEW: Check eligibility before creating escrow
+router.get('/check-eligibility', escrowController.checkCanCreateEscrow);
+
 /**
  * @route   GET /api/escrow/public
  * @desc    Get public/featured deals for landing page (shows completed transactions)

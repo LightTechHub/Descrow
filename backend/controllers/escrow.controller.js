@@ -226,6 +226,82 @@ exports.createEscrow = async (req, res) => {
     });
   }
 };
+
+/**
+ * Check if user can create escrow (verification + tier check)
+ */
+exports.checkCanCreateEscrow = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { amount, currency = 'USD' } = req.query;
+
+    // Fresh fetch of user
+    const user = await User.findById(userId).select('+kycStatus');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const checks = {
+      emailVerified: user.verified,
+      kycVerified: user.isKYCVerified && user.kycStatus?.status === 'approved',
+      kycStatus: user.kycStatus?.status || 'unverified',
+      tier: user.tier
+    };
+
+    // Check if can create
+    let canCreate = true;
+    let blockingReason = null;
+    let requiresAction = null;
+
+    if (!checks.emailVerified) {
+      canCreate = false;
+      blockingReason = 'Email verification required';
+      requiresAction = 'verify_email';
+    } else if (!checks.kycVerified) {
+      canCreate = false;
+      blockingReason = 'KYC verification required';
+      requiresAction = 'complete_kyc';
+    }
+
+    // If amount provided, check tier limits
+    let tierCheck = null;
+    if (amount && canCreate) {
+      const parsedAmount = parseFloat(amount);
+      if (!isNaN(parsedAmount)) {
+        tierCheck = user.canCreateTransaction(parsedAmount, currency);
+        if (!tierCheck.allowed) {
+          canCreate = false;
+          blockingReason = tierCheck.reason;
+          requiresAction = 'upgrade_tier';
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        canCreate,
+        blockingReason,
+        requiresAction,
+        checks,
+        tierCheck,
+        tierLimits: user.getTierLimits()
+      }
+    });
+
+  } catch (error) {
+    console.error('Check can create escrow error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check escrow creation eligibility'
+    });
+  }
+};
+
 /**
  * Calculate fees for amount (preview before creating) - ENHANCED WITH CURRENCY SUPPORT
  */

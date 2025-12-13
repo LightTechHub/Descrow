@@ -9,7 +9,6 @@ const { notifyEscrowParties, createNotification } = require('../utils/notificati
  */
 exports.createEscrow = async (req, res) => {
   try {
-    // Handle both JSON and FormData
     const { 
       title, 
       description, 
@@ -65,16 +64,45 @@ exports.createEscrow = async (req, res) => {
       });
     }
 
-    // Get buyer with tier info
-    const buyer = await User.findById(buyerId);
+    // ✅ FIX 1: FRESH FETCH of buyer with latest KYC status
+    const buyer = await User.findById(buyerId).select('+kycStatus');
     if (!buyer) {
       return res.status(404).json({
         success: false,
         message: 'Buyer not found'
       });
     }
-    
-    // Check tier limits
+
+    console.log('🔍 Buyer KYC Check:', {
+      userId: buyer._id,
+      email: buyer.email,
+      verified: buyer.verified,
+      isKYCVerified: buyer.isKYCVerified,
+      kycStatus: buyer.kycStatus?.status,
+      tier: buyer.tier
+    });
+
+    // ✅ FIX 2: EXPLICIT KYC verification check
+    if (!buyer.verified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Email verification required before creating escrow',
+        requiresVerification: true,
+        verificationType: 'email'
+      });
+    }
+
+    if (!buyer.isKYCVerified || buyer.kycStatus?.status !== 'approved') {
+      return res.status(403).json({
+        success: false,
+        message: 'KYC verification required before creating escrow',
+        requiresVerification: true,
+        verificationType: 'kyc',
+        currentKYCStatus: buyer.kycStatus?.status || 'unverified'
+      });
+    }
+
+    // ✅ FIX 3: Check tier limits
     const canCreate = buyer.canCreateTransaction(parsedAmount, currency);
     if (!canCreate.allowed) {
       return res.status(403).json({
@@ -100,7 +128,7 @@ exports.createEscrow = async (req, res) => {
       attachments = req.files.map(file => ({
         filename: file.filename,
         originalName: file.originalname,
-        url: file.path, // or file.location for cloud storage
+        url: file.path,
         mimetype: file.mimetype,
         size: file.size,
         uploadedAt: new Date()
@@ -151,25 +179,26 @@ exports.createEscrow = async (req, res) => {
       seller._id,
       'escrow_created',
       'New Escrow Request',
-      `${buyer.firstName} wants to create a ${currency} ${parsedAmount} escrow deal with you: "${title}"`,
+      `${buyer.name} wants to create a ${currency} ${parsedAmount} escrow deal with you: "${title}"`,
       `/escrow/${escrow._id}`,
       { 
         escrowId: escrow._id, 
         amount: parsedAmount, 
         currency: currency,
-        otherParty: buyer.firstName 
+        otherParty: buyer.name 
       }
     );
 
     // Populate and return
     await escrow.populate('buyer seller', 'firstName lastName email profilePicture tier');
 
-    // FORMAT RESPONSE FOR FRONTEND setEscrow(response.data.escrow)
+    console.log('✅ Escrow created successfully:', escrow._id);
+
     res.status(201).json({
       success: true,
       message: 'Escrow created successfully. Waiting for seller acceptance.',
       data: {
-        escrow: { // ✅ ADDED: Wrap escrow in escrow property for frontend
+        escrow: {
           ...escrow.toObject(),
           feeBreakdown,
           buyerTier: buyer.tier,
@@ -180,9 +209,8 @@ exports.createEscrow = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create escrow error:', error);
+    console.error('❌ Create escrow error:', error);
     
-    // Handle specific errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -198,7 +226,6 @@ exports.createEscrow = async (req, res) => {
     });
   }
 };
-
 /**
  * Calculate fees for amount (preview before creating) - ENHANCED WITH CURRENCY SUPPORT
  */

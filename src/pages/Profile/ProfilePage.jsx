@@ -10,7 +10,9 @@ import {
   ArrowLeft,
   Loader,
   AlertTriangle,
-  Mail
+  Mail,
+  Bug,
+  RefreshCw
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
 import KYCTab from './KYCTab';
@@ -28,6 +30,11 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
+  
+  // ✅ Debug state
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [fixing, setFixing] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   
   const hasFetched = useRef(false);
 
@@ -103,6 +110,71 @@ const ProfilePage = () => {
   const handleProfileUpdate = () => {
     hasFetched.current = false;
     fetchData();
+  };
+
+  // ✅ NEW: Show debug info
+  const handleShowDebugInfo = () => {
+    const info = {
+      email: user?.email,
+      verified: user?.verified,
+      isKYCVerified: user?.isKYCVerified,
+      kycStatusField: user?.kycStatus?.status,
+      kycStatusFromAPI: kycStatus?.status,
+      kycSessionId: user?.kycStatus?.diditSessionId || kycStatus?.sessionId,
+      tier: user?.tier,
+      timestamp: new Date().toISOString()
+    };
+    
+    setDebugInfo(info);
+    console.log('🔍 Full Debug Info:', info);
+    console.log('🔍 Full User Object:', user);
+    console.log('🔍 Full KYC Status Object:', kycStatus);
+    setShowDebug(true);
+  };
+
+  // ✅ NEW: Force fix KYC status
+  const handleForceFixKYC = async () => {
+    try {
+      setFixing(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Not authenticated. Please login again.');
+        return;
+      }
+      
+      console.log('🔄 Attempting to force sync KYC status...');
+      
+      const response = await fetch('https://descrow-backend-5ykg.onrender.com/api/users/kyc/force-sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      console.log('📥 Force sync result:', data);
+      
+      if (data.success) {
+        toast.success('✅ KYC status synced successfully!');
+        
+        // Refresh all data
+        hasFetched.current = false;
+        await fetchData();
+        
+        // Update debug info
+        handleShowDebugInfo();
+      } else {
+        toast.error('❌ Failed to sync: ' + (data.message || 'Unknown error'));
+        console.error('Sync failed:', data);
+      }
+    } catch (error) {
+      console.error('❌ Force fix error:', error);
+      toast.error('Failed to sync KYC status. Check console for details.');
+    } finally {
+      setFixing(false);
+    }
   };
 
   if (loading) {
@@ -194,6 +266,64 @@ const ProfilePage = () => {
               onVerifyClick={() => handleTabChange('kyc')}
             />
           )}
+
+          {/* ✅ NEW: Debug Tools Section */}
+          <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bug className="w-5 h-5 text-yellow-700 dark:text-yellow-400" />
+                <h3 className="font-bold text-yellow-900 dark:text-yellow-200">
+                  🔧 Debug Tools
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowDebug(!showDebug)}
+                className="text-xs text-yellow-700 dark:text-yellow-400 hover:underline"
+              >
+                {showDebug ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            
+            {showDebug && (
+              <div className="space-y-2">
+                <button
+                  onClick={handleShowDebugInfo}
+                  className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm flex items-center justify-center gap-2"
+                >
+                  <Bug className="w-4 h-4" />
+                  Show Debug Info
+                </button>
+                
+                <button
+                  onClick={handleForceFixKYC}
+                  disabled={fixing}
+                  className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {fixing ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      🔄 Force Fix KYC Status
+                    </>
+                  )}
+                </button>
+                
+                {debugInfo && (
+                  <div className="mt-3 p-3 bg-gray-900 text-green-400 text-xs rounded-lg overflow-auto max-h-60 font-mono">
+                    <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+                  </div>
+                )}
+                
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
+                  💡 Click "Show Debug Info" to see current verification status, then "Force Fix" if KYC shows as unverified but you've completed DIDIT verification.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

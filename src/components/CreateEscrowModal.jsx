@@ -1,4 +1,4 @@
-ort React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader, Mail, FileCheck, Shield, AlertCircle } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import escrowService from '../services/escrowService';

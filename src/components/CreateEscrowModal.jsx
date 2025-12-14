@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader, AlertCircle, DollarSign, Mail, FileCheck, Shield, RefreshCw } from 'lucide-react';
+import { X, Loader, AlertCircle, Shield } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import escrowService from '../services/escrowService';
-import profileService from '../services/profileService';
 import toast from 'react-hot-toast';
-import { verifyService } from '../services/verifyService';
 
-const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
-  // ✅ State to hold refreshed user data
-  const [user, setUser] = useState(null); // ✅ CHANGED: Start with null
-  const [checkingVerification, setCheckingVerification] = useState(true);
-  const [verificationError, setVerificationError] = useState(false);
-
+const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
   const { 
     register, 
     handleSubmit, 
@@ -36,68 +29,6 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
   const [feeLoading, setFeeLoading] = useState(false);
   const [feeBreakdown, setFeeBreakdown] = useState(null);
   const [filePreviews, setFilePreviews] = useState([]);
-  const [resending, setResending] = useState(false);
-
-  // ✅ Check verification status on mount - ALWAYS FRESH CHECK
-  useEffect(() => {
-    checkVerificationStatus();
-  }, []);
-
-  // ✅ Refresh verification status with better error handling
-  const checkVerificationStatus = async () => {
-    try {
-      setCheckingVerification(true);
-      setVerificationError(false);
-      
-      console.log('🔍 Fetching fresh user verification status...');
-      console.log('📤 Initial user prop:', initialUser);
-      
-      // Call the profile endpoint to get FRESH user data
-      const response = await profileService.getProfile();
-      
-      console.log('📥 Profile Response:', response);
-      
-      if (response.success && response.data?.user) {
-        const freshUser = response.data.user;
-        setUser(freshUser);
-        
-        console.log('✅ Fresh User Set:', {
-          email: freshUser.email,
-          verified: freshUser.verified,
-          isKYCVerified: freshUser.isKYCVerified,
-          kycStatusField: freshUser.kycStatus?.status,
-          tier: freshUser.tier
-        });
-        
-        // ✅ Check after setting user
-        const emailOK = freshUser.verified === true;
-        const kycOK = (freshUser.isKYCVerified === true) || (freshUser.kycStatus?.status === 'approved');
-        
-        console.log('🎯 Verification Check Results:', {
-          emailVerified: emailOK,
-          kycVerified: kycOK,
-          canCreate: emailOK && kycOK
-        });
-        
-        if (!emailOK) {
-          console.log('❌ BLOCKED: Email not verified');
-        } else if (!kycOK) {
-          console.log('❌ BLOCKED: KYC not verified. Status:', freshUser.kycStatus?.status);
-        } else {
-          console.log('✅ PASSED: User is fully verified and can create escrow');
-        }
-      } else {
-        console.warn('⚠️ Invalid profile response, using initial user');
-        setUser(initialUser);
-      }
-    } catch (error) {
-      console.error('❌ Failed to check verification status:', error);
-      setVerificationError(true);
-      setUser(initialUser);
-    } finally {
-      setCheckingVerification(false);
-    }
-  };
 
   // Currency symbols mapping
   const currencySymbols = {
@@ -204,20 +135,20 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
     } catch (err) {
       console.error('❌ Create escrow error:', err);
       
-      // ✅ Handle verification errors specifically
+      // ✅ Handle verification errors from backend
       if (err.response?.status === 403) {
         const errorData = err.response?.data;
         
         if (errorData?.verificationType === 'email') {
-          toast.error('Email verification required!');
+          toast.error('Please verify your email first. Check your inbox!', { duration: 6000 });
         } else if (errorData?.verificationType === 'kyc') {
-          toast.error(`KYC verification required. Current status: ${errorData?.currentKYCStatus || 'unverified'}`);
+          toast.error('Please complete KYC verification in your profile.', { duration: 6000 });
+          setTimeout(() => {
+            window.location.href = '/profile?tab=kyc';
+          }, 2000);
         } else {
           toast.error(errorData?.message || 'Verification required');
         }
-        
-        // Refresh verification status
-        await checkVerificationStatus();
       } else {
         toast.error(err.response?.data?.message || 'Failed to create escrow');
       }
@@ -226,249 +157,6 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
     }
   };
 
-  const handleResendVerification = async () => {
-    try {
-      setResending(true);
-      const response = await verifyService.resendVerificationEmail(user?.email);
-      
-      if (response.success) {
-        toast.success('Verification email sent! Check your inbox.', {
-          duration: 5000,
-          icon: '📧'
-        });
-      }
-    } catch (error) {
-      console.error('Resend verification error:', error);
-      toast.error('Failed to send verification email. Please try again.');
-    } finally {
-      setResending(false);
-    }
-  };
-
-  // ✅ Show loading while checking verification OR if user not set yet
-  if (checkingVerification || !user) {
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 text-center">
-          <Loader className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-700 dark:text-gray-300">Checking verification status...</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            Fetching your latest verification info
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ NOW check verification status AFTER user is set
-  const isEmailVerified = user.verified === true;
-  const isKYCVerified = (user.isKYCVerified === true) || (user.kycStatus?.status === 'approved');
-  const canCreateEscrow = isEmailVerified && isKYCVerified;
-  
-  console.log('🎯 Final Verification State (rendering):', {
-    isEmailVerified,
-    isKYCVerified,
-    canCreateEscrow,
-    userKYCStatus: user.kycStatus?.status,
-    userIsKYCVerified: user.isKYCVerified
-  });
-
-  // ✅ Show error state with retry option
-  if (verificationError) {
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
-          <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-            Connection Error
-          </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Failed to check verification status. Please try again.
-          </p>
-          <div className="flex gap-3">
-            <button
-              onClick={checkVerificationStatus}
-              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
-            >
-              Retry
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ Verification required screen
-  if (!canCreateEscrow) {
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-          {/* Header */}
-          <div className="border-b border-gray-200 dark:border-gray-800 p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Verification Required</h2>
-              <button 
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
-              >
-                <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-              </button>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="p-6">
-            {!isEmailVerified ? (
-              <div className="text-center">
-                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-red-500 to-orange-500 rounded-full flex items-center justify-center mb-6">
-                  <Mail className="w-10 h-10 text-white" />
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                  Email Verification Required
-                </h3>
-                
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Please verify your email address to create secure escrow transactions.
-                </p>
-                
-                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 mb-6">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Verification email sent to:
-                  </p>
-                  <p className="font-medium text-gray-900 dark:text-white break-all">
-                    {user?.email || 'your email'}
-                  </p>
-                </div>
-                
-                <div className="space-y-3">
-                  <button
-                    onClick={handleResendVerification}
-                    disabled={resending}
-                    className="w-full px-6 py-3.5 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl font-semibold hover:from-red-700 hover:to-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-                  >
-                    {resending ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <Loader className="w-5 h-5 animate-spin" />
-                        Sending...
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        <Mail className="w-5 h-5" />
-                        Resend Verification Email
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-full flex items-center justify-center mb-6">
-                  <FileCheck className="w-10 h-10 text-white" />
-                </div>
-                
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  <Shield className="w-6 h-6 text-green-600 dark:text-green-400" />
-                  <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-sm font-medium">
-                    Email Verified ✓
-                  </span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                  KYC Verification Required
-                </h3>
-                
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Complete KYC verification to create escrows and access higher transaction limits.
-                </p>
-
-                {/* Show current KYC status */}
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
-                  <p className="text-sm font-medium text-amber-900 dark:text-amber-200 mb-1">
-                    Current KYC Status
-                  </p>
-                  <p className="text-lg font-bold text-amber-700 dark:text-amber-300 uppercase">
-                    {user.kycStatus?.status || 'unverified'}
-                  </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                    isKYCVerified: {String(user.isKYCVerified)}
-                  </p>
-                  {user.kycStatus?.status === 'in_progress' && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                      Your verification is being processed. This usually takes a few minutes.
-                    </p>
-                  )}
-                  {user.kycStatus?.status === 'pending' && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                      Please complete your KYC verification session.
-                    </p>
-                  )}
-                </div>
-                
-                <div className="space-y-3">
-                  {/* Refresh button */}
-                  <button
-                    onClick={() => {
-                      toast.promise(
-                        checkVerificationStatus(),
-                        {
-                          loading: 'Refreshing status...',
-                          success: 'Status refreshed!',
-                          error: 'Failed to refresh'
-                        }
-                      );
-                    }}
-                    className="w-full px-6 py-3.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl font-semibold hover:from-gray-700 hover:to-gray-800 transition shadow-lg hover:shadow-xl"
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <RefreshCw className="w-5 h-5" />
-                      Refresh Verification Status
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      onClose();
-                      window.location.href = '/profile?tab=kyc';
-                    }}
-                    className="w-full px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition shadow-lg hover:shadow-xl"
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <FileCheck className="w-5 h-5" />
-                      {user.kycStatus?.status === 'unverified' ? 'Start KYC Verification' : 'View KYC Status'}
-                    </span>
-                  </button>
-                  
-                  <button
-                    onClick={onClose}
-                    className="w-full px-6 py-3.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-                  >
-                    Back to Dashboard
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="border-t border-gray-200 dark:border-gray-800 p-6 bg-gray-50 dark:bg-gray-900/50">
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <Shield className="w-4 h-4" />
-              <span>Secure verification • Your data is protected</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ Main escrow form (for verified users)
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -488,23 +176,6 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
           </button>
         </div>
 
-        {/* Verification Status Banner */}
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border-b border-green-200 dark:border-green-800 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <FileCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
-              </div>
-              <span className="text-sm font-medium text-green-800 dark:text-green-300">
-                ✓ Fully Verified Account
-              </span>
-            </div>
-            <span className="text-xs text-green-700 dark:text-green-400">
-              {user?.tier ? `Tier: ${user.tier.toUpperCase()}` : 'Ready to transact'}
-            </span>
-          </div>
-        </div>
-
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
           {/* Title */}
@@ -516,7 +187,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
               type="text"
               {...register('title', { required: 'Title is required' })}
               placeholder="e.g., iPhone 15 Pro Max Purchase"
-              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white ${
+              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white ${
                 errors.title ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
@@ -534,7 +205,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
               {...register('description', { required: 'Description is required' })}
               placeholder="Describe what you're purchasing..."
               rows={4}
-              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white resize-none ${
+              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white resize-none ${
                 errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
@@ -566,7 +237,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                     min: { value: 0.01, message: 'Amount must be greater than 0' }
                   })}
                   placeholder="0.00"
-                  className={`w-full pl-20 pr-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white ${
+                  className={`w-full pl-20 pr-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white ${
                     errors.amount ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                   }`}
                 />
@@ -582,7 +253,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
               </label>
               <select
                 {...register('currency')}
-                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-gray-900 dark:text-white"
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
               >
                 {currencies.map(curr => (
                   <option key={curr.code} value={curr.code}>
@@ -647,7 +318,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                 },
               })}
               placeholder="seller@example.com"
-              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white ${
+              className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white ${
                 errors.sellerEmail ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
@@ -666,7 +337,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
             </label>
             <select
               {...register('category')}
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-gray-900 dark:text-white"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
             >
               <option value="electronics">Electronics</option>
               <option value="services">Services</option>
@@ -685,7 +356,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
             </label>
             <select
               {...register('deliveryMethod')}
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none text-gray-900 dark:text-white"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
             >
               <option value="physical">Physical Shipping</option>
               <option value="digital">Digital Delivery</option>
@@ -749,14 +420,14 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || feeLoading}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
             >
               {loading ? (
                 <>

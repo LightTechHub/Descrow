@@ -17,7 +17,10 @@ import SellingTab from 'components/Dashboard/SellingTab';
 import CreateEscrowModal from 'components/CreateEscrowModal';
 
 import { authService } from 'services/authService';
+import profileService from 'services/profileService'; // ✅ ADD THIS
 import notificationService from 'services/notificationService';
+import toast from 'react-hot-toast'; // ✅ ADD THIS
+
 const UnifiedDashboard = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,22 +28,18 @@ const UnifiedDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingUser, setLoadingUser] = useState(true); // ✅ ADD THIS
+  
+  // ✅ NEW: Fetch fresh user data on mount
   useEffect(() => {
-    // Get user from auth service
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) {
-      navigate('/login');
-      return;
-    }
-    setUser(currentUser);
-
-    // Check URL params for tab
+    fetchUserData();
+    
+    // Check URL params
     const tab = searchParams.get('tab');
     if (tab && ['overview', 'buying', 'selling', 'all'].includes(tab)) {
       setActiveTab(tab);
     }
 
-    // Check if create modal should open
     const action = searchParams.get('action');
     if (action === 'create') {
       setShowCreateModal(true);
@@ -48,9 +47,57 @@ const UnifiedDashboard = () => {
       setSearchParams(searchParams);
     }
 
-    // Fetch unread notifications count
     fetchUnreadCount();
   }, []);
+
+  // ✅ NEW: Fetch fresh user data from API
+  const fetchUserData = async () => {
+    try {
+      setLoadingUser(true);
+      
+      // Check if logged in
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser) {
+        navigate('/login');
+        return;
+      }
+
+      // Fetch FRESH data from API
+      console.log('🔄 Fetching fresh user data from API...');
+      const response = await profileService.getProfile();
+      
+      if (response.success && response.data?.user) {
+        const freshUser = response.data.user;
+        console.log('✅ Fresh user data:', {
+          email: freshUser.email,
+          verified: freshUser.verified,
+          isKYCVerified: freshUser.isKYCVerified,
+          kycStatus: freshUser.kycStatus?.status
+        });
+        
+        setUser(freshUser);
+        
+        // ✅ Update localStorage with fresh data
+        localStorage.setItem('user', JSON.stringify(freshUser));
+      } else {
+        // Fallback to cached user if API fails
+        console.warn('⚠️ API failed, using cached user');
+        setUser(currentUser);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch user data:', error);
+      
+      // Fallback to cached user
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        navigate('/login');
+      }
+    } finally {
+      setLoadingUser(false);
+    }
+  };
 
   const fetchUnreadCount = async () => {
     try {
@@ -72,14 +119,44 @@ const UnifiedDashboard = () => {
     authService.logout();
   };
 
+  // ✅ NEW: Refresh user data before opening modal
+  const handleOpenCreateModal = async () => {
+    console.log('🎯 Opening create modal - refreshing user data first...');
+    
+    try {
+      const response = await profileService.getProfile();
+      if (response.success && response.data?.user) {
+        const freshUser = response.data.user;
+        console.log('✅ Refreshed user before modal:', {
+          verified: freshUser.verified,
+          isKYCVerified: freshUser.isKYCVerified,
+          kycStatus: freshUser.kycStatus?.status
+        });
+        setUser(freshUser);
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to refresh user, using cached:', error);
+    }
+    
+    setShowCreateModal(true);
+  };
+
   const handleCreateSuccess = () => {
     setShowCreateModal(false);
     // Refresh current tab
     window.location.reload();
   };
 
-  if (!user) {
-    return null;
+  // ✅ Show loading while fetching user
+  if (loadingUser || !user) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   const tabs = [
@@ -107,9 +184,9 @@ const UnifiedDashboard = () => {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-3">
-              {/* Create Button */}
+              {/* Create Button - ✅ UPDATED */}
               <button
-                onClick={() => setShowCreateModal(true)}
+                onClick={handleOpenCreateModal}
                 className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
               >
                 <Plus className="w-5 h-5" />
@@ -187,8 +264,6 @@ const UnifiedDashboard = () => {
                 Combined view of all your buying and selling transactions
               </p>
             </div>
-            {/* You can create an AllTransactionsTab component similar to BuyingTab/SellingTab */}
-            {/* For now, showing both */}
             <BuyingTab user={user} />
             <div className="border-t border-gray-200 dark:border-gray-800 my-8"></div>
             <SellingTab user={user} />
@@ -196,9 +271,9 @@ const UnifiedDashboard = () => {
         )}
       </main>
 
-      {/* Floating Create Button (Mobile) */}
+      {/* Floating Create Button (Mobile) - ✅ UPDATED */}
       <button
-        onClick={() => setShowCreateModal(true)}
+        onClick={handleOpenCreateModal}
         className="sm:hidden fixed bottom-6 right-6 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition z-50"
       >
         <Plus className="w-6 h-6" />

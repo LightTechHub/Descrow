@@ -8,8 +8,8 @@ import { verifyService } from '../services/verifyService';
 
 const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
   // ✅ State to hold refreshed user data
-  const [user, setUser] = useState(initialUser);
-  const [checkingVerification, setCheckingVerification] = useState(true); // Start with true
+  const [user, setUser] = useState(null); // ✅ CHANGED: Start with null
+  const [checkingVerification, setCheckingVerification] = useState(true);
   const [verificationError, setVerificationError] = useState(false);
 
   const { 
@@ -50,6 +50,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
       setVerificationError(false);
       
       console.log('🔍 Fetching fresh user verification status...');
+      console.log('📤 Initial user prop:', initialUser);
       
       // Call the profile endpoint to get FRESH user data
       const response = await profileService.getProfile();
@@ -60,17 +61,27 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
         const freshUser = response.data.user;
         setUser(freshUser);
         
-        console.log('✅ Fresh Verification Status:', {
-          emailVerified: freshUser.verified,
+        console.log('✅ Fresh User Set:', {
+          email: freshUser.email,
+          verified: freshUser.verified,
           isKYCVerified: freshUser.isKYCVerified,
           kycStatusField: freshUser.kycStatus?.status,
           tier: freshUser.tier
         });
         
-        // ✅ EXPLICIT CHECK: Show what's blocking
-        if (!freshUser.verified) {
+        // ✅ Check after setting user
+        const emailOK = freshUser.verified === true;
+        const kycOK = (freshUser.isKYCVerified === true) || (freshUser.kycStatus?.status === 'approved');
+        
+        console.log('🎯 Verification Check Results:', {
+          emailVerified: emailOK,
+          kycVerified: kycOK,
+          canCreate: emailOK && kycOK
+        });
+        
+        if (!emailOK) {
           console.log('❌ BLOCKED: Email not verified');
-        } else if (!freshUser.isKYCVerified && freshUser.kycStatus?.status !== 'approved') {
+        } else if (!kycOK) {
           console.log('❌ BLOCKED: KYC not verified. Status:', freshUser.kycStatus?.status);
         } else {
           console.log('✅ PASSED: User is fully verified and can create escrow');
@@ -87,19 +98,6 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
       setCheckingVerification(false);
     }
   };
-
-  // ✅ EXPLICIT verification checks with detailed logging
-  const isEmailVerified = user?.verified || false;
-  const isKYCVerified = (user?.isKYCVerified === true) || (user?.kycStatus?.status === 'approved');
-  const canCreateEscrow = isEmailVerified && isKYCVerified;
-  
-  console.log('🎯 Current Verification State:', {
-    isEmailVerified,
-    isKYCVerified,
-    canCreateEscrow,
-    userKYCStatus: user?.kycStatus?.status,
-    userIsKYCVerified: user?.isKYCVerified
-  });
 
   // Currency symbols mapping
   const currencySymbols = {
@@ -247,8 +245,8 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
     }
   };
 
-  // ✅ Show loading while checking verification
-  if (checkingVerification) {
+  // ✅ Show loading while checking verification OR if user not set yet
+  if (checkingVerification || !user) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 text-center">
@@ -261,6 +259,19 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
       </div>
     );
   }
+
+  // ✅ NOW check verification status AFTER user is set
+  const isEmailVerified = user.verified === true;
+  const isKYCVerified = (user.isKYCVerified === true) || (user.kycStatus?.status === 'approved');
+  const canCreateEscrow = isEmailVerified && isKYCVerified;
+  
+  console.log('🎯 Final Verification State (rendering):', {
+    isEmailVerified,
+    isKYCVerified,
+    canCreateEscrow,
+    userKYCStatus: user.kycStatus?.status,
+    userIsKYCVerified: user.isKYCVerified
+  });
 
   // ✅ Show error state with retry option
   if (verificationError) {
@@ -383,14 +394,17 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                     Current KYC Status
                   </p>
                   <p className="text-lg font-bold text-amber-700 dark:text-amber-300 uppercase">
-                    {user?.kycStatus?.status || 'unverified'}
+                    {user.kycStatus?.status || 'unverified'}
                   </p>
-                  {user?.kycStatus?.status === 'in_progress' && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                    isKYCVerified: {String(user.isKYCVerified)}
+                  </p>
+                  {user.kycStatus?.status === 'in_progress' && (
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                       Your verification is being processed. This usually takes a few minutes.
                     </p>
                   )}
-                  {user?.kycStatus?.status === 'pending' && (
+                  {user.kycStatus?.status === 'pending' && (
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                       Please complete your KYC verification session.
                     </p>
@@ -427,7 +441,7 @@ const CreateEscrowModal = ({ user: initialUser, onClose, onSuccess }) => {
                   >
                     <span className="flex items-center justify-center gap-2">
                       <FileCheck className="w-5 h-5" />
-                      {user?.kycStatus?.status === 'unverified' ? 'Start KYC Verification' : 'View KYC Status'}
+                      {user.kycStatus?.status === 'unverified' ? 'Start KYC Verification' : 'View KYC Status'}
                     </span>
                   </button>
                   

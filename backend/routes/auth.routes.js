@@ -6,6 +6,11 @@ const emailService = require('../services/email.service');
 const jwt = require('jsonwebtoken');
 
 /**
+ * ---------------- GOOGLE AUTH ----------------
+ */
+router.post('/google', authController.googleAuth);
+
+/**
  * ---------------- REGISTER ----------------
  */
 router.post(
@@ -63,16 +68,35 @@ router.get('/dev/test-email', async (req, res) => {
   try {
     const email = req.query.email;
     if (!email) {
-      return res.status(400).json({ success: false, message: 'Email is required' });
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
     }
 
-    const testToken = jwt.sign({ id: 'test-user-id' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    await emailService.sendVerificationEmail(email, 'Test User', testToken);
+    const testToken = jwt.sign(
+      { id: 'test-user-id' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
 
-    res.status(200).json({ success: true, message: `Test email sent to ${email}` });
+    await emailService.sendVerificationEmail(
+      email,
+      'Test User',
+      testToken
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Test email sent to ${email}`
+    });
   } catch (error) {
     console.error('❌ Dev test email error:', error);
-    res.status(500).json({ success: false, message: 'Failed to send test email', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send test email',
+      error: error.message
+    });
   }
 });
 

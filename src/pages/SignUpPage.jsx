@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Shield, Mail, Lock, User, Eye, EyeOff, Loader, AlertCircle, CheckCircle } from 'lucide-react';
 import { authService } from '../services/authService';
+import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
+import toast from 'react-hot-toast';
 
 const SignUpPage = ({ setUser }) => {
   const navigate = useNavigate();
@@ -16,7 +19,6 @@ const SignUpPage = ({ setUser }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const [successMessage, setSuccessMessage] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,9 +27,7 @@ const SignUpPage = ({ setUser }) => {
       [name]: value
     });
     setError('');
-    setSuccessMessage('');
 
-    // Password strength check
     if (name === 'password') {
       checkPasswordStrength(value);
     }
@@ -55,10 +55,41 @@ const SignUpPage = ({ setUser }) => {
     return 'Strong';
   };
 
+  // ✅ GOOGLE OAUTH HANDLER
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setLoading(true);
+      const decoded = jwtDecode(credentialResponse.credential);
+      
+      console.log('🔐 Google OAuth Success:', decoded);
+      
+      // Send to backend
+      const response = await authService.googleAuth({
+        email: decoded.email,
+        name: decoded.name,
+        googleId: decoded.sub,
+        picture: decoded.picture
+      });
+      
+      if (response.success) {
+        setUser(response.user);
+        toast.success(`Welcome, ${response.user.name}!`);
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError(response.message || 'Google signup failed');
+      }
+    } catch (error) {
+      console.error('Google signup error:', error);
+      setError('Google signup failed. Please try again.');
+      toast.error('Google signup failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccessMessage('');
 
     // Validation
     if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
@@ -84,18 +115,25 @@ const SignUpPage = ({ setUser }) => {
         password: formData.password
       });
 
-      // ✅ Handle success
+      // ✅ HANDLE SUCCESS WITH AUTO REDIRECT
       if (response.success) {
-        if (response.message?.toLowerCase().includes('verify')) {
-          // Show verification notice if email verification required
-          setSuccessMessage('Account created! Please verify your email before logging in.');
-        } else {
-          // If user is auto-verified
-          setUser(response.user);
-          navigate('/dashboard', { replace: true });
-        }
+        // Show success toast
+        toast.success('Account created! 📧 Check your email to verify.', {
+          duration: 4000,
+          icon: '✅'
+        });
+        
+        // ✅ REDIRECT TO LOGIN AFTER 2 SECONDS
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              email: formData.email,
+              message: '✅ Account created! Please verify your email before logging in.'
+            },
+            replace: true
+          });
+        }, 2000);
       } else {
-        // API returned success = false
         setError(response.message || 'Registration failed. Please try again.');
       }
 
@@ -106,6 +144,7 @@ const SignUpPage = ({ setUser }) => {
         err.message ||
         'Registration failed. Please try again.';
       setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -133,12 +172,27 @@ const SignUpPage = ({ setUser }) => {
             </div>
           )}
 
-          {successMessage && (
-            <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start gap-3">
-              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-800 dark:text-green-200">{successMessage}</p>
-            </div>
-          )}
+          {/* ✅ GOOGLE SIGN UP BUTTON */}
+          <div className="mb-6">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => {
+                setError('Google signup failed');
+                toast.error('Google signup failed');
+              }}
+              useOneTap
+              text="signup_with"
+              size="large"
+              width="100%"
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="mb-6 flex items-center">
+            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
+            <span className="px-4 text-sm text-gray-500 dark:text-gray-400">OR</span>
+            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Name */}
@@ -296,15 +350,8 @@ const SignUpPage = ({ setUser }) => {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="mt-6 mb-6 flex items-center">
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
-            <span className="px-4 text-sm text-gray-500 dark:text-gray-400">OR</span>
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
-          </div>
-
           {/* Login Link */}
-          <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
             Already have an account?{' '}
             <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
               Login here

@@ -216,6 +216,220 @@ exports.login = async (req, res) => {
 };
 
 /* ============================================================
+   🚪 LOGOUT
+============================================================ */
+exports.logout = async (req, res) => {
+  try {
+    // In a stateless JWT system, logout is handled on the frontend
+    // by removing the token from localStorage
+    
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
+  }
+};
+
+/* ============================================================
+   🔄 REFRESH TOKEN
+============================================================ */
+exports.refreshToken = async (req, res) => {
+  try {
+    const userId = req.user.id; // From authenticate middleware
+    
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is suspended'
+      });
+    }
+    
+    // Generate new token
+    const token = generateToken(user._id, user.email);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Token refreshed',
+      token
+    });
+  } catch (error) {
+    console.error('❌ Refresh token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Token refresh failed'
+    });
+  }
+};
+
+/* ============================================================
+   ✅ VERIFY EMAIL
+============================================================ */
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    if (user.verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already verified'
+      });
+    }
+    
+    user.verified = true;
+    user.verifiedAt = new Date();
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully'
+    });
+  } catch (error) {
+    console.error('❌ Verify email error:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Invalid or expired verification token'
+    });
+  }
+};
+
+/* ============================================================
+   📧 RESEND VERIFICATION
+============================================================ */
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    if (user.verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already verified'
+      });
+    }
+    
+    const verificationToken = generateToken(user._id);
+    
+    await emailService.sendVerificationEmail(user.email, user.name, verificationToken);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Verification email sent'
+    });
+  } catch (error) {
+    console.error('❌ Resend verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend verification email'
+    });
+  }
+};
+
+/* ============================================================
+   🔑 FORGOT PASSWORD
+============================================================ */
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      // Don't reveal if user exists
+      return res.status(200).json({
+        success: true,
+        message: 'If that email exists, a password reset link has been sent'
+      });
+    }
+    
+    const resetToken = generateToken(user._id);
+    
+    await emailService.sendPasswordResetEmail(user.email, user.name, resetToken);
+    
+    res.status(200).json({
+      success: true,
+      message: 'If that email exists, a password reset link has been sent'
+    });
+  } catch (error) {
+    console.error('❌ Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process password reset request'
+    });
+  }
+};
+
+/* ============================================================
+   🔄 RESET PASSWORD
+============================================================ */
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+    
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid reset token'
+      });
+    }
+    
+    user.password = password;
+    await user.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Invalid or expired reset token'
+    });
+  }
+};
+
+/* ============================================================
    (All other handlers remain unchanged below)
 ============================================================ */
 // verifyEmail

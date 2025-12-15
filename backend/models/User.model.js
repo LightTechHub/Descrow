@@ -18,17 +18,17 @@ const userSchema = new mongoose.Schema({
   },
 
   googleId: {
-  type: String,
-  sparse: true,
-  unique: true
-}
+    type: String,
+    sparse: true,
+    unique: true
+  },
 
-password: {
-  type: String,
-  required: [true, 'Password is required'],
-  minlength: [8, 'Password must be at least 8 characters'],
-  select: false
-},
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [8, 'Password must be at least 8 characters'],
+    select: false
+  },
 
   role: {
     type: String,

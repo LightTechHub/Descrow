@@ -32,27 +32,22 @@ export const authService = {
       
       console.log('📦 Backend response:', res.data);
 
-      // Check if response is successful
       if (!res.data.success) {
         const errorMsg = res.data.message || 'Login failed';
         toast.error(errorMsg);
         throw new Error(errorMsg);
       }
 
-      // Check if user exists in response
       if (!res.data.user) {
         toast.error('Invalid response from server');
         throw new Error('No user data in response');
       }
 
-      // Check if user is verified
       if (!res.data.user.verified) {
         console.warn('⚠️ User not verified');
-        // Don't save token for unverified users
         localStorage.setItem('user', JSON.stringify(res.data.user));
         toast.error('Your email is not verified yet. Please check your inbox.');
         
-        // Return response with verified: false so Login.js knows
         return {
           success: false,
           message: 'Email not verified',
@@ -61,29 +56,52 @@ export const authService = {
         };
       }
 
-      // Check if token exists
       if (!res.data.token) {
         toast.error('Authentication token missing');
         throw new Error('No token in response');
       }
 
-      // ✅ Everything is valid - save to localStorage
       console.log('✅ Saving token and user to localStorage');
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
 
-      // Verify it was saved
-      const savedToken = localStorage.getItem('token');
-      const savedUser = localStorage.getItem('user');
-      console.log('💾 Token saved:', !!savedToken);
-      console.log('💾 User saved:', !!savedUser);
+      console.log('💾 Token saved:', !!localStorage.getItem('token'));
+      console.log('💾 User saved:', !!localStorage.getItem('user'));
 
-      console.log('✅ authService.login returning success response');
       return res.data;
 
     } catch (err) {
       console.error('❌ authService.login error:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Invalid credentials.';
+      toast.error(errorMessage);
+      throw err.response?.data || { message: errorMessage };
+    }
+  },
+
+  /**
+   * 🔵 Google OAuth Login
+   */
+  async googleAuth(googleData) {
+    try {
+      const res = await api.post('/auth/google', googleData);
+
+      if (!res.data.success) {
+        toast.error(res.data.message || 'Google authentication failed');
+        throw new Error(res.data.message || 'Google authentication failed');
+      }
+
+      if (res.data.token && res.data.user) {
+        localStorage.setItem('token', res.data.token);
+        localStorage.setItem('user', JSON.stringify(res.data.user));
+      }
+
+      toast.success('Google login successful');
+      return res.data;
+
+    } catch (err) {
+      console.error('❌ Google auth error:', err);
+      const errorMessage =
+        err.response?.data?.message || 'Google authentication failed.';
       toast.error(errorMessage);
       throw err.response?.data || { message: errorMessage };
     }
@@ -97,15 +115,18 @@ export const authService = {
       const res = await api.post('/auth/verify-email', { token });
       toast.success('✅ Email verified successfully! You can now log in.');
 
-      // Optionally update localStorage user if currently stored
       const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
       if (storedUser.email === res.data.user.email) {
-        localStorage.setItem('user', JSON.stringify({ ...storedUser, verified: true }));
+        localStorage.setItem(
+          'user',
+          JSON.stringify({ ...storedUser, verified: true })
+        );
       }
 
       setTimeout(() => {
         window.location.href = '/login';
       }, 2000);
+
       return res.data;
     } catch (err) {
       console.error('Verify email error:', err);

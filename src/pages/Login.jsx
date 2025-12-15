@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Loader, AlertCircle, CheckCircle } from 'lucide-react';
 import { authService } from '../services/authService';
+import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-hot-toast';
 
 const Login = ({ setUser }) => {
@@ -34,9 +36,41 @@ const Login = ({ setUser }) => {
     setError('');
   };
 
+  // ✅ GOOGLE OAUTH HANDLER
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setLoading(true);
+      const decoded = jwtDecode(credentialResponse.credential);
+      
+      console.log('🔐 Google OAuth Success:', decoded);
+      
+      // Send to backend
+      const response = await authService.googleAuth({
+        email: decoded.email,
+        name: decoded.name,
+        googleId: decoded.sub,
+        picture: decoded.picture
+      });
+      
+      if (response.success) {
+        setUser(response.user);
+        toast.success(`Welcome back, ${response.user.name}!`);
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError(response.message || 'Google login failed');
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      setError('Google login failed. Please try again.');
+      toast.error('Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    e.stopPropagation(); // ✅ Stop event bubbling
+    e.stopPropagation();
     
     setError('');
     setSuccessMessage('');
@@ -49,89 +83,39 @@ const Login = ({ setUser }) => {
     try {
       setLoading(true);
       console.log('🔐 Starting login process...');
-      console.log('📧 Email:', formData.email);
       
       const response = await authService.login({
         email: formData.email.trim(),
         password: formData.password
       });
 
-      console.log('📦 Full response:', JSON.stringify(response, null, 2));
-
-      // ✅ Extensive checks
-      if (!response) {
-        console.error('❌ No response from authService');
-        setError('Login failed - no response from server');
+      if (!response || !response.success) {
+        setError(response?.message || 'Login failed');
         return;
       }
 
-      if (!response.success) {
-        console.error('❌ Response not successful:', response.message);
-        setError(response.message || 'Login failed');
-        return;
-      }
-
-      if (!response.user) {
-        console.error('❌ No user in response');
+      if (!response.user || !response.token) {
         setError('Login failed - invalid response');
         return;
       }
 
-      if (!response.token) {
-        console.error('❌ No token in response');
-        setError('Login failed - no authentication token');
-        return;
-      }
-
       if (!response.user.verified) {
-        console.warn('⚠️ User not verified');
         setError('Your email is not verified. Please check your inbox or spam folder.');
         return;
       }
 
-      console.log('✅ All checks passed!');
-      console.log('👤 User object:', response.user);
-      console.log('🎫 Token exists:', !!response.token);
-
-      // Double-check localStorage
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      console.log('💾 Token in localStorage:', !!storedToken);
-      console.log('💾 User in localStorage:', !!storedUser);
-
-      if (!storedToken || !storedUser) {
-        console.error('❌ Token/user not saved to localStorage!');
-        setError('Session not created properly. Please try again.');
-        return;
-      }
-
       // Update parent state
-      console.log('🔄 Updating parent component state...');
       setUser(response.user);
-
-      // Show success toast
       toast.success(`Welcome back, ${response.user.name}!`);
 
-      console.log('🚀 Attempting navigation to /dashboard...');
-      
-      // Navigate after a short delay
+      // Navigate
       setTimeout(() => {
-        console.log('📍 Navigating now...');
         navigate('/dashboard', { replace: true });
       }, 500);
 
     } catch (err) {
-      console.error('❌ Login error caught:', err);
-      console.error('Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      });
-      
-      const message =
-        err.response?.data?.message ||
-        err.message ||
-        'Login failed. Please check your credentials.';
+      console.error('❌ Login error:', err);
+      const message = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
       setError(message);
       toast.error(message);
     } finally {
@@ -189,6 +173,28 @@ const Login = ({ setUser }) => {
               </div>
             </div>
           )}
+
+          {/* ✅ GOOGLE LOGIN BUTTON */}
+          <div className="mb-6">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => {
+                setError('Google login failed');
+                toast.error('Google login failed');
+              }}
+              useOneTap
+              text="signin_with"
+              size="large"
+              width="100%"
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="mb-6 flex items-center">
+            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
+            <span className="px-4 text-sm text-gray-500 dark:text-gray-400">OR</span>
+            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
@@ -276,15 +282,8 @@ const Login = ({ setUser }) => {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="mt-6 mb-6 flex items-center">
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
-            <span className="px-4 text-sm text-gray-500 dark:text-gray-400">OR</span>
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-700"></div>
-          </div>
-
           {/* Sign Up Link */}
-          <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
             Don't have an account?{' '}
             <Link to="/signup" className="font-medium text-blue-600 hover:text-blue-500">
               Sign up for free

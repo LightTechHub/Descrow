@@ -1,39 +1,72 @@
 // File: src/context/UserContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 
 const UserContext = createContext();
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is logged in (from localStorage or your auth system)
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Check localStorage for user data
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-      } finally {
+  // ✅ Fetch fresh user data from backend
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setUser(null);
         setLoading(false);
+        return;
       }
-    };
 
-    checkAuth();
+      const response = await axios.get(`${API_URL}/users/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        const userData = response.data.user;
+        setUser(userData);
+        // ✅ Update localStorage with fresh data
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+    } catch (error) {
+      console.error('Failed to fetch user profile:', error);
+      
+      // If token is invalid, clear everything
+      if (error.response?.status === 401) {
+        setUser(null);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Refresh user data (can be called from anywhere)
+  const refreshUser = async () => {
+    await fetchUserProfile();
+  };
+
+  // ✅ Check auth on mount - fetch from backend, not localStorage
+  useEffect(() => {
+    fetchUserProfile();
   }, []);
 
   // Check if user is admin
   const isAdmin = user?.role === 'admin' || user?.isAdmin === true;
 
   // Sign in function
-  const signIn = async (userData) => {
+  const signIn = async (userData, token) => {
     try {
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
+      if (token) {
+        localStorage.setItem('token', token);
+      }
+      // ✅ Fetch fresh data after sign in
+      await fetchUserProfile();
       return { success: true };
     } catch (error) {
       console.error('Sign in failed:', error);
@@ -59,7 +92,8 @@ export const UserProvider = ({ children }) => {
     isAdmin,
     loading,
     signIn,
-    signOut
+    signOut,
+    refreshUser
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

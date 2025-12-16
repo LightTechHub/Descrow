@@ -1,23 +1,62 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle, XCircle, Clock, Loader, AlertCircle, Mail, ExternalLink, RefreshCw } from 'lucide-react';
-import profileService from '../../services/profileService';
+import { CheckCircle, XCircle, Clock, Loader, AlertCircle, Mail, ExternalLink, RefreshCw, Info } from 'lucide-react';
+import profileService from 'services/profileService';
 import toast from 'react-hot-toast';
 
 const KYCTab = ({ user, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [kycStatus, setKycStatus] = useState(null);
   const [verificationUrl, setVerificationUrl] = useState(null);
   
   const hasFetchedKYC = useRef(false);
 
   useEffect(() => {
+    // Check URL parameters for redirect status
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlStatus = urlParams.get('status');
+    const sessionId = urlParams.get('sessionId');
+
+    if (urlStatus) {
+      handleRedirectStatus(urlStatus, sessionId);
+      
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname + '?tab=kyc');
+    }
+
     if (!hasFetchedKYC.current) {
       hasFetchedKYC.current = true;
       fetchKYCStatus();
     }
   }, []);
+
+  const handleRedirectStatus = (status, sessionId) => {
+    switch (status) {
+      case 'success':
+        toast.success('Verification completed! Checking status...');
+        break;
+      case 'in_review':
+        toast.info('Verification submitted for review. This may take a few minutes.');
+        break;
+      case 'failed':
+        toast.error('Verification failed. Please try again.');
+        break;
+      case 'cancelled':
+        toast.info('Verification was cancelled.');
+        break;
+      case 'expired':
+        toast.error('Verification session expired.');
+        break;
+      default:
+        console.log('Unknown redirect status:', status);
+    }
+
+    // Refresh status after redirect
+    setTimeout(() => {
+      hasFetchedKYC.current = false;
+      fetchKYCStatus();
+    }, 2000);
+  };
 
   const fetchKYCStatus = async () => {
     try {
@@ -31,28 +70,6 @@ const KYCTab = ({ user, onUpdate }) => {
     } catch (error) {
       console.error('Failed to fetch KYC status:', error);
       setKycStatus({ status: 'unverified' });
-    }
-  };
-
-  const handleForceSync = async () => {
-    try {
-      setSyncing(true);
-      const response = await profileService.forceSyncKYC();
-      
-      if (response.success) {
-        toast.success('KYC status synced successfully!');
-        // Refresh the page to get updated user data
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        toast.error('Failed to sync KYC status');
-      }
-    } catch (error) {
-      console.error('Force sync error:', error);
-      toast.error('Failed to sync KYC status');
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -157,58 +174,34 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* DEBUG & FORCE SYNC SECTION */}
-      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
-        <div className="flex items-center justify-between">
+  // Approved
+  if (kycStatus?.status === 'approved') {
+    return (
+      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6">
+        <div className="flex items-center gap-4">
+          <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
           <div>
-            <h4 className="font-semibold text-purple-900 dark:text-purple-200">
-              KYC Status Debug
-            </h4>
-            <p className="text-sm text-purple-700 dark:text-purple-300">
-              DB Status: {kycStatus?.status} | isKYCVerified: {user?.isKYCVerified ? 'true' : 'false'}
+            <h3 className="text-xl font-semibold text-green-900 dark:text-green-200">
+              ✅ Verification Complete!
+            </h3>
+            <p className="text-green-700 dark:text-green-300">
+              Your identity has been verified successfully via Didit
             </p>
-          </div>
-          <button
-            onClick={handleForceSync}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
-          >
-            {syncing ? (
-              <Loader className="w-5 h-5 animate-spin" />
-            ) : (
-              <RefreshCw className="w-5 h-5" />
+            {kycStatus.verifiedAt && (
+              <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                Verified on {new Date(kycStatus.verifiedAt).toLocaleDateString()}
+              </p>
             )}
-            Force Sync
-          </button>
+          </div>
         </div>
       </div>
+    );
+  }
 
-      {/* Approved */}
-      {kycStatus?.status === 'approved' && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6">
-          <div className="flex items-center gap-4">
-            <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
-            <div>
-              <h3 className="text-xl font-semibold text-green-900 dark:text-green-200">
-                ✅ Verification Complete!
-              </h3>
-              <p className="text-green-700 dark:text-green-300">
-                Your identity has been verified successfully via Didit
-              </p>
-              {kycStatus.verifiedAt && (
-                <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                  Verified on {new Date(kycStatus.verifiedAt).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pending/In Progress */}
-      {(kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress') && (
+  // Pending/In Progress/In Review
+  if (kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress') {
+    return (
+      <div className="space-y-4">
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
           <div className="flex items-center gap-4 mb-4">
             <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-pulse" />
@@ -217,13 +210,26 @@ const KYCTab = ({ user, onUpdate }) => {
                 Verification In Progress
               </h3>
               <p className="text-blue-700 dark:text-blue-300">
-                Complete your verification with Didit to unlock all features
+                {kycStatus.status === 'in_progress' 
+                  ? 'Your verification is being reviewed. This usually takes a few minutes.'
+                  : 'Complete your verification with Didit to unlock all features'}
               </p>
             </div>
           </div>
           
+          {kycStatus.status === 'in_progress' && (
+            <div className="bg-blue-100 dark:bg-blue-800/30 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-2">
+                <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  We're reviewing your documents. You'll receive an update shortly via email and in your dashboard.
+                </p>
+              </div>
+            </div>
+          )}
+          
           <div className="flex gap-3">
-            {verificationUrl && (
+            {verificationUrl && kycStatus.status === 'pending' && (
               <button
                 onClick={() => window.location.href = verificationUrl}
                 className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -247,88 +253,92 @@ const KYCTab = ({ user, onUpdate }) => {
             </button>
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Rejected */}
-      {(kycStatus?.status === 'rejected' || kycStatus?.status === 'expired') && (
-        <div className="space-y-4">
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
-              <div>
-                <h3 className="text-lg font-semibold text-red-900 dark:text-red-200">
-                  {kycStatus.status === 'expired' ? 'Verification Expired' : 'Verification Failed'}
-                </h3>
-                <p className="text-red-700 dark:text-red-300">
-                  {kycStatus.rejectionReason || 'Your verification could not be completed'}
-                </p>
-              </div>
+  // Rejected
+  if (kycStatus?.status === 'rejected' || kycStatus?.status === 'expired') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
+          <div className="flex items-center gap-4 mb-4">
+            <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+            <div>
+              <h3 className="text-lg font-semibold text-red-900 dark:text-red-200">
+                {kycStatus.status === 'expired' ? 'Verification Expired' : 'Verification Failed'}
+              </h3>
+              <p className="text-red-700 dark:text-red-300">
+                {kycStatus.rejectionReason || 'Your verification could not be completed'}
+              </p>
             </div>
           </div>
-          <button
-            onClick={startVerification}
-            disabled={loading}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Starting...' : 'Try Again'}
-          </button>
         </div>
-      )}
+        <button
+          onClick={startVerification}
+          disabled={loading}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Starting...' : 'Try Again'}
+        </button>
+      </div>
+    );
+  }
 
-      {/* Unverified - Start verification */}
-      {(!kycStatus?.status || kycStatus?.status === 'unverified') && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 text-center">
-          <AlertCircle className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Verify Your Identity
-          </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Complete automatic identity verification in minutes using Didit
-          </p>
-          
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-6 text-left">
-            <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-3">
-              What you'll need:
-            </h4>
-            <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
-              <li className="flex items-start gap-2">
-                <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                Valid government-issued ID (Passport, Driver's License, or National ID)
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                A device with a camera for liveness check
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                5-10 minutes of your time
-              </li>
-            </ul>
-          </div>
-
-          <button
-            onClick={startVerification}
-            disabled={loading}
-            className="px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
-          >
-            {loading ? (
-              <>
-                <Loader className="w-6 h-6 animate-spin" />
-                Starting Verification...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="w-6 h-6" />
-                Start Verification
-              </>
-            )}
-          </button>
-
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
-            Powered by Didit • Secure & Encrypted
-          </p>
+  // Unverified - Start verification
+  return (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 text-center">
+        <AlertCircle className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Verify Your Identity
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          Complete automatic identity verification in minutes using Didit
+        </p>
+        
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-6 text-left">
+          <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-3">
+            What you'll need:
+          </h4>
+          <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-300">
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              Valid government-issued ID (Passport, Driver's License, or National ID)
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              A device with a camera for liveness check
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              5-10 minutes of your time
+            </li>
+          </ul>
         </div>
-      )}
+
+        <button
+          onClick={startVerification}
+          disabled={loading}
+          className="px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+        >
+          {loading ? (
+            <>
+              <Loader className="w-6 h-6 animate-spin" />
+              Starting Verification...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="w-6 h-6" />
+              Start Verification
+            </>
+          )}
+        </button>
+
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+          Powered by Didit • Secure & Encrypted
+        </p>
+      </div>
     </div>
   );
 };

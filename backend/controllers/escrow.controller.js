@@ -64,43 +64,53 @@ exports.createEscrow = async (req, res) => {
       });
     }
 
-    // ✅ FIX 1: FRESH FETCH of buyer with latest KYC status
-    const buyer = await User.findById(buyerId).select('+kycStatus');
-    if (!buyer) {
-      return res.status(404).json({
-        success: false,
-        message: 'Buyer not found'
-      });
-    }
+    // Get buyer with tier info
+const buyer = await User.findById(buyerId);
+if (!buyer) {
+  return res.status(404).json({
+    success: false,
+    message: 'Buyer not found'
+  });
+}
 
-    console.log('🔍 Buyer KYC Check:', {
-      userId: buyer._id,
-      email: buyer.email,
+// ✅ DETAILED LOGGING
+console.log('🔍 Creating Escrow - User Check:', {
+  userId: buyer._id,
+  email: buyer.email,
+  verified: buyer.verified,
+  isKYCVerified: buyer.isKYCVerified,
+  kycStatus: buyer.kycStatus?.status,
+  tier: buyer.tier
+});
+
+// ✅ EXPLICIT EMAIL CHECK
+if (!buyer.verified || buyer.verified === false) {
+  console.log('❌ BLOCKED: Email not verified');
+  return res.status(403).json({
+    success: false,
+    message: 'Email verification required to create transactions',
+    requiresVerification: true,
+    verificationType: 'email',
+    debugInfo: {
       verified: buyer.verified,
-      isKYCVerified: buyer.isKYCVerified,
-      kycStatus: buyer.kycStatus?.status,
-      tier: buyer.tier
-    });
-
-    // ✅ FIX 2: EXPLICIT KYC verification check
-    if (!buyer.verified) {
-      return res.status(403).json({
-        success: false,
-        message: 'Email verification required before creating escrow',
-        requiresVerification: true,
-        verificationType: 'email'
-      });
+      type: typeof buyer.verified
     }
+  });
+}
 
-    if (!buyer.isKYCVerified || buyer.kycStatus?.status !== 'approved') {
-      return res.status(403).json({
-        success: false,
-        message: 'KYC verification required before creating escrow',
-        requiresVerification: true,
-        verificationType: 'kyc',
-        currentKYCStatus: buyer.kycStatus?.status || 'unverified'
-      });
-    }
+// ✅ EXPLICIT KYC CHECK
+if (!buyer.isKYCVerified || buyer.kycStatus?.status !== 'approved') {
+  console.log('❌ BLOCKED: KYC not verified');
+  return res.status(403).json({
+    success: false,
+    message: 'KYC verification required before creating escrow',
+    requiresVerification: true,
+    verificationType: 'kyc',
+    currentKYCStatus: buyer.kycStatus?.status || 'unverified'
+  });
+}
+
+console.log('✅ PASSED: User verified and can create escrow');
 
     // ✅ FIX 3: Check tier limits
     const canCreate = buyer.canCreateTransaction(parsedAmount, currency);

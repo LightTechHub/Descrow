@@ -64,8 +64,9 @@ exports.createEscrow = async (req, res) => {
       });
     }
 
-    // Get buyer with tier info
-const buyer = await User.findById(buyerId);
+    // Get buyer with tier info - FETCH FRESH DATA
+let buyer = await User.findById(buyerId).select('+verified +isKYCVerified +kycStatus');
+
 if (!buyer) {
   return res.status(404).json({
     success: false,
@@ -74,7 +75,7 @@ if (!buyer) {
 }
 
 // ✅ DETAILED LOGGING
-console.log('🔍 Creating Escrow - User Check:', {
+console.log('🔍 Creating Escrow - Fresh User Check:', {
   userId: buyer._id,
   email: buyer.email,
   verified: buyer.verified,

@@ -7,7 +7,10 @@ const { body } = require('express-validator');
 
 // ======================================================
 // ===================== PROTECTED ======================
-// ======================================================
+// =====================================================
+
+router.get('/me', userController.getProfile); // Reuse existing getProfile controller
+
 
 // Protect all routes
 router.use(authenticate);

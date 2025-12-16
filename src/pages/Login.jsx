@@ -38,35 +38,57 @@ const Login = ({ setUser }) => {
 
   // ✅ GOOGLE OAUTH HANDLER
   const handleGoogleSuccess = async (credentialResponse) => {
-    try {
-      setLoading(true);
-      const decoded = jwtDecode(credentialResponse.credential);
-      
-      console.log('🔐 Google OAuth Success:', decoded);
-      
-      // Send to backend
-      const response = await authService.googleAuth({
-        email: decoded.email,
-        name: decoded.name,
-        googleId: decoded.sub,
-        picture: decoded.picture
-      });
-      
-      if (response.success) {
+  try {
+    setLoading(true);
+    const decoded = jwtDecode(credentialResponse.credential);
+    
+    console.log('🔐 Google OAuth Success:', decoded);
+    
+    const response = await authService.googleAuth({
+      email: decoded.email,
+      name: decoded.name,
+      googleId: decoded.sub,
+      picture: decoded.picture
+    });
+    
+    if (response.success) {
+      // ✅ CHANGE: Fetch fresh user data
+      try {
+        const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
+          headers: {
+            'Authorization': `Bearer ${response.token}`
+          }
+        });
+        
+        if (freshUserResponse.ok) {
+          const freshData = await freshUserResponse.json();
+          if (freshData.success && freshData.user) {
+            console.log('✅ Fresh Google user data:', freshData.user);
+            setUser(freshData.user);
+          } else {
+            setUser(response.user);
+          }
+        } else {
+          setUser(response.user);
+        }
+      } catch (fetchError) {
+        console.error('Failed to fetch fresh user data:', fetchError);
         setUser(response.user);
-        toast.success(`Welcome back, ${response.user.name}!`);
-        navigate('/dashboard', { replace: true });
-      } else {
-        setError(response.message || 'Google login failed');
       }
-    } catch (error) {
-      console.error('Google login error:', error);
-      setError('Google login failed. Please try again.');
-      toast.error('Google login failed');
-    } finally {
-      setLoading(false);
+
+      toast.success(`Welcome back, ${response.user.name}!`);
+      navigate('/dashboard', { replace: true });
+    } else {
+      setError(response.message || 'Google login failed');
     }
-  };
+  } catch (error) {
+    console.error('Google login error:', error);
+    setError('Google login failed. Please try again.');
+    toast.error('Google login failed');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = async (e) => {
   e.preventDefault();

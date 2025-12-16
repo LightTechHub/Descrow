@@ -498,7 +498,7 @@ exports.checkKYCStatus = async (req, res) => {
  */
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
+    const user = await User.findById(req.user.id).select('-password');
     
     if (!user) {
       return res.status(404).json({
@@ -522,20 +522,31 @@ exports.getProfile = async (req, res) => {
       };
     }
 
-    res.status(200).json({
+    res.json({
       success: true,
       data: {
-        user,
-        tierLimits
+        user: {
+          id: user._id,
+          name: user.name || `${user.firstName} ${user.lastName}`,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          verified: user.verified, // ✅ Make sure this is included
+          isKYCVerified: user.isKYCVerified, // ✅ Make sure this is included
+          kycStatus: user.kycStatus?.status || 'unverified', // ✅ Make sure this is included
+          tier: user.tier,
+          role: user.role,
+          profilePicture: user.profilePicture,
+          phone: user.phone
+        },
+        tierLimits // ✅ Tier limits included
       }
     });
-
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch profile',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Failed to fetch profile'
     });
   }
 };

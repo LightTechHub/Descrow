@@ -216,6 +216,42 @@ exports.login = async (req, res) => {
 };
 
 /* ============================================================
+   ✅ VERIFY EMAIL REDIRECT (GET endpoint - redirects to frontend)
+============================================================ */
+exports.verifyEmailRedirect = async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Verify and decode token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    const user = await User.findOne({ _id: decoded.id });
+    
+    if (!user) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      return res.redirect(`${frontendUrl}/login?verified=error&message=User+not+found`);
+    }
+    
+    if (user.verified) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      return res.redirect(`${frontendUrl}/login?verified=already`);
+    }
+    
+    user.verified = true;
+    user.verifiedAt = new Date();
+    await user.save();
+    
+    // Redirect to login with success message
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendUrl}/login?verified=success`);
+  } catch (error) {
+    console.error('❌ Verify email redirect error:', error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendUrl}/login?verified=error&message=Invalid+token`);
+  }
+};
+
+/* ============================================================
    🚪 LOGOUT
 ============================================================ */
 exports.logout = async (req, res) => {

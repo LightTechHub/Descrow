@@ -38,21 +38,95 @@ const Login = ({ setUser }) => {
 
   // ✅ GOOGLE OAUTH HANDLER
   const handleGoogleSuccess = async (credentialResponse) => {
-  try {
-    setLoading(true);
-    const decoded = jwtDecode(credentialResponse.credential);
+    try {
+      setLoading(true);
+      const decoded = jwtDecode(credentialResponse.credential);
+      
+      console.log('🔐 Google OAuth Success:', decoded);
+      
+      const response = await authService.googleAuth({
+        email: decoded.email,
+        name: decoded.name,
+        googleId: decoded.sub,
+        picture: decoded.picture
+      });
+      
+      if (response.success) {
+        // ✅ CHANGE: Fetch fresh user data
+        try {
+          const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
+            headers: {
+              'Authorization': `Bearer ${response.token}`
+            }
+          });
+          
+          if (freshUserResponse.ok) {
+            const freshData = await freshUserResponse.json();
+            if (freshData.success && freshData.user) {
+              console.log('✅ Fresh Google user data:', freshData.user);
+              setUser(freshData.user);
+            } else {
+              setUser(response.user);
+            }
+          } else {
+            setUser(response.user);
+          }
+        } catch (fetchError) {
+          console.error('Failed to fetch fresh user data:', fetchError);
+          setUser(response.user);
+        }
+
+        toast.success(`Welcome back, ${response.user.name}!`);
+        navigate('/dashboard', { replace: true });
+      } else {
+        setError(response.message || 'Google login failed');
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      setError('Google login failed. Please try again.');
+      toast.error('Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     
-    console.log('🔐 Google OAuth Success:', decoded);
-    
-    const response = await authService.googleAuth({
-      email: decoded.email,
-      name: decoded.name,
-      googleId: decoded.sub,
-      picture: decoded.picture
-    });
-    
-    if (response.success) {
-      // ✅ CHANGE: Fetch fresh user data
+    setError('');
+    setSuccessMessage('');
+
+    if (!formData.email || !formData.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('🔐 Starting login process...');
+      
+      const response = await authService.login({
+        email: formData.email.trim(),
+        password: formData.password
+      });
+
+      if (!response || !response.success) {
+        setError(response?.message || 'Login failed');
+        return;
+      }
+
+      if (!response.user || !response.token) {
+        setError('Login failed - invalid response');
+        return;
+      }
+
+      if (!response.user.verified) {
+        setError('Your email is not verified. Please check your inbox or spam folder.');
+        return;
+      }
+
+      // ✅ CHANGE: Fetch fresh user data from backend
       try {
         const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
           headers: {
@@ -63,109 +137,34 @@ const Login = ({ setUser }) => {
         if (freshUserResponse.ok) {
           const freshData = await freshUserResponse.json();
           if (freshData.success && freshData.user) {
-            console.log('✅ Fresh Google user data:', freshData.user);
-            setUser(freshData.user);
+            console.log('✅ Fresh user data:', freshData.user);
+            setUser(freshData.user); // Use fresh data instead of login response
           } else {
-            setUser(response.user);
+            setUser(response.user); // Fallback to login response
           }
         } else {
-          setUser(response.user);
+          setUser(response.user); // Fallback
         }
       } catch (fetchError) {
         console.error('Failed to fetch fresh user data:', fetchError);
-        setUser(response.user);
+        setUser(response.user); // Fallback
       }
 
       toast.success(`Welcome back, ${response.user.name}!`);
-      navigate('/dashboard', { replace: true });
-    } else {
-      setError(response.message || 'Google login failed');
+
+      // Navigate
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 500);
+
+    } catch (err) {
+      console.error('❌ Login error:', err);
+      const message = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Google login error:', error);
-    setError('Google login failed. Please try again.');
-    toast.error('Google login failed');
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  
-  setError('');
-  setSuccessMessage('');
-
-  if (!formData.email || !formData.password) {
-    setError('Please fill in all fields');
-    return;
-  }
-
-  try {
-    setLoading(true);
-    console.log('🔐 Starting login process...');
-    
-    const response = await authService.login({
-      email: formData.email.trim(),
-      password: formData.password
-    });
-
-    if (!response || !response.success) {
-      setError(response?.message || 'Login failed');
-      return;
-    }
-
-    if (!response.user || !response.token) {
-      setError('Login failed - invalid response');
-      return;
-    }
-
-    if (!response.user.verified) {
-      setError('Your email is not verified. Please check your inbox or spam folder.');
-      return;
-    }
-
-    // ✅ CHANGE: Fetch fresh user data from backend
-    try {
-      const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
-        headers: {
-          'Authorization': `Bearer ${response.token}`
-        }
-      });
-      
-      if (freshUserResponse.ok) {
-        const freshData = await freshUserResponse.json();
-        if (freshData.success && freshData.user) {
-          console.log('✅ Fresh user data:', freshData.user);
-          setUser(freshData.user); // Use fresh data instead of login response
-        } else {
-          setUser(response.user); // Fallback to login response
-        }
-      } else {
-        setUser(response.user); // Fallback
-      }
-    } catch (fetchError) {
-      console.error('Failed to fetch fresh user data:', fetchError);
-      setUser(response.user); // Fallback
-    }
-
-    toast.success(`Welcome back, ${response.user.name}!`);
-
-    // Navigate
-    setTimeout(() => {
-      navigate('/dashboard', { replace: true });
-    }, 500);
-
-  } catch (err) {
-    console.error('❌ Login error:', err);
-    const message = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
-    setError(message);
-    toast.error(message);
-  } finally {
-    setLoading(false);
-  }
-};
   };
 
   return (

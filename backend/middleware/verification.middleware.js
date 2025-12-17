@@ -1,10 +1,9 @@
-// backend/middleware/verification.middleware.js - COMPLETE VERIFICATION CHECK
-
+// backend/middleware/verification.middleware.js
 const User = require('../models/User.model');
 
 const verificationMiddleware = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.id || req.user._id);
 
     if (!user) {
       return res.status(404).json({
@@ -13,48 +12,30 @@ const verificationMiddleware = async (req, res, next) => {
       });
     }
 
-    // ✅ Check email verification
-    if (!user.isEmailVerified) {
+    // ✅ Check email verification - Use 'verified' field (not isEmailVerified)
+    if (!user.verified) {
       return res.status(403).json({
         success: false,
         message: 'Email verification required to create transactions',
-        requiredAction: 'verify_email',
-        redirectTo: '/verify-email',
+        requiresVerification: true,
+        verificationType: 'email',
         verificationStatus: {
           email: false,
-          phone: user.isPhoneVerified || false,
           kyc: user.isKYCVerified || false
         }
       });
     }
 
-    // ✅ Check phone verification (for transactions > $100)
-    const transactionAmount = req.body.amount ? parseFloat(req.body.amount) : 0;
-    
-    if (transactionAmount > 100 && !user.isPhoneVerified) {
+    // ✅ Check KYC verification - Use kycStatus.status field
+    if (!user.isKYCVerified || user.kycStatus?.status !== 'approved') {
       return res.status(403).json({
         success: false,
-        message: 'Phone verification required for transactions above $100',
-        requiredAction: 'verify_phone',
-        redirectTo: '/verify-phone',
+        message: 'KYC verification required before creating escrow',
+        requiresVerification: true,
+        verificationType: 'kyc',
+        currentKYCStatus: user.kycStatus?.status || 'unverified',
         verificationStatus: {
           email: true,
-          phone: false,
-          kyc: user.isKYCVerified || false
-        }
-      });
-    }
-
-    // ✅ Check KYC verification (for transactions > $1000)
-    if (transactionAmount > 1000 && !user.isKYCVerified) {
-      return res.status(403).json({
-        success: false,
-        message: 'KYC verification required for transactions above $1,000',
-        requiredAction: 'verify_kyc',
-        redirectTo: '/verify-kyc',
-        verificationStatus: {
-          email: true,
-          phone: true,
           kyc: false
         }
       });
@@ -62,8 +43,7 @@ const verificationMiddleware = async (req, res, next) => {
 
     // ✅ All verifications passed
     req.verificationStatus = {
-      email: user.isEmailVerified,
-      phone: user.isPhoneVerified,
+      email: user.verified,
       kyc: user.isKYCVerified
     };
 

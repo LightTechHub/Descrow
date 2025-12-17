@@ -30,19 +30,9 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
   const [feeBreakdown, setFeeBreakdown] = useState(null);
   const [filePreviews, setFilePreviews] = useState([]);
 
-  // Currency symbols mapping
   const currencySymbols = {
-    USD: '$',
-    NGN: '₦',
-    EUR: '€',
-    GBP: '£',
-    CAD: 'C$',
-    AUD: 'A$',
-    KES: 'KSh',
-    GHS: 'GH₵',
-    ZAR: 'R',
-    XOF: 'CFA',
-    XAF: 'FCFA'
+    USD: '$', NGN: '₦', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$',
+    KES: 'KSh', GHS: 'GH₵', ZAR: 'R', XOF: 'CFA', XAF: 'FCFA'
   };
 
   const currencies = [
@@ -59,19 +49,18 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
     { code: 'XAF', name: 'Central African CFA', symbol: 'FCFA' }
   ];
 
-  // Calculate fees when amount changes
   const amount = watch('amount');
   const currency = watch('currency');
 
   useEffect(() => {
-    const debounce = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (amount && parseFloat(amount) > 0) {
         fetchFeeBreakdown();
       } else {
         setFeeBreakdown(null);
       }
     }, 500);
-    return () => clearTimeout(debounce);
+    return () => clearTimeout(timer);
   }, [amount, currency]);
 
   const fetchFeeBreakdown = async () => {
@@ -79,7 +68,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       setFeeLoading(true);
       const response = await escrowService.calculateFees(amount, currency);
       if (response.success) {
-        setFeeBreakdown(response.data);
+        setFeeBreakdown(response.data.feeBreakdown);
       }
     } catch (err) {
       console.error('Failed to calculate fees:', err);
@@ -88,16 +77,14 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
     }
   };
 
-  // Handle file selection and preview
   const handleFilesChange = (e, onChange) => {
     const files = Array.from(e.target.files);
     onChange(files);
-    const previews = files.map(file => ({
+    setFilePreviews(files.map(file => ({
       name: file.name,
       url: URL.createObjectURL(file),
       type: file.type
-    }));
-    setFilePreviews(previews);
+    })));
   };
 
   const onSubmit = async (data) => {
@@ -118,34 +105,33 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       formData.append('category', data.category);
       formData.append('deliveryMethod', data.deliveryMethod);
       
-      if (data.attachments && data.attachments.length > 0) {
+      if (data.attachments?.length > 0) {
         data.attachments.forEach(file => formData.append('attachments', file));
       }
 
-      console.log('📤 Submitting escrow creation...');
       const response = await escrowService.createEscrow(formData);
 
       if (response.success) {
         toast.success('Escrow created successfully!');
-        onSuccess && onSuccess();
+        onSuccess?.();
         onClose();
       } else {
         toast.error(response.message || 'Failed to create escrow');
       }
     } catch (err) {
-      console.error('❌ Create escrow error:', err);
+      console.error('Create escrow error:', err);
       
-      // ✅ Handle verification errors from backend
       if (err.response?.status === 403) {
         const errorData = err.response?.data;
         
         if (errorData?.verificationType === 'email') {
-          toast.error('Please verify your email first. Check your inbox!', { duration: 6000 });
+          toast.error('Please verify your email first!', { duration: 6000 });
         } else if (errorData?.verificationType === 'kyc') {
-          toast.error('Please complete KYC verification in your profile.', { duration: 6000 });
-          setTimeout(() => {
-            window.location.href = '/profile?tab=kyc';
-          }, 2000);
+          toast.error('KYC verification required!', { duration: 6000 });
+          setTimeout(() => window.location.href = '/profile?tab=kyc', 2000);
+        } else if (errorData?.verificationType === 'bank_account') {
+          toast.error('Please add a bank account first!', { duration: 6000 });
+          setTimeout(() => window.location.href = '/profile?tab=bank', 2000);
         } else {
           toast.error(errorData?.message || 'Verification required');
         }
@@ -223,7 +209,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
               <div className="relative">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex gap-1 items-center pointer-events-none">
                   <span className="font-bold text-lg text-gray-500 dark:text-gray-300">
-                    {currencySymbols[currency] || '$'}
+                    {currencySymbols[currency]}
                   </span>
                   <span className="text-xs text-gray-400 dark:text-gray-500">
                     {currency}
@@ -256,9 +242,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
                 className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
               >
                 {currencies.map(curr => (
-                  <option key={curr.code} value={curr.code}>
-                    {curr.code}
-                  </option>
+                  <option key={curr.code} value={curr.code}>{curr.code}</option>
                 ))}
               </select>
             </div>
@@ -315,7 +299,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
                 pattern: {
                   value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
                   message: 'Invalid email format'
-                },
+                }
               })}
               placeholder="seller@example.com"
               className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white ${
@@ -385,10 +369,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
             {filePreviews.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {filePreviews.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300 flex items-center gap-2"
-                  >
+                  <div key={idx} className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300">
                     <span className="truncate max-w-[150px]">{file.name}</span>
                   </div>
                 ))}

@@ -64,7 +64,7 @@ exports.createEscrow = async (req, res) => {
       });
     }
 
-   // Get buyer - FETCH FRESH FROM DATABASE
+   // Get buyer with tier info
 const buyer = await User.findById(buyerId);
 
 if (!buyer) {
@@ -74,24 +74,17 @@ if (!buyer) {
   });
 }
 
-// ✅ EXACT SAME CHECK AS BANK ACCOUNT - Use kycStatus object
-if (!buyer.kycStatus || buyer.kycStatus.status !== 'approved') {
-  console.log('❌ BLOCKED: KYC not approved', {
-    hasKycStatus: !!buyer.kycStatus,
-    status: buyer.kycStatus?.status
-  });
-  
+// ✅ SAME CHECK AS BANK ACCOUNT - Check if user has bank account
+if (!buyer.hasBankAccount) {
   return res.status(403).json({
     success: false,
-    message: 'KYC verification required before creating escrow',
-    action: 'complete_kyc',
-    kycRequired: true,
-    currentStatus: buyer.kycStatus?.status || 'unverified'
+    message: 'Please add a bank account before creating escrow',
+    requiresVerification: true,
+    verificationType: 'bank_account'
   });
 }
 
-console.log('✅ PASSED: KYC approved, user can create escrow');
-  
+console.log('✅ User has bank account, can create escrow');
   
     // ✅ FIX 3: Check tier limits
     const canCreate = buyer.canCreateTransaction(parsedAmount, currency);

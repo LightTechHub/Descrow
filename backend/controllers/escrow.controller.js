@@ -64,8 +64,8 @@ exports.createEscrow = async (req, res) => {
       });
     }
 
-    // Get buyer with tier info - FETCH FRESH DATA
-let buyer = await User.findById(buyerId).select('+verified +isKYCVerified +kycStatus');
+   // Get buyer - FETCH FRESH FROM DATABASE
+const buyer = await User.findById(buyerId);
 
 if (!buyer) {
   return res.status(404).json({
@@ -74,45 +74,25 @@ if (!buyer) {
   });
 }
 
-// ✅ DETAILED LOGGING
-console.log('🔍 Creating Escrow - Fresh User Check:', {
-  userId: buyer._id,
-  email: buyer.email,
-  verified: buyer.verified,
-  isKYCVerified: buyer.isKYCVerified,
-  kycStatus: buyer.kycStatus?.status,
-  tier: buyer.tier
-});
-
-// ✅ EXPLICIT EMAIL CHECK
-if (!buyer.verified || buyer.verified === false) {
-  console.log('❌ BLOCKED: Email not verified');
-  return res.status(403).json({
-    success: false,
-    message: 'Email verification required to create transactions',
-    requiresVerification: true,
-    verificationType: 'email',
-    debugInfo: {
-      verified: buyer.verified,
-      type: typeof buyer.verified
-    }
+// ✅ EXACT SAME CHECK AS BANK ACCOUNT - Use kycStatus object
+if (!buyer.kycStatus || buyer.kycStatus.status !== 'approved') {
+  console.log('❌ BLOCKED: KYC not approved', {
+    hasKycStatus: !!buyer.kycStatus,
+    status: buyer.kycStatus?.status
   });
-}
-
-// ✅ EXPLICIT KYC CHECK
-if (!buyer.isKYCVerified || buyer.kycStatus?.status !== 'approved') {
-  console.log('❌ BLOCKED: KYC not verified');
+  
   return res.status(403).json({
     success: false,
     message: 'KYC verification required before creating escrow',
-    requiresVerification: true,
-    verificationType: 'kyc',
-    currentKYCStatus: buyer.kycStatus?.status || 'unverified'
+    action: 'complete_kyc',
+    kycRequired: true,
+    currentStatus: buyer.kycStatus?.status || 'unverified'
   });
 }
 
-console.log('✅ PASSED: User verified and can create escrow');
-
+console.log('✅ PASSED: KYC approved, user can create escrow');
+  
+  
     // ✅ FIX 3: Check tier limits
     const canCreate = buyer.canCreateTransaction(parsedAmount, currency);
     if (!canCreate.allowed) {

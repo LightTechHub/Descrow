@@ -31,7 +31,7 @@ const escrowSchema = new mongoose.Schema({
     enum: ['USD', 'EUR', 'GBP', 'NGN', 'KES', 'GHS', 'ZAR', 'CAD', 'AUD', 'XOF', 'XAF']
   },
 
-  // ✅ File Attachments Support
+  // File Attachments
   attachments: [{
     filename: String,
     originalName: String,
@@ -62,16 +62,16 @@ const escrowSchema = new mongoose.Schema({
     index: true
   },
 
-  // Tier tracking
+  // ✅ Tier tracking (UPDATED: added "free")
   buyerTier: {
     type: String,
-    enum: ['starter', 'growth', 'enterprise', 'api'],
+    enum: ['free', 'starter', 'growth', 'enterprise', 'api'],
     default: 'starter'
   },
-  
+
   sellerTier: {
     type: String,
-    enum: ['starter', 'growth', 'enterprise', 'api'],
+    enum: ['free', 'starter', 'growth', 'enterprise', 'api'],
     default: 'starter'
   },
 
@@ -79,14 +79,14 @@ const escrowSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      'pending',      // Created, waiting for seller acceptance
-      'accepted',     // Seller accepted, waiting for payment
-      'funded',       // Buyer paid, money in escrow
-      'delivered',    // Seller marked as delivered
-      'completed',    // Buyer confirmed delivery
-      'paid_out',     // Seller received payment
-      'cancelled',    // Cancelled by either party
-      'disputed'      // In dispute
+      'pending',
+      'accepted',
+      'funded',
+      'delivered',
+      'completed',
+      'paid_out',
+      'cancelled',
+      'disputed'
     ],
     default: 'pending',
     index: true
@@ -100,7 +100,7 @@ const escrowSchema = new mongoose.Schema({
     note: String
   }],
 
-  // Payment details with tier-based fees
+  // Payment details
   payment: {
     method: {
       type: String,
@@ -109,25 +109,21 @@ const escrowSchema = new mongoose.Schema({
     reference: String,
     transactionId: String,
     paymentId: String,
-    
-    // Amounts
+
     amount: mongoose.Schema.Types.Decimal128,
     buyerFee: mongoose.Schema.Types.Decimal128,
     sellerFee: mongoose.Schema.Types.Decimal128,
     platformFee: mongoose.Schema.Types.Decimal128,
     buyerPays: mongoose.Schema.Types.Decimal128,
     sellerReceives: mongoose.Schema.Types.Decimal128,
-    
-    // Fee percentages used (for record keeping)
+
     buyerFeePercentage: Number,
     sellerFeePercentage: Number,
-    
-    // Status tracking
+
     paidAt: Date,
     verifiedAt: Date,
     paidOutAt: Date,
-    
-    // Gateway response data
+
     gatewayResponse: mongoose.Schema.Types.Mixed
   },
 
@@ -153,26 +149,22 @@ const escrowSchema = new mongoose.Schema({
     }
   }],
 
-  // Delivery details with proof system
+  // Delivery
   delivery: {
     method: {
       type: String,
       enum: ['physical', 'digital', 'service'],
       default: 'physical'
     },
-    
-    // Delivery proof data
+
     proof: {
       method: {
         type: String,
         enum: ['courier', 'personal', 'other']
       },
-      
-      // Courier delivery
       courierName: String,
       trackingNumber: String,
-      
-      // Personal delivery
+
       vehicleType: String,
       plateNumber: String,
       driverName: String,
@@ -180,11 +172,8 @@ const escrowSchema = new mongoose.Schema({
       vehiclePhoto: String,
       gpsEnabled: Boolean,
       gpsTrackingId: String,
-      
-      // Other method
+
       methodDescription: String,
-      
-      // Common fields
       estimatedDelivery: Date,
       packagePhotos: [String],
       additionalNotes: String,
@@ -194,19 +183,19 @@ const escrowSchema = new mongoose.Schema({
         ref: 'User'
       }
     },
-    
+
     trackingNumber: String,
     deliveredAt: Date,
     confirmedAt: Date,
     autoReleaseAt: Date,
-    
+
     evidence: [{
       type: { type: String },
       url: String,
       uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       uploadedAt: { type: Date, default: Date.now }
     }],
-    
+
     notes: String
   },
 
@@ -227,7 +216,7 @@ const escrowSchema = new mongoose.Schema({
     resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' }
   },
 
-  // Payout tracking
+  // Payout
   payout: {
     accountId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -268,19 +257,11 @@ const escrowSchema = new mongoose.Schema({
     }
   },
 
-  // Chat unlock flag
   chatUnlocked: {
     type: Boolean,
     default: false
   },
 
-  // ✅ FIXED: Removed real isActive field to avoid conflict
-  // isActive: {
-  //   type: Boolean,
-  //   default: true
-  // },
-
-  // ✅ Visibility for public deals
   visibility: {
     type: String,
     enum: ['private', 'public'],
@@ -289,138 +270,126 @@ const escrowSchema = new mongoose.Schema({
 
 }, {
   timestamps: true,
-  toJSON: { 
+  toJSON: {
     virtuals: true,
-    transform: function(doc, ret) {
-      // Convert Decimal128 to numbers for JSON
+    transform: function (doc, ret) {
       if (ret.amount) ret.amount = parseFloat(ret.amount.toString());
+
       if (ret.payment) {
-        if (ret.payment.amount) ret.payment.amount = parseFloat(ret.payment.amount.toString());
-        if (ret.payment.buyerFee) ret.payment.buyerFee = parseFloat(ret.payment.buyerFee.toString());
-        if (ret.payment.sellerFee) ret.payment.sellerFee = parseFloat(ret.payment.sellerFee.toString());
-        if (ret.payment.platformFee) ret.payment.platformFee = parseFloat(ret.payment.platformFee.toString());
-        if (ret.payment.buyerPays) ret.payment.buyerPays = parseFloat(ret.payment.buyerPays.toString());
-        if (ret.payment.sellerReceives) ret.payment.sellerReceives = parseFloat(ret.payment.sellerReceives.toString());
+        ['amount', 'buyerFee', 'sellerFee', 'platformFee', 'buyerPays', 'sellerReceives']
+          .forEach(field => {
+            if (ret.payment[field]) {
+              ret.payment[field] = parseFloat(ret.payment[field].toString());
+            }
+          });
       }
-      if (ret.payout && ret.payout.amount) {
+
+      if (ret.payout?.amount) {
         ret.payout.amount = parseFloat(ret.payout.amount.toString());
       }
-      
-      // Convert attachment file sizes to readable format
+
       if (ret.attachments) {
-        ret.attachments = ret.attachments.map(attachment => ({
-          ...attachment,
-          sizeReadable: formatFileSize(attachment.size)
+        ret.attachments = ret.attachments.map(a => ({
+          ...a,
+          sizeReadable: formatFileSize(a.size)
         }));
       }
-      
+
       return ret;
     }
   },
   toObject: { virtuals: true }
 });
 
-// Helper function to format file sizes
+// Helper
 function formatFileSize(bytes) {
   if (!bytes) return '0 Bytes';
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 }
 
-// INDEXES
+// Indexes
 escrowSchema.index({ buyer: 1, status: 1 });
 escrowSchema.index({ seller: 1, status: 1 });
 escrowSchema.index({ createdAt: -1 });
 escrowSchema.index({ 'payment.reference': 1 }, { sparse: true });
 escrowSchema.index({ visibility: 1, status: 1 });
 
-// Generate unique Escrow ID
-escrowSchema.pre('save', function(next) {
+// Hooks
+escrowSchema.pre('save', function (next) {
   if (!this.escrowId) {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    this.escrowId = `ESC${timestamp}${random}`;
+    this.escrowId = `ESC${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
   }
   next();
 });
 
-// Prevent buyer = seller
-escrowSchema.pre('validate', function(next) {
+escrowSchema.pre('validate', function (next) {
   if (this.buyer && this.seller && this.buyer.equals(this.seller)) {
     return next(new Error('Buyer and Seller cannot be the same user'));
   }
   next();
 });
 
-// Track status changes in timeline
-escrowSchema.pre('save', function(next) {
+escrowSchema.pre('save', function (next) {
   if (this.isModified('status') && !this.isNew) {
-    this.timeline.push({
-      status: this.status,
-      timestamp: new Date()
-    });
+    this.timeline.push({ status: this.status, timestamp: new Date() });
   }
   next();
 });
 
-// ✅ FIXED: Virtuals - REMOVED conflicting isActive virtual
-escrowSchema.virtual('isCompleted').get(function() {
+// Virtuals
+escrowSchema.virtual('isCompleted').get(function () {
   return ['completed', 'paid_out'].includes(this.status);
 });
 
-// ✅ FIXED: Renamed to avoid conflict
-escrowSchema.virtual('isActiveDeal').get(function() {
+escrowSchema.virtual('isActiveDeal').get(function () {
   return !['cancelled', 'disputed', 'paid_out', 'completed'].includes(this.status);
 });
 
-escrowSchema.virtual('canBeFunded').get(function() {
-  return this.status === 'accepted' || this.status === 'pending';
+escrowSchema.virtual('canBeFunded').get(function () {
+  return ['pending', 'accepted'].includes(this.status);
 });
 
-escrowSchema.virtual('canBeDelivered').get(function() {
+escrowSchema.virtual('canBeDelivered').get(function () {
   return this.status === 'funded';
 });
 
-// ✅ Virtual for attachment count
-escrowSchema.virtual('attachmentsCount').get(function() {
-  return this.attachments ? this.attachments.length : 0;
+escrowSchema.virtual('attachmentsCount').get(function () {
+  return this.attachments?.length || 0;
 });
 
-// ✅ Method to add attachment
-escrowSchema.methods.addAttachment = function(fileData, uploadedBy) {
+// Methods
+escrowSchema.methods.addAttachment = function (fileData, uploadedBy) {
   this.attachments.push({
     filename: fileData.filename,
     originalName: fileData.originalname,
     url: fileData.path || fileData.location,
     mimetype: fileData.mimetype,
     size: fileData.size,
-    uploadedBy: uploadedBy,
+    uploadedBy,
     uploadedAt: new Date()
   });
   return this.save();
 };
 
-// ✅ Method to remove attachment
-escrowSchema.methods.removeAttachment = function(attachmentId) {
-  this.attachments = this.attachments.filter(att => att._id.toString() !== attachmentId);
+escrowSchema.methods.removeAttachment = function (attachmentId) {
+  this.attachments = this.attachments.filter(a => a._id.toString() !== attachmentId);
   return this.save();
 };
 
-// ✅ NEW: Method to check if user can access escrow
-escrowSchema.methods.canUserAccess = function(userId) {
-  return this.buyer.toString() === userId.toString() || 
+escrowSchema.methods.canUserAccess = function (userId) {
+  return this.buyer.toString() === userId.toString() ||
          this.seller.toString() === userId.toString();
 };
 
-// ✅ NEW: Method to update status with timeline
-escrowSchema.methods.updateStatus = function(newStatus, actorId, note = '') {
+escrowSchema.methods.updateStatus = function (newStatus, actorId, note = '') {
   this.status = newStatus;
   this.timeline.push({
     status: newStatus,
     actor: actorId,
-    note: note,
+    note,
     timestamp: new Date()
   });
   return this.save();

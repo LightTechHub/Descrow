@@ -9,6 +9,25 @@ const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
+const fs = require('fs'); // ✅ ADDED
+
+// ==================== CREATE UPLOAD DIRECTORIES ====================
+// ✅ NEW SECTION ADDED
+const uploadDirs = [
+  'uploads',
+  'uploads/avatars',
+  'uploads/documents',
+  'uploads/kyc',
+  'uploads/disputes'
+];
+
+uploadDirs.forEach(dir => {
+  const dirPath = path.join(__dirname, dir);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    console.log(`✅ Created directory: ${dir}`);
+  }
+});
 
 // ==================== IMPORT CRON JOBS ====================
 const { startSubscriptionCron } = require('./jobs/subscription.cron');

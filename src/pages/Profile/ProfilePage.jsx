@@ -11,8 +11,6 @@ import {
   Loader,
   AlertTriangle,
   Mail,
-  Bug,
-  RefreshCw,
   CheckCircle
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
@@ -20,8 +18,8 @@ import KYCTab from './KYCTab';
 import SecurityTab from './SecurityTab';
 import SettingsTab from './SettingsTab';
 import BankAccountTab from '../../components/Profile/BankAccountTab';
-import profileService from 'services/profileService';
-import { authService } from 'services/authService';
+import profileService from '../../services/profileService';  // ✅ FIXED PATH
+import { authService } from '../../services/authService';    // ✅ FIXED PATH
 import toast from 'react-hot-toast';
 
 const ProfilePage = () => {
@@ -31,11 +29,6 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
-  
-  // ✅ Debug state
-  const [debugInfo, setDebugInfo] = useState(null);
-  const [fixing, setFixing] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
   
   const hasFetched = useRef(false);
   const pollIntervalRef = useRef(null);
@@ -57,16 +50,10 @@ const ProfilePage = () => {
 
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         const profileData = profileResponse.value.data;
-        setUser(profileData);
         
-        // ✅ Update local user object to reflect verification status
-        const updatedUser = {
-          ...profileData,
-          verified: profileData.verified || profileData.user?.verified,
-          isKYCVerified: profileData.isKYCVerified || profileData.user?.isKYCVerified,
-          kycStatus: profileData.kycStatus || profileData.user?.kycStatus
-        };
-        setUser(updatedUser);
+        // ✅ Extract user data properly
+        const userData = profileData.user || profileData;
+        setUser(userData);
       }
 
       if (kycResponse.status === 'fulfilled' && kycResponse.value.success) {
@@ -74,14 +61,13 @@ const ProfilePage = () => {
         setKycStatus(kycData);
         
         // ✅ Stop polling if KYC is approved
-        if (kycData.status === 'approved' && kycData.isKYCVerified) {
+        if (kycData.isKYCVerified && (kycData.status === 'approved' || kycData.status === 'completed')) {
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
           }
         }
-      } else if (kycResponse.status === 'rejected') {
-        console.warn('KYC fetch failed:', kycResponse.reason);
+      } else {
         setKycStatus({ status: 'unverified', isKYCVerified: false });
       }
     } catch (error) {
@@ -92,13 +78,15 @@ const ProfilePage = () => {
     }
   }, [navigate]);
 
-  // ✅ Poll for KYC status updates when on KYC tab
+  // ✅ Poll for KYC status updates when on KYC tab and not verified
   useEffect(() => {
-    if (activeTab === 'kyc' && kycStatus?.status !== 'approved') {
-      // Poll every 10 seconds
+    const isVerified = kycStatus?.isKYCVerified && 
+                      (kycStatus?.status === 'approved' || kycStatus?.status === 'completed');
+    
+    if (activeTab === 'kyc' && !isVerified) {
       pollIntervalRef.current = setInterval(() => {
         console.log('🔄 Polling KYC status...');
-        fetchData(true); // Silent refresh
+        fetchData(true);
       }, 10000);
       
       return () => {
@@ -107,7 +95,7 @@ const ProfilePage = () => {
         }
       };
     }
-  }, [activeTab, kycStatus?.status, fetchData]);
+  }, [activeTab, kycStatus?.isKYCVerified, kycStatus?.status, fetchData]);
 
   useEffect(() => {
     if (!hasFetched.current) {
@@ -132,7 +120,7 @@ const ProfilePage = () => {
     
     if (tab === 'bank-accounts') {
       const isEmailVerified = user?.verified;
-      const isKYCApproved = kycStatus?.isKYCVerified && kycStatus?.status === 'approved';
+      const isKYCApproved = kycStatus?.isKYCVerified === true;
       
       if (!isEmailVerified) {
         toast.error('Please verify your email first');
@@ -148,72 +136,6 @@ const ProfilePage = () => {
   const handleProfileUpdate = () => {
     hasFetched.current = false;
     fetchData();
-  };
-
-  // ✅ Show debug info
-  const handleShowDebugInfo = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('https://descrow-backend-5ykg.onrender.com/api/users/debug/kyc-status', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const debugData = await response.json();
-      setDebugInfo(debugData.data || debugData);
-      console.log('🔍 Debug Info from API:', debugData);
-      setShowDebug(true);
-    } catch (error) {
-      console.error('Debug fetch error:', error);
-      toast.error('Failed to fetch debug info');
-    }
-  };
-
-  // ✅ Force fix KYC status
-  const handleForceFixKYC = async () => {
-    try {
-      setFixing(true);
-      
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Not authenticated. Please login again.');
-        return;
-      }
-      
-      console.log('🔄 Attempting to force sync KYC status...');
-      
-      const response = await fetch('https://descrow-backend-5ykg.onrender.com/api/users/kyc/force-sync', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const data = await response.json();
-      console.log('📥 Force sync result:', data);
-      
-      if (data.success) {
-        toast.success('✅ KYC status synced successfully!');
-        
-        // Refresh all data
-        hasFetched.current = false;
-        await fetchData();
-        
-        // Update debug info
-        await handleShowDebugInfo();
-      } else {
-        toast.error('❌ Failed to sync: ' + (data.message || 'Unknown error'));
-        console.error('Sync failed:', data);
-      }
-    } catch (error) {
-      console.error('❌ Force fix error:', error);
-      toast.error('Failed to sync KYC status. Check console for details.');
-    } finally {
-      setFixing(false);
-    }
   };
 
   if (loading) {
@@ -254,8 +176,9 @@ const ProfilePage = () => {
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
-  const isEmailVerified = user?.verified;
-  const isKYCApproved = kycStatus?.isKYCVerified && kycStatus?.status === 'approved';
+  // ✅ Simplified verification checks using isKYCVerified boolean
+  const isEmailVerified = user?.verified === true;
+  const isKYCApproved = kycStatus?.isKYCVerified === true;
   const canAccessEscrowFeatures = isEmailVerified && isKYCApproved;
 
   return (
@@ -290,23 +213,17 @@ const ProfilePage = () => {
                     Email Verified
                   </span>
                 )}
-                {isKYCApproved ? (
+                {isKYCApproved && (
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-xs font-medium rounded-full flex items-center gap-1">
                     <CheckCircle className="w-3 h-3" />
-                    KYC Verified
+                    Identity Verified
                   </span>
-                ) : (
-                  <button
-                    onClick={() => handleTabChange('kyc')}
-                    className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-medium rounded-full transition"
-                  >
-                    Verify Now
-                  </button>
                 )}
               </div>
             </div>
           </div>
 
+          {/* ✅ Only show warnings if NOT verified */}
           {!isEmailVerified && <EmailVerificationWarning />}
           {isEmailVerified && !isKYCApproved && (
             <KYCVerificationWarning 
@@ -314,64 +231,6 @@ const ProfilePage = () => {
               onVerifyClick={() => handleTabChange('kyc')}
             />
           )}
-
-          {/* ✅ Debug Tools Section */}
-          <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Bug className="w-5 h-5 text-yellow-700 dark:text-yellow-400" />
-                <h3 className="font-bold text-yellow-900 dark:text-yellow-200">
-                  🔧 Debug Tools
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowDebug(!showDebug)}
-                className="text-xs text-yellow-700 dark:text-yellow-400 hover:underline"
-              >
-                {showDebug ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            
-            {showDebug && (
-              <div className="space-y-2">
-                <button
-                  onClick={handleShowDebugInfo}
-                  className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm flex items-center justify-center gap-2"
-                >
-                  <Bug className="w-4 h-4" />
-                  Show Debug Info
-                </button>
-                
-                <button
-                  onClick={handleForceFixKYC}
-                  disabled={fixing}
-                  className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {fixing ? (
-                    <>
-                      <Loader className="w-4 h-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-4 h-4" />
-                      🔄 Force Fix KYC Status
-                    </>
-                  )}
-                </button>
-                
-                {debugInfo && (
-                  <div className="mt-3 p-3 bg-gray-900 text-green-400 text-xs rounded-lg overflow-auto max-h-60 font-mono">
-                    <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-                  </div>
-                )}
-                
-                <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
-                  💡 Click "Show Debug Info" to see current verification status, then "Force Fix" if KYC shows as unverified but you've completed DIDIT verification.
-                </p>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -412,7 +271,7 @@ const EmailVerificationWarning = () => (
           Verify Your Email Address
         </p>
         <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-          Check your inbox for the verification email. Email verification is required for KYC.
+          Check your inbox for the verification email.
         </p>
       </div>
     </div>
@@ -420,15 +279,15 @@ const EmailVerificationWarning = () => (
 );
 
 const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
-  let message = 'You need to verify your identity to create escrows and add bank accounts for payouts.';
-  let buttonText = 'Verify Now';
+  let message = 'Complete identity verification to unlock all features.';
+  let buttonText = 'Start Verification';
   
   if (kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress') {
-    message = 'Your KYC documents are under review. This usually takes 24-48 hours.';
+    message = 'Your identity verification is being reviewed. This usually takes 24-48 hours.';
     buttonText = null;
   } else if (kycStatus?.status === 'rejected') {
-    message = `Your KYC was rejected: ${kycStatus.rejectionReason || 'Please resubmit with correct information.'}`;
-    buttonText = 'Resubmit KYC';
+    message = `Verification was rejected: ${kycStatus.rejectionReason || 'Please try again with correct information.'}`;
+    buttonText = 'Try Again';
   }
   
   return (
@@ -437,7 +296,7 @@ const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
         <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
         <div className="flex-1">
           <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-            Complete KYC Verification
+            Identity Verification Required
           </p>
           <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
             {message}
@@ -474,7 +333,7 @@ const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApprov
           disabledReason = 'Verify email first';
         } else if (!isKYCApproved) {
           isDisabled = true;
-          disabledReason = 'Complete KYC first';
+          disabledReason = 'Complete identity verification first';
         }
       }
 

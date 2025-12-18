@@ -20,8 +20,8 @@ import KYCTab from './KYCTab';
 import SecurityTab from './SecurityTab';
 import SettingsTab from './SettingsTab';
 import BankAccountTab from '../../components/Profile/BankAccountTab';
-import profileService from 'services/profileService';
-import { authService } from 'services/authService';
+import profileService from '../../services/profileService';  // ✅ FIXED
+import { authService } from '../../services/authService';    // ✅ FIXED
 import toast from 'react-hot-toast';
 
 const ProfilePage = () => {

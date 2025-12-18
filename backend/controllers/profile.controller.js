@@ -1,16 +1,14 @@
+// backend/controllers/profile.controller.js
 const User = require('../models/User.model');
-const multer = require('multer');
-const path = require('path');
+const { deleteOldAvatar } = require('../middleware/upload.middleware');
 
 /**
  * Get user profile
  */
 exports.getProfile = async (req, res) => {
   try {
-    // ✅ FIXED: Remove populate for kycVerification since it doesn't exist
-    const user = await User.findById(req.user.id)
-      .select('-password -twoFactorSecret -apiAccess.apiSecret');
-
+    const user = await User.findById(req.user._id).select('-password -twoFactorSecret -apiAccess.apiSecret');
+    
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -18,10 +16,9 @@ exports.getProfile = async (req, res) => {
       });
     }
 
-    // ✅ Ensure kycStatus has proper structure
+    // Ensure kycStatus has proper structure
     const userData = user.toObject ? user.toObject() : user;
     
-    // Add virtual fields for compatibility
     const profile = {
       ...userData,
       kycStatus: userData.kycStatus || {
@@ -37,7 +34,6 @@ exports.getProfile = async (req, res) => {
       success: true,
       data: profile
     });
-
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({
@@ -48,7 +44,7 @@ exports.getProfile = async (req, res) => {
 };
 
 /**
- * Update profile
+ * Update user profile
  */
 exports.updateProfile = async (req, res) => {
   try {
@@ -63,7 +59,7 @@ exports.updateProfile = async (req, res) => {
     if (businessInfo) updates.businessInfo = businessInfo;
 
     const user = await User.findByIdAndUpdate(
-      req.user.id,
+      req.user._id,
       { $set: updates },
       { new: true, runValidators: true }
     ).select('-password -twoFactorSecret -apiAccess.apiSecret');
@@ -84,43 +80,10 @@ exports.updateProfile = async (req, res) => {
 };
 
 /**
- * Upload profile picture
+ * Upload user avatar
  */
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/avatars/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-    cb(null, `avatar-${req.user.id}-${uniqueSuffix}${path.extname(file.originalname)}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (extname && mimetype) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
-    }
-  }
-}).single('avatar');
-
-exports.uploadAvatar = (req, res) => {
-  upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message
-      });
-    }
-
+exports.uploadAvatar = async (req, res) => {
+  try {
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -128,46 +91,57 @@ exports.uploadAvatar = (req, res) => {
       });
     }
 
-    try {
-      const avatarUrl = `/uploads/avatars/${req.file.filename}`;
-
-      const user = await User.findByIdAndUpdate(
-        req.user.id,
-        { profilePicture: avatarUrl },
-        { new: true }
-      ).select('-password -twoFactorSecret -apiAccess.apiSecret');
-
-      res.json({
-        success: true,
-        message: 'Avatar uploaded successfully',
-        data: {
-          avatarUrl,
-          user
-        }
-      });
-
-    } catch (error) {
-      console.error('Upload avatar error:', error);
-      res.status(500).json({
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        message: 'Failed to upload avatar'
+        message: 'User not found'
       });
     }
-  });
+
+    // Delete old avatar if exists
+    if (user.profilePicture) {
+      deleteOldAvatar(user.profilePicture);
+    }
+
+    // Save new avatar path
+    user.profilePicture = req.avatarUrl || `/${req.file.path.replace(/\\/g, '/')}`;
+    await user.save();
+
+    console.log('✅ Avatar uploaded successfully for user:', user._id);
+
+    res.json({
+      success: true,
+      message: 'Avatar uploaded successfully',
+      data: {
+        avatarUrl: user.profilePicture,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          profilePicture: user.profilePicture
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Upload avatar error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload avatar',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 };
 
 /**
- * Submit KYC verification - UPDATED for embedded kycStatus
+ * Submit KYC verification
  */
 exports.submitKYC = async (req, res) => {
   try {
-    const {
-      personalInfo,
-      businessInfo,
-      tier
-    } = req.body;
+    const { personalInfo, businessInfo, tier } = req.body;
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
     
     if (!user) {
       return res.status(404).json({
@@ -224,12 +198,11 @@ exports.submitKYC = async (req, res) => {
 };
 
 /**
- * Get KYC status - UPDATED for embedded kycStatus
+ * Get KYC status
  */
 exports.getKYCStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id)
-      .select('kycStatus isKYCVerified');
+    const user = await User.findById(req.user._id).select('kycStatus isKYCVerified');
 
     if (!user) {
       return res.status(404).json({
@@ -238,7 +211,6 @@ exports.getKYCStatus = async (req, res) => {
       });
     }
 
-    // Return embedded kycStatus
     res.json({
       success: true,
       data: {
@@ -264,7 +236,7 @@ exports.getKYCStatus = async (req, res) => {
 };
 
 /**
- * Upload KYC documents - NEW METHOD for embedded kycStatus
+ * Upload KYC documents - MERGED from current file
  */
 exports.uploadKYCDocuments = async (req, res) => {
   try {
@@ -277,7 +249,7 @@ exports.uploadKYCDocuments = async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
     
     if (!user) {
       return res.status(404).json({
@@ -361,7 +333,14 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user.id).select('+password');
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
     // Check current password
     const isMatch = await user.comparePassword(currentPassword);
@@ -404,7 +383,14 @@ exports.deleteAccount = async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user.id).select('+password');
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
     // Verify password
     const isMatch = await user.comparePassword(password);
@@ -414,19 +400,6 @@ exports.deleteAccount = async (req, res) => {
         message: 'Incorrect password'
       });
     }
-
-    // Check for active escrows (you'll need to import Escrow model)
-    // const activeEscrows = await Escrow.countDocuments({
-    //   $or: [{ buyer: req.user.id }, { seller: req.user.id }],
-    //   status: { $nin: ['completed', 'paid_out', 'cancelled'] }
-    // });
-
-    // if (activeEscrows > 0) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: `Cannot delete account with ${activeEscrows} active transaction(s)`
-    //   });
-    // }
 
     // Soft delete (mark as deleted instead of removing)
     user.status = 'deleted';
@@ -447,3 +420,5 @@ exports.deleteAccount = async (req, res) => {
     });
   }
 };
+
+module.exports = exports;

@@ -464,7 +464,8 @@ function mapDiditStatus(status, verified, failureReason) {
   let isKYCVerified = false;
   let logMessage = '';
 
-  if (status === 'completed' && verified) {
+  // ✅ Handle both 'completed' and 'approved' as valid approved states
+  if ((status === 'completed' || status === 'approved') && verified) {
     kycStatus = 'approved';
     isKYCVerified = true;
     logMessage = '✅ KYC approved';

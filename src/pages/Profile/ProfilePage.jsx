@@ -20,8 +20,8 @@ import KYCTab from './KYCTab';
 import SecurityTab from './SecurityTab';
 import SettingsTab from './SettingsTab';
 import BankAccountTab from '../../components/Profile/BankAccountTab';
-import profileService from '../../services/profileService';
-import { authService } from '../../services/authService';
+import profileService from 'services/profileService';
+import { authService } from 'services/authService';
 import toast from 'react-hot-toast';
 
 const ProfilePage = () => {
@@ -32,7 +32,7 @@ const ProfilePage = () => {
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
   
-  // Debug state
+  // ✅ Debug state
   const [debugInfo, setDebugInfo] = useState(null);
   const [fixing, setFixing] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -58,20 +58,30 @@ const ProfilePage = () => {
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         const profileData = profileResponse.value.data;
         setUser(profileData);
+        
+        // ✅ Update local user object to reflect verification status
+        const updatedUser = {
+          ...profileData,
+          verified: profileData.verified || profileData.user?.verified,
+          isKYCVerified: profileData.isKYCVerified || profileData.user?.isKYCVerified,
+          kycStatus: profileData.kycStatus || profileData.user?.kycStatus
+        };
+        setUser(updatedUser);
       }
 
       if (kycResponse.status === 'fulfilled' && kycResponse.value.success) {
         const kycData = kycResponse.value.data;
         setKycStatus(kycData);
         
-        // Stop polling if KYC is approved
+        // ✅ Stop polling if KYC is approved
         if (kycData.status === 'approved' && kycData.isKYCVerified) {
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
           }
         }
-      } else {
+      } else if (kycResponse.status === 'rejected') {
+        console.warn('KYC fetch failed:', kycResponse.reason);
         setKycStatus({ status: 'unverified', isKYCVerified: false });
       }
     } catch (error) {
@@ -82,12 +92,13 @@ const ProfilePage = () => {
     }
   }, [navigate]);
 
-  // Poll for KYC status updates when on KYC tab
+  // ✅ Poll for KYC status updates when on KYC tab
   useEffect(() => {
     if (activeTab === 'kyc' && kycStatus?.status !== 'approved') {
+      // Poll every 10 seconds
       pollIntervalRef.current = setInterval(() => {
         console.log('🔄 Polling KYC status...');
-        fetchData(true);
+        fetchData(true); // Silent refresh
       }, 10000);
       
       return () => {
@@ -139,6 +150,7 @@ const ProfilePage = () => {
     fetchData();
   };
 
+  // ✅ Show debug info
   const handleShowDebugInfo = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -159,6 +171,7 @@ const ProfilePage = () => {
     }
   };
 
+  // ✅ Force fix KYC status
   const handleForceFixKYC = async () => {
     try {
       setFixing(true);
@@ -184,15 +197,20 @@ const ProfilePage = () => {
       
       if (data.success) {
         toast.success('✅ KYC status synced successfully!');
+        
+        // Refresh all data
         hasFetched.current = false;
         await fetchData();
+        
+        // Update debug info
         await handleShowDebugInfo();
       } else {
         toast.error('❌ Failed to sync: ' + (data.message || 'Unknown error'));
+        console.error('Sync failed:', data);
       }
     } catch (error) {
       console.error('❌ Force fix error:', error);
-      toast.error('Failed to sync KYC status');
+      toast.error('Failed to sync KYC status. Check console for details.');
     } finally {
       setFixing(false);
     }
@@ -214,6 +232,9 @@ const ProfilePage = () => {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             Profile Not Found
           </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Unable to load user profile
+          </p>
           <button
             onClick={() => navigate('/dashboard')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg"
@@ -286,45 +307,15 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {!isEmailVerified && (
-            <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Mail className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                    Verify Your Email Address
-                  </p>
-                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                    Check your inbox for the verification email.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
+          {!isEmailVerified && <EmailVerificationWarning />}
           {isEmailVerified && !isKYCApproved && (
-            <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                    Complete KYC Verification
-                  </p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                    Verify your identity to create escrows and add bank accounts.
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleTabChange('kyc')}
-                  className="px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition whitespace-nowrap"
-                >
-                  Verify Now
-                </button>
-              </div>
-            </div>
+            <KYCVerificationWarning 
+              kycStatus={kycStatus} 
+              onVerifyClick={() => handleTabChange('kyc')}
+            />
           )}
 
-          {/* Debug Tools */}
+          {/* ✅ Debug Tools Section */}
           <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -354,7 +345,7 @@ const ProfilePage = () => {
                 <button
                   onClick={handleForceFixKYC}
                   disabled={fixing}
-                  className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {fixing ? (
                     <>
@@ -364,7 +355,7 @@ const ProfilePage = () => {
                   ) : (
                     <>
                       <RefreshCw className="w-4 h-4" />
-                      Force Fix KYC
+                      🔄 Force Fix KYC Status
                     </>
                   )}
                 </button>
@@ -374,6 +365,10 @@ const ProfilePage = () => {
                     <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
                   </div>
                 )}
+                
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
+                  💡 Click "Show Debug Info" to see current verification status, then "Force Fix" if KYC shows as unverified but you've completed DIDIT verification.
+                </p>
               </div>
             )}
           </div>
@@ -383,48 +378,160 @@ const ProfilePage = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-2">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                
-                let isDisabled = false;
-                if (tab.id === 'kyc' && !isEmailVerified) isDisabled = true;
-                if (tab.id === 'bank-accounts' && (!isEmailVerified || !isKYCApproved)) isDisabled = true;
-
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => !isDisabled && handleTabChange(tab.id)}
-                    disabled={isDisabled}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-left transition ${
-                      isActive
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                        : isDisabled
-                        ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 flex-shrink-0" />
-                    <span className="flex-1">{tab.label}</span>
-                    {isDisabled && <span className="text-xs">🔒</span>}
-                  </button>
-                );
-              })}
-            </div>
+            <TabSidebar 
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              isEmailVerified={isEmailVerified}
+              isKYCApproved={isKYCApproved}
+            />
+            {canAccessEscrowFeatures && <PayoutInfo />}
           </div>
 
           <div className="lg:col-span-3">
-            {activeTab === 'profile' && <ProfileTab user={user} onUpdate={handleProfileUpdate} />}
-            {activeTab === 'kyc' && <KYCTab user={user} onUpdate={handleProfileUpdate} />}
-            {activeTab === 'bank-accounts' && <BankAccountTab user={user} onUpdate={handleProfileUpdate} kycVerified={canAccessEscrowFeatures} />}
-            {activeTab === 'security' && <SecurityTab user={user} onUpdate={handleProfileUpdate} />}
-            {activeTab === 'settings' && <SettingsTab user={user} onUpdate={handleProfileUpdate} />}
+            <TabContent 
+              activeTab={activeTab}
+              user={user}
+              kycStatus={kycStatus}
+              onUpdate={handleProfileUpdate}
+              kycVerified={canAccessEscrowFeatures}
+            />
           </div>
         </div>
       </div>
     </div>
   );
+};
+
+const EmailVerificationWarning = () => (
+  <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+    <div className="flex items-center gap-3">
+      <Mail className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+      <div className="flex-1">
+        <p className="text-sm font-medium text-red-800 dark:text-red-200">
+          Verify Your Email Address
+        </p>
+        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+          Check your inbox for the verification email. Email verification is required for KYC.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
+  let message = 'You need to verify your identity to create escrows and add bank accounts for payouts.';
+  let buttonText = 'Verify Now';
+  
+  if (kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress') {
+    message = 'Your KYC documents are under review. This usually takes 24-48 hours.';
+    buttonText = null;
+  } else if (kycStatus?.status === 'rejected') {
+    message = `Your KYC was rejected: ${kycStatus.rejectionReason || 'Please resubmit with correct information.'}`;
+    buttonText = 'Resubmit KYC';
+  }
+  
+  return (
+    <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+      <div className="flex items-center gap-3">
+        <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+            Complete KYC Verification
+          </p>
+          <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+            {message}
+          </p>
+        </div>
+        {buttonText && (
+          <button
+            onClick={onVerifyClick}
+            className="px-4 py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition whitespace-nowrap"
+          >
+            {buttonText}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApproved }) => (
+  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-2">
+    {tabs.map((tab) => {
+      const Icon = tab.icon;
+      const isActive = activeTab === tab.id;
+      
+      let isDisabled = false;
+      let disabledReason = '';
+      
+      if (tab.id === 'kyc' && !isEmailVerified) {
+        isDisabled = true;
+        disabledReason = 'Verify email first';
+      } else if (tab.id === 'bank-accounts') {
+        if (!isEmailVerified) {
+          isDisabled = true;
+          disabledReason = 'Verify email first';
+        } else if (!isKYCApproved) {
+          isDisabled = true;
+          disabledReason = 'Complete KYC first';
+        }
+      }
+
+      return (
+        <button
+          key={tab.id}
+          onClick={() => !isDisabled && onTabChange(tab.id)}
+          disabled={isDisabled}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-left transition ${
+            isActive
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : isDisabled
+              ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+          }`}
+          title={isDisabled ? disabledReason : ''}
+        >
+          <Icon className="w-5 h-5 flex-shrink-0" />
+          <span className="flex-1">{tab.label}</span>
+          {isDisabled && <span className="text-xs text-gray-400">🔒</span>}
+        </button>
+      );
+    })}
+  </div>
+);
+
+const PayoutInfo = () => (
+  <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+    <h4 className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">
+      💰 Automatic Payouts
+    </h4>
+    <div className="text-xs text-blue-800 dark:text-blue-300 space-y-1">
+      <p><strong>NGN:</strong> Paystack → Bank Transfer</p>
+      <p><strong>USD/Foreign:</strong> Flutterwave → Bank/Crypto</p>
+      <p><strong>Crypto:</strong> NowPayments → Wallet</p>
+    </div>
+    <p className="text-xs text-blue-700 dark:text-blue-400 mt-2">
+      Funds auto-transfer within 24h of escrow completion
+    </p>
+  </div>
+);
+
+const TabContent = ({ activeTab, user, kycStatus, onUpdate, kycVerified }) => {
+  switch (activeTab) {
+    case 'profile':
+      return <ProfileTab user={user} onUpdate={onUpdate} />;
+    case 'kyc':
+      return <KYCTab user={user} onUpdate={onUpdate} />;
+    case 'bank-accounts':
+      return <BankAccountTab user={user} onUpdate={onUpdate} kycVerified={kycVerified} />;
+    case 'security':
+      return <SecurityTab user={user} onUpdate={onUpdate} />;
+    case 'settings':
+      return <SettingsTab user={user} onUpdate={onUpdate} />;
+    default:
+      return <ProfileTab user={user} onUpdate={onUpdate} />;
+  }
 };
 
 export default ProfilePage;

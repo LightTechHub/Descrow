@@ -3,9 +3,7 @@ const User = require('../models/User.model');
 
 const verificationMiddleware = async (req, res, next) => {
   try {
-    // ✅ FIX: Standardize to always use _id
-    const userId = req.user._id || req.user.id;
-    const user = await User.findById(userId);
+    const user = await User.findById(req.user.id || req.user._id);
 
     if (!user) {
       return res.status(404).json({
@@ -14,7 +12,7 @@ const verificationMiddleware = async (req, res, next) => {
       });
     }
 
-    // ✅ Check email verification
+    // ✅ Check email verification - Use 'verified' field (not isEmailVerified)
     if (!user.verified) {
       return res.status(403).json({
         success: false,
@@ -28,7 +26,7 @@ const verificationMiddleware = async (req, res, next) => {
       });
     }
 
-    // ✅ Check KYC verification
+    // ✅ Check KYC verification - Use kycStatus.status field
     if (!user.isKYCVerified || user.kycStatus?.status !== 'approved') {
       return res.status(403).json({
         success: false,

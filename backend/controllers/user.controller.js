@@ -498,7 +498,8 @@ exports.checkKYCStatus = async (req, res) => {
  */
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    // ✅ FIX: Use req.user._id instead of req.user.id
+    const user = await User.findById(req.user._id).select('-password');
     
     if (!user) {
       return res.status(404).json({
@@ -531,15 +532,15 @@ exports.getProfile = async (req, res) => {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          verified: user.verified, // ✅ Make sure this is included
-          isKYCVerified: user.isKYCVerified, // ✅ Make sure this is included
-          kycStatus: user.kycStatus?.status || 'unverified', // ✅ Make sure this is included
+          verified: user.verified,
+          isKYCVerified: user.isKYCVerified,
+          kycStatus: user.kycStatus?.status || 'unverified',
           tier: user.tier,
           role: user.role,
           profilePicture: user.profilePicture,
           phone: user.phone
         },
-        tierLimits // ✅ Tier limits included
+        tierLimits
       }
     });
   } catch (error) {

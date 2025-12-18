@@ -11,15 +11,16 @@ import {
   Loader,
   AlertTriangle,
   Mail,
-  CheckCircle
+  CheckCircle,
+  Camera
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
 import KYCTab from './KYCTab';
 import SecurityTab from './SecurityTab';
 import SettingsTab from './SettingsTab';
 import BankAccountTab from '../../components/Profile/BankAccountTab';
-import profileService from '../../services/profileService';  // ✅ FIXED PATH
-import { authService } from '../../services/authService';    // ✅ FIXED PATH
+import profileService from '../../services/profileService';
+import { authService } from '../../services/authService';
 import toast from 'react-hot-toast';
 
 const ProfilePage = () => {
@@ -29,9 +30,11 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState({ status: 'unverified', isKYCVerified: false });
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   
   const hasFetched = useRef(false);
   const pollIntervalRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const fetchData = useCallback(async (silent = false) => {
     try {
@@ -50,9 +53,19 @@ const ProfilePage = () => {
 
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         const profileData = profileResponse.value.data;
-        
-        // ✅ Extract user data properly
         const userData = profileData.user || profileData;
+        
+        // ✅ Ensure kycStatus structure is present
+        if (!userData.kycStatus) {
+          userData.kycStatus = {
+            status: 'unverified',
+            tier: 'basic',
+            documents: [],
+            personalInfo: {},
+            businessInfo: {}
+          };
+        }
+        
         setUser(userData);
       }
 
@@ -61,14 +74,23 @@ const ProfilePage = () => {
         setKycStatus(kycData);
         
         // ✅ Stop polling if KYC is approved
-        if (kycData.isKYCVerified && (kycData.status === 'approved' || kycData.status === 'completed')) {
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
+        const isVerified = kycData.isKYCVerified && 
+                          (kycData.status === 'approved' || kycData.status === 'completed');
+        
+        if (isVerified && pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+          console.log('✅ KYC verified - stopped polling');
         }
       } else {
-        setKycStatus({ status: 'unverified', isKYCVerified: false });
+        setKycStatus({ 
+          status: 'unverified', 
+          tier: 'basic',
+          isKYCVerified: false,
+          documents: [],
+          personalInfo: {},
+          businessInfo: {}
+        });
       }
     } catch (error) {
       console.error('Profile fetch error:', error);
@@ -87,7 +109,7 @@ const ProfilePage = () => {
       pollIntervalRef.current = setInterval(() => {
         console.log('🔄 Polling KYC status...');
         fetchData(true);
-      }, 10000);
+      }, 10000); // Poll every 10 seconds
       
       return () => {
         if (pollIntervalRef.current) {
@@ -138,6 +160,52 @@ const ProfilePage = () => {
     fetchData();
   };
 
+  // ✅ NEW: Handle avatar upload
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingAvatar(true);
+      const response = await profileService.uploadAvatar(file);
+
+      if (response.success) {
+        toast.success('Profile picture updated successfully');
+        
+        // ✅ Update user state with new avatar
+        setUser(prev => ({
+          ...prev,
+          profilePicture: response.data.profilePicture || response.data.avatarUrl
+        }));
+      }
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      toast.error(error.message || 'Failed to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
@@ -159,7 +227,7 @@ const ProfilePage = () => {
           </p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
             Back to Dashboard
           </button>
@@ -176,7 +244,6 @@ const ProfilePage = () => {
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
-  // ✅ Simplified verification checks using isKYCVerified boolean
   const isEmailVerified = user?.verified === true;
   const isKYCApproved = kycStatus?.isKYCVerified === true;
   const canAccessEscrowFeatures = isEmailVerified && isKYCApproved;
@@ -194,8 +261,40 @@ const ProfilePage = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg">
-              {user.name?.charAt(0).toUpperCase() || 'U'}
+            {/* ✅ UPDATED: Avatar with upload functionality */}
+            <div className="relative group">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                className="hidden"
+              />
+              
+              {user.profilePicture ? (
+                <img
+                  src={user.profilePicture}
+                  alt={user.name}
+                  className="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-lg"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg">
+                  {user.name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+              )}
+              
+              {/* Upload overlay */}
+              <button
+                onClick={handleAvatarClick}
+                disabled={uploadingAvatar}
+                className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                {uploadingAvatar ? (
+                  <Loader className="w-6 h-6 text-white animate-spin" />
+                ) : (
+                  <Camera className="w-6 h-6 text-white" />
+                )}
+              </button>
             </div>
 
             <div>
@@ -223,7 +322,7 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* ✅ Only show warnings if NOT verified */}
+          {/* Verification warnings */}
           {!isEmailVerified && <EmailVerificationWarning />}
           {isEmailVerified && !isKYCApproved && (
             <KYCVerificationWarning 
@@ -381,7 +480,7 @@ const TabContent = ({ activeTab, user, kycStatus, onUpdate, kycVerified }) => {
     case 'profile':
       return <ProfileTab user={user} onUpdate={onUpdate} />;
     case 'kyc':
-      return <KYCTab user={user} onUpdate={onUpdate} />;
+      return <KYCTab user={user} kycStatus={kycStatus} onUpdate={onUpdate} />;
     case 'bank-accounts':
       return <BankAccountTab user={user} onUpdate={onUpdate} kycVerified={kycVerified} />;
     case 'security':

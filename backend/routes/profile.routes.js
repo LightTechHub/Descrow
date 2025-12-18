@@ -1,7 +1,9 @@
+// backend/routes/profile.routes.js
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const profileController = require('../controllers/profile.controller');
+const { uploadAvatar } = require('../middleware/upload.middleware'); // ✅ ADD THIS
 
 // All routes require authentication
 router.use(authenticate);
@@ -9,7 +11,7 @@ router.use(authenticate);
 // Profile routes
 router.get('/', profileController.getProfile);
 router.put('/', profileController.updateProfile);
-router.post('/avatar', profileController.uploadAvatar);
+router.post('/avatar', uploadAvatar, profileController.uploadAvatar); // ✅ UPDATED - Added uploadAvatar middleware
 
 // KYC routes
 router.post('/kyc', profileController.submitKYC);

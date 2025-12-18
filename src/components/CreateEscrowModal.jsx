@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader, AlertCircle, Shield } from 'lucide-react';
+import { X, Loader, AlertCircle, Shield, CheckCircle } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import escrowService from '../services/escrowService';
 import toast from 'react-hot-toast';
 
 const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
+  const navigate = useNavigate();
   const { 
     register, 
     handleSubmit, 
@@ -29,6 +31,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
   const [feeLoading, setFeeLoading] = useState(false);
   const [feeBreakdown, setFeeBreakdown] = useState(null);
   const [filePreviews, setFilePreviews] = useState([]);
+  const [createdEscrowId, setCreatedEscrowId] = useState(null);
 
   const currencySymbols = {
     USD: '$', NGN: '₦', EUR: '€', GBP: '£', CAD: 'C$', AUD: 'A$',
@@ -52,6 +55,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
   const amount = watch('amount');
   const currency = watch('currency');
 
+  // ✅ Auto-calculate fees when amount changes
   useEffect(() => {
     const timer = setTimeout(() => {
       if (amount && parseFloat(amount) > 0) {
@@ -79,6 +83,14 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
 
   const handleFilesChange = (e, onChange) => {
     const files = Array.from(e.target.files);
+    
+    // ✅ Validate file size (5MB max per file)
+    const invalidFiles = files.filter(file => file.size > 5 * 1024 * 1024);
+    if (invalidFiles.length > 0) {
+      toast.error('Some files exceed 5MB limit');
+      return;
+    }
+
     onChange(files);
     setFilePreviews(files.map(file => ({
       name: file.name,
@@ -88,8 +100,12 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
   };
 
   const onSubmit = async (data) => {
-    if (data.sellerEmail === user?.email) {
-      setError('sellerEmail', { type: 'manual', message: 'Cannot create escrow with yourself' });
+    // ✅ Validate seller email
+    if (data.sellerEmail.toLowerCase() === user?.email?.toLowerCase()) {
+      setError('sellerEmail', { 
+        type: 'manual', 
+        message: 'Cannot create escrow with yourself' 
+      });
       return;
     }
 
@@ -97,11 +113,11 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       setLoading(true);
 
       const formData = new FormData();
-      formData.append('title', data.title);
-      formData.append('description', data.description);
+      formData.append('title', data.title.trim());
+      formData.append('description', data.description.trim());
       formData.append('amount', parseFloat(data.amount));
       formData.append('currency', data.currency);
-      formData.append('sellerEmail', data.sellerEmail);
+      formData.append('sellerEmail', data.sellerEmail.toLowerCase().trim());
       formData.append('category', data.category);
       formData.append('deliveryMethod', data.deliveryMethod);
       
@@ -109,35 +125,92 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
         data.attachments.forEach(file => formData.append('attachments', file));
       }
 
+      console.log('📤 Creating escrow...');
       const response = await escrowService.createEscrow(formData);
 
       if (response.success) {
-        toast.success('Escrow created successfully!');
+        const escrowId = response.data.escrow?.escrowId || response.data.escrowId;
+        
+        console.log('✅ Escrow created:', escrowId);
+        
+        // ✅ Show success message
+        toast.success(
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5" />
+            <span>Escrow created! Redirecting to payment...</span>
+          </div>,
+          { duration: 3000 }
+        );
+
+        // ✅ Store escrow ID
+        setCreatedEscrowId(escrowId);
+
+        // ✅ Call success callback
         onSuccess?.();
-        onClose();
+
+        // ✅ Wait 1 second then redirect to escrow detail page
+        setTimeout(() => {
+          onClose();
+          navigate(`/escrow/${escrowId}`);
+        }, 1000);
+
       } else {
         toast.error(response.message || 'Failed to create escrow');
       }
+
     } catch (err) {
-      console.error('Create escrow error:', err);
+      console.error('❌ Create escrow error:', err);
       
-      if (err.response?.status === 403) {
-        const errorData = err.response?.data;
-        
+      const status = err.response?.status;
+      const errorData = err.response?.data;
+
+      // ✅ Handle specific error types
+      if (status === 403) {
         if (errorData?.verificationType === 'email') {
-          toast.error('Please verify your email first!', { duration: 6000 });
+          toast.error(
+            <div>
+              <p className="font-semibold">Email Verification Required</p>
+              <p className="text-sm">Please verify your email to create escrows</p>
+            </div>,
+            { duration: 5000 }
+          );
         } else if (errorData?.verificationType === 'kyc') {
-          toast.error('KYC verification required!', { duration: 6000 });
-          setTimeout(() => window.location.href = '/profile?tab=kyc', 2000);
+          toast.error(
+            <div>
+              <p className="font-semibold">KYC Verification Required</p>
+              <p className="text-sm">Redirecting to verification page...</p>
+            </div>,
+            { duration: 3000 }
+          );
+          setTimeout(() => {
+            onClose();
+            navigate('/profile?tab=kyc');
+          }, 2000);
         } else if (errorData?.verificationType === 'bank_account') {
-          toast.error('Please add a bank account first!', { duration: 6000 });
-          setTimeout(() => window.location.href = '/profile?tab=bank', 2000);
+          toast.error(
+            <div>
+              <p className="font-semibold">Bank Account Required</p>
+              <p className="text-sm">Add a bank account to receive payments</p>
+            </div>,
+            { duration: 3000 }
+          );
+          setTimeout(() => {
+            onClose();
+            navigate('/profile?tab=bank-accounts');
+          }, 2000);
         } else {
           toast.error(errorData?.message || 'Verification required');
         }
+      } else if (status === 400) {
+        toast.error(errorData?.message || 'Invalid escrow data');
+      } else if (status === 404) {
+        toast.error('Seller not found. Check the email address.');
+      } else if (status === 429) {
+        toast.error('Too many requests. Please try again later.');
       } else {
-        toast.error(err.response?.data?.message || 'Failed to create escrow');
+        toast.error('Failed to create escrow. Please try again.');
       }
+
     } finally {
       setLoading(false);
     }
@@ -157,7 +230,11 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Start a secure transaction</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
+          <button 
+            onClick={onClose} 
+            disabled={loading}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition disabled:opacity-50"
+          >
             <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
@@ -171,14 +248,20 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
             </label>
             <input
               type="text"
-              {...register('title', { required: 'Title is required' })}
+              {...register('title', { 
+                required: 'Title is required',
+                minLength: { value: 3, message: 'Title must be at least 3 characters' }
+              })}
               placeholder="e.g., iPhone 15 Pro Max Purchase"
               className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white ${
                 errors.title ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
               }`}
             />
             {errors.title && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.title.message}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {errors.title.message}
+              </p>
             )}
           </div>
 
@@ -188,7 +271,10 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
               Description *
             </label>
             <textarea
-              {...register('description', { required: 'Description is required' })}
+              {...register('description', { 
+                required: 'Description is required',
+                minLength: { value: 10, message: 'Description must be at least 10 characters' }
+              })}
               placeholder="Describe what you're purchasing..."
               rows={4}
               className={`w-full px-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white resize-none ${
@@ -196,7 +282,10 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
               }`}
             />
             {errors.description && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.description.message}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {errors.description.message}
+              </p>
             )}
           </div>
 
@@ -220,7 +309,8 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
                   step="0.01"
                   {...register('amount', {
                     required: 'Amount is required',
-                    min: { value: 0.01, message: 'Amount must be greater than 0' }
+                    min: { value: 1, message: 'Amount must be at least 1' },
+                    max: { value: 1000000, message: 'Amount too large' }
                   })}
                   placeholder="0.00"
                   className={`w-full pl-20 pr-4 py-2.5 bg-white dark:bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white ${
@@ -229,7 +319,10 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
                 />
               </div>
               {errors.amount && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.amount.message}</p>
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.amount.message}
+                </p>
               )}
             </div>
 
@@ -251,7 +344,8 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
           {/* Fee Breakdown */}
           {feeBreakdown && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3">
+              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3 flex items-center gap-2">
+                <Shield className="w-4 h-4" />
                 Fee Breakdown
               </h3>
               <div className="space-y-2 text-sm">
@@ -307,7 +401,10 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
               }`}
             />
             {errors.sellerEmail && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.sellerEmail.message}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {errors.sellerEmail.message}
+              </p>
             )}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               The seller will receive a notification to accept this escrow
@@ -369,12 +466,16 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
             {filePreviews.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {filePreviews.map((file, idx) => (
-                  <div key={idx} className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300">
+                  <div key={idx} className="bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg text-xs text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 text-green-600" />
                     <span className="truncate max-w-[150px]">{file.name}</span>
                   </div>
                 ))}
               </div>
             )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Max 5MB per file. Supported: Images, PDF, Word documents
+            </p>
           </div>
 
           {/* Info Box */}

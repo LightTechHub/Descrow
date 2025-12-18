@@ -16,8 +16,9 @@ export const authService = {
       return res.data;
     } catch (err) {
       console.error('Registration error:', err);
-      toast.error(err.response?.data?.message || 'Registration failed.');
-      throw err.response?.data || { message: 'Registration failed.' };
+      const errorMsg = err.response?.data?.message || 'Registration failed.';
+      toast.error(errorMsg);
+      throw err.response?.data || { message: errorMsg };
     }
   },
 
@@ -86,8 +87,9 @@ export const authService = {
       const res = await api.post('/auth/google', googleData);
 
       if (!res.data.success) {
-        toast.error(res.data.message || 'Google authentication failed');
-        throw new Error(res.data.message || 'Google authentication failed');
+        const errorMsg = res.data.message || 'Google authentication failed';
+        toast.error(errorMsg);
+        throw new Error(errorMsg);
       }
 
       if (res.data.token && res.data.user) {
@@ -100,8 +102,7 @@ export const authService = {
 
     } catch (err) {
       console.error('❌ Google auth error:', err);
-      const errorMessage =
-        err.response?.data?.message || 'Google authentication failed.';
+      const errorMessage = err.response?.data?.message || 'Google authentication failed.';
       toast.error(errorMessage);
       throw err.response?.data || { message: errorMessage };
     }
@@ -115,8 +116,8 @@ export const authService = {
       const res = await api.post('/auth/verify-email', { token });
       toast.success('✅ Email verified successfully! You can now log in.');
 
-      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-      if (storedUser.email === res.data.user.email) {
+      const storedUser = this.getCurrentUser();
+      if (storedUser && storedUser.email === res.data.user?.email) {
         localStorage.setItem(
           'user',
           JSON.stringify({ ...storedUser, verified: true })
@@ -130,8 +131,9 @@ export const authService = {
       return res.data;
     } catch (err) {
       console.error('Verify email error:', err);
-      toast.error(err.response?.data?.message || 'Invalid or expired link.');
-      throw err.response?.data || { message: 'Verification failed.' };
+      const errorMsg = err.response?.data?.message || 'Invalid or expired link.';
+      toast.error(errorMsg);
+      throw err.response?.data || { message: errorMsg };
     }
   },
 
@@ -145,8 +147,9 @@ export const authService = {
       return res.data;
     } catch (err) {
       console.error('Resend verification error:', err);
-      toast.error(err.response?.data?.message || 'Failed to resend verification email.');
-      throw err.response?.data || { message: 'Resend verification failed.' };
+      const errorMsg = err.response?.data?.message || 'Failed to resend verification email.';
+      toast.error(errorMsg);
+      throw err.response?.data || { message: errorMsg };
     }
   },
 
@@ -160,8 +163,9 @@ export const authService = {
       return res.data;
     } catch (err) {
       console.error('Forgot password error:', err);
-      toast.error(err.response?.data?.message || 'Failed to send reset link.');
-      throw err.response?.data || { message: 'Forgot password failed.' };
+      const errorMsg = err.response?.data?.message || 'Failed to send reset link.';
+      toast.error(errorMsg);
+      throw err.response?.data || { message: errorMsg };
     }
   },
 
@@ -178,8 +182,9 @@ export const authService = {
       return res.data;
     } catch (err) {
       console.error('Reset password error:', err);
-      toast.error(err.response?.data?.message || 'Failed to reset password.');
-      throw err.response?.data || { message: 'Password reset failed.' };
+      const errorMsg = err.response?.data?.message || 'Failed to reset password.';
+      toast.error(errorMsg);
+      throw err.response?.data || { message: errorMsg };
     }
   },
 
@@ -195,9 +200,68 @@ export const authService = {
 
   /**
    * 👤 Get current logged-in user
+   * ✅ FIXED: Safe JSON parsing with error handling
    */
   getCurrentUser() {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    const userStr = localStorage.getItem('user');
+    
+    // ✅ Check if user exists and is not "undefined" string
+    if (!userStr || userStr === 'undefined' || userStr === 'null') {
+      return null;
+    }
+    
+    // ✅ Safe JSON parse with error handling
+    try {
+      return JSON.parse(userStr);
+    } catch (error) {
+      console.error('❌ Error parsing user data:', error);
+      // Clear corrupted data
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      return null;
+    }
+  },
+
+  /**
+   * 🎫 Get authentication token
+   */
+  getToken() {
+    return localStorage.getItem('token');
+  },
+
+  /**
+   * ✅ Check if user is authenticated
+   */
+  isAuthenticated() {
+    const token = this.getToken();
+    const user = this.getCurrentUser();
+    return !!(token && user);
+  },
+
+  /**
+   * 🔄 Refresh user data from localStorage
+   */
+  refreshUser() {
+    return this.getCurrentUser();
+  },
+
+  /**
+   * 💾 Update user data in localStorage
+   */
+  updateUser(userData) {
+    try {
+      const currentUser = this.getCurrentUser();
+      if (currentUser) {
+        const updatedUser = { ...currentUser, ...userData };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        return updatedUser;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error updating user data:', error);
+      return null;
+    }
   }
 };
+
+export default authService;

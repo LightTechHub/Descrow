@@ -18,6 +18,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResendVerification from './pages/ResendVerification';
 import ResetPassword from './pages/ResetPassword';
+import CompleteProfilePage from './pages/Auth/CompleteProfilePage'; // ✅ NEW
 
 // ==================== FOOTER PAGES ====================
 import ContactPage from './pages/ContactPage';
@@ -152,12 +153,12 @@ function App() {
   // ==================== NAVBAR & FOOTER LOGIC ====================
   const showNavbar = () => {
     const path = window.location.pathname;
-    const noNavbarRoutes = ['/login','/signup','/verify-email','/forgot-password','/reset-password','/resend-verification','/admin'];
+    const noNavbarRoutes = ['/login','/signup','/verify-email','/forgot-password','/reset-password','/resend-verification','/complete-profile','/admin'];
     return !noNavbarRoutes.some(route => path.startsWith(route));
   };
   const showFooter = () => {
     const path = window.location.pathname;
-    const noFooterRoutes = ['/login','/signup','/verify-email','/forgot-password','/reset-password','/resend-verification','/admin','/dashboard','/escrow','/profile','/notifications','/payment'];
+    const noFooterRoutes = ['/login','/signup','/verify-email','/forgot-password','/reset-password','/resend-verification','/complete-profile','/admin','/dashboard','/escrow','/profile','/notifications','/payment'];
     return !noFooterRoutes.some(route => path.startsWith(route));
   };
 
@@ -188,6 +189,12 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/resend-verification" element={<ResendVerification />} />
+        
+        {/* ✅ NEW: Complete Profile Route */}
+        <Route 
+          path="/complete-profile" 
+          element={user ? <Navigate to="/dashboard" replace /> : <CompleteProfilePage setUser={setUser} />} 
+        />
 
         {/* ==================== FOOTER PAGES ==================== */}
         <Route path="/contact" element={<ContactPage />} />

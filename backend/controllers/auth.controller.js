@@ -1,9 +1,13 @@
-// controllers/auth.controller.js
+// backend/controllers/auth.controller.js
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
+const { OAuth2Client } = require('google-auth-library'); // ✅ ADDED
+
+// ✅ ADDED: Initialize Google OAuth client
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // -------------------- Helper: Generate JWT --------------------
 const generateToken = (userId, email = null) => {
@@ -21,11 +25,35 @@ const getFrontendUrl = () => {
 };
 
 /* ============================================================
-   🔵 GOOGLE AUTH
+   🔵 GOOGLE AUTH - UPDATED
 ============================================================ */
 exports.googleAuth = async (req, res) => {
   try {
-    const { email, name, googleId, picture } = req.body;
+    const { credential, googleData } = req.body;
+
+    // ✅ NEW: Verify Google token if credential is provided
+    let email, name, picture, googleId;
+
+    if (credential) {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID
+      });
+
+      const payload = ticket.getPayload();
+      email = payload.email;
+      name = payload.name;
+      picture = payload.picture;
+      googleId = payload.sub;
+    } else if (googleData) {
+      // ✅ Fallback: Accept googleData directly (for testing/legacy)
+      ({ email, name, picture, googleId } = googleData);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Google authentication data'
+      });
+    }
 
     if (!email || !googleId) {
       return res.status(400).json({
@@ -34,34 +62,146 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
+    // Check if user exists
     let user = await User.findOne({ email: email.toLowerCase() });
 
-    // 🆕 Create user if not exists
-    if (!user) {
-      user = await User.create({
+    if (user) {
+      // ✅ EXISTING USER - Login directly
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.profilePicture = picture;
+        user.authProvider = 'google';
+        await user.save();
+      }
+
+      // 🚫 Block suspended users
+      if (!user.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is suspended. Contact support.'
+        });
+      }
+
+      const token = generateToken(user._id, user.email);
+
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          verified: user.verified,
+          isKYCVerified: user.isKYCVerified,
+          profilePicture: user.profilePicture,
+          tier: user.tier,
+          role: user.role
+        }
+      });
+    }
+
+    // ✅ NEW USER - Return data for profile completion
+    return res.json({
+      success: true,
+      requiresProfileCompletion: true,
+      googleData: {
+        email,
         name,
-        email: email.toLowerCase(),
+        picture,
         googleId,
-        profilePicture: picture,
-        verified: true, // ✅ Google emails are trusted
-        role: 'dual',
-        tier: 'free',
-        password: Math.random().toString(36) + Math.random().toString(36)
-      });
-    }
+        emailVerified: true // Google emails are pre-verified
+      },
+      message: 'Please complete your profile'
+    });
 
-    // 🚫 Block suspended users
-    if (!user.isActive) {
-      return res.status(403).json({
+  } catch (error) {
+    console.error('❌ Google auth error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Google authentication failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/* ============================================================
+   ✅ NEW: Complete Google Profile
+============================================================ */
+exports.completeGoogleProfile = async (req, res) => {
+  try {
+    const {
+      email,
+      name,
+      googleId,
+      picture,
+      phone,
+      country,
+      accountType, // 'individual' or 'business'
+      // Business fields (optional)
+      companyName,
+      companyType,
+      industry,
+      agreedToTerms
+    } = req.body;
+
+    // Validate required fields
+    if (!email || !name || !phone || !country || !agreedToTerms) {
+      return res.status(400).json({
         success: false,
-        message: 'Account is suspended. Contact support.'
+        message: 'Please fill all required fields'
       });
     }
 
+    // Check if email already exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered'
+      });
+    }
+
+    // Create user with a random secure password (not used for Google login)
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      phone,
+      country,
+      googleId,
+      profilePicture: picture,
+      authProvider: 'google',
+      verified: true, // ✅ Google emails are pre-verified
+      accountType: accountType || 'individual',
+      role: 'dual',
+      tier: 'free',
+      agreedToTerms: true,
+      agreedToTermsAt: new Date(),
+      password: Math.random().toString(36) + Math.random().toString(36), // Random password
+      
+      // Business fields
+      ...(accountType === 'business' && {
+        businessInfo: {
+          companyName,
+          companyType,
+          industry
+        }
+      })
+    });
+
+    // ✅ Send welcome email (background - don't block response)
+    emailService.sendWelcomeEmail(user.email, user.name).catch(err => {
+      console.error('Failed to send welcome email:', err);
+    });
+
+    // Generate token
     const token = generateToken(user._id, user.email);
 
-    res.status(200).json({
+    console.log('✅ Google user profile completed:', user._id);
+
+    res.status(201).json({
       success: true,
+      message: 'Account created successfully',
       token,
       user: {
         id: user._id,
@@ -69,17 +209,19 @@ exports.googleAuth = async (req, res) => {
         email: user.email,
         verified: user.verified,
         isKYCVerified: user.isKYCVerified || false,
+        profilePicture: user.profilePicture,
         tier: user.tier,
         role: user.role,
-        profilePicture: user.profilePicture
+        accountType: user.accountType
       }
     });
 
   } catch (error) {
-    console.error('❌ Google auth error:', error);
+    console.error('❌ Complete Google profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Google authentication failed'
+      message: 'Failed to complete profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -114,13 +256,15 @@ exports.register = async (req, res) => {
       password,
       role: 'dual',
       tier: 'free',
-      verified: false
+      verified: false,
+      authProvider: 'local'
     });
 
     const verificationToken = generateToken(user._id);
 
+    // Send verification email (don't block response)
     emailService.sendVerificationEmail(user.email, user.name, verificationToken)
-      .catch(() => {});
+      .catch(err => console.error('Failed to send verification email:', err));
 
     res.status(201).json({
       success: true,
@@ -133,7 +277,8 @@ exports.register = async (req, res) => {
     console.error('❌ Register error:', error);
     res.status(500).json({
       success: false,
-      message: 'Registration failed'
+      message: 'Registration failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -187,6 +332,7 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Update last login
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() }, { runValidators: false });
 
     const token = generateToken(user._id, user.email);
@@ -202,6 +348,8 @@ exports.login = async (req, res) => {
         role: user.role,
         tier: user.tier,
         verified: user.verified,
+        isKYCVerified: user.isKYCVerified || false,
+        profilePicture: user.profilePicture,
         kycStatus: user.kycStatus
       }
     });
@@ -210,7 +358,8 @@ exports.login = async (req, res) => {
     console.error('❌ Login error:', error);
     res.status(500).json({
       success: false,
-      message: 'Login failed'
+      message: 'Login failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -227,13 +376,13 @@ exports.verifyEmailRedirect = async (req, res) => {
     
     const user = await User.findOne({ _id: decoded.id });
     
+    const frontendUrl = getFrontendUrl();
+    
     if (!user) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       return res.redirect(`${frontendUrl}/login?verified=error&message=User+not+found`);
     }
     
     if (user.verified) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       return res.redirect(`${frontendUrl}/login?verified=already`);
     }
     
@@ -242,78 +391,16 @@ exports.verifyEmailRedirect = async (req, res) => {
     await user.save();
     
     // Redirect to login with success message
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/login?verified=success`);
   } catch (error) {
     console.error('❌ Verify email redirect error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = getFrontendUrl();
     res.redirect(`${frontendUrl}/login?verified=error&message=Invalid+token`);
   }
 };
 
 /* ============================================================
-   🚪 LOGOUT
-============================================================ */
-exports.logout = async (req, res) => {
-  try {
-    // In a stateless JWT system, logout is handled on the frontend
-    // by removing the token from localStorage
-    
-    res.status(200).json({
-      success: true,
-      message: 'Logged out successfully'
-    });
-  } catch (error) {
-    console.error('❌ Logout error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Logout failed'
-    });
-  }
-};
-
-/* ============================================================
-   🔄 REFRESH TOKEN
-============================================================ */
-exports.refreshToken = async (req, res) => {
-  try {
-    const userId = req.user.id; // From authenticate middleware
-    
-    const user = await User.findById(userId);
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-    
-    if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account is suspended'
-      });
-    }
-    
-    // Generate new token
-    const token = generateToken(user._id, user.email);
-    
-    res.status(200).json({
-      success: true,
-      message: 'Token refreshed',
-      token
-    });
-  } catch (error) {
-    console.error('❌ Refresh token error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Token refresh failed'
-    });
-  }
-};
-
-/* ============================================================
-   ✅ VERIFY EMAIL
+   ✅ VERIFY EMAIL (API endpoint)
 ============================================================ */
 exports.verifyEmail = async (req, res) => {
   try {
@@ -466,11 +553,64 @@ exports.resetPassword = async (req, res) => {
 };
 
 /* ============================================================
-   (All other handlers remain unchanged below)
+   🚪 LOGOUT
 ============================================================ */
-// verifyEmail
-// verifyEmailRedirect
-// resendVerification
-// forgotPassword
-// resetPassword
-// refreshToken
+exports.logout = async (req, res) => {
+  try {
+    // In a stateless JWT system, logout is handled on the frontend
+    // by removing the token from localStorage
+    
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
+  }
+};
+
+/* ============================================================
+   🔄 REFRESH TOKEN
+============================================================ */
+exports.refreshToken = async (req, res) => {
+  try {
+    const userId = req.user.id; // From authenticate middleware
+    
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is suspended'
+      });
+    }
+    
+    // Generate new token
+    const token = generateToken(user._id, user.email);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Token refreshed',
+      token
+    });
+  } catch (error) {
+    console.error('❌ Refresh token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Token refresh failed'
+    });
+  }
+};
+
+module.exports = exports;

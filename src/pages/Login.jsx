@@ -3,7 +3,6 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Loader, AlertCircle, CheckCircle } from 'lucide-react';
 import { authService } from '../services/authService';
 import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-hot-toast';
 
 const Login = ({ setUser }) => {
@@ -36,23 +35,29 @@ const Login = ({ setUser }) => {
     setError('');
   };
 
-  // ✅ GOOGLE OAUTH HANDLER
+  // ✅ UPDATED: Google OAuth Handler with profile completion support
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
-      const decoded = jwtDecode(credentialResponse.credential);
+      setError('');
       
-      console.log('🔐 Google OAuth Success:', decoded);
+      console.log('🔐 Google OAuth Success');
       
       const response = await authService.googleAuth({
-        email: decoded.email,
-        name: decoded.name,
-        googleId: decoded.sub,
-        picture: decoded.picture
+        credential: credentialResponse.credential
       });
       
       if (response.success) {
-        // ✅ CHANGE: Fetch fresh user data
+        // ✅ NEW: Check if profile completion is required
+        if (response.requiresProfileCompletion) {
+          console.log('📝 Redirecting to profile completion');
+          navigate('/complete-profile', {
+            state: { googleData: response.googleData }
+          });
+          return;
+        }
+
+        // ✅ EXISTING USER - Fetch fresh data and login
         try {
           const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
             headers: {
@@ -76,7 +81,8 @@ const Login = ({ setUser }) => {
           setUser(response.user);
         }
 
-        toast.success(`Welcome back, ${response.user.name}!`);
+        // ✅ REMOVED DUPLICATE: authService.googleAuth already shows toast
+        // toast.success(`Welcome back, ${response.user.name}!`); // ❌ REMOVED
         navigate('/dashboard', { replace: true });
       } else {
         setError(response.message || 'Google login failed');
@@ -84,7 +90,8 @@ const Login = ({ setUser }) => {
     } catch (error) {
       console.error('Google login error:', error);
       setError('Google login failed. Please try again.');
-      toast.error('Google login failed');
+      // ✅ REMOVED DUPLICATE: authService.googleAuth already shows error toast
+      // toast.error('Google login failed'); // ❌ REMOVED
     } finally {
       setLoading(false);
     }
@@ -126,7 +133,7 @@ const Login = ({ setUser }) => {
         return;
       }
 
-      // ✅ CHANGE: Fetch fresh user data from backend
+      // ✅ Fetch fresh user data from backend
       try {
         const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
           headers: {
@@ -138,21 +145,21 @@ const Login = ({ setUser }) => {
           const freshData = await freshUserResponse.json();
           if (freshData.success && freshData.user) {
             console.log('✅ Fresh user data:', freshData.user);
-            setUser(freshData.user); // Use fresh data instead of login response
+            setUser(freshData.user);
           } else {
-            setUser(response.user); // Fallback to login response
+            setUser(response.user);
           }
         } else {
-          setUser(response.user); // Fallback
+          setUser(response.user);
         }
       } catch (fetchError) {
         console.error('Failed to fetch fresh user data:', fetchError);
-        setUser(response.user); // Fallback
+        setUser(response.user);
       }
 
-      toast.success(`Welcome back, ${response.user.name}!`);
+      // ✅ REMOVED DUPLICATE: authService.login already shows toast
+      // toast.success(`Welcome back, ${response.user.name}!`); // ❌ REMOVED
 
-      // Navigate
       setTimeout(() => {
         navigate('/dashboard', { replace: true });
       }, 500);
@@ -161,7 +168,8 @@ const Login = ({ setUser }) => {
       console.error('❌ Login error:', err);
       const message = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
       setError(message);
-      toast.error(message);
+      // ✅ REMOVED DUPLICATE: authService.login already shows error toast
+      // toast.error(message); // ❌ REMOVED
     } finally {
       setLoading(false);
     }
@@ -224,7 +232,7 @@ const Login = ({ setUser }) => {
               onSuccess={handleGoogleSuccess}
               onError={() => {
                 setError('Google login failed');
-                toast.error('Google login failed');
+                toast.error('Google login failed'); // ✅ Only one toast here
               }}
               useOneTap
               text="signin_with"

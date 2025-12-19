@@ -92,12 +92,19 @@ export const authService = {
         throw new Error(errorMsg);
       }
 
+      // ✅ Check if profile completion is required
+      if (res.data.requiresProfileCompletion) {
+        console.log('📝 Profile completion required');
+        return res.data; // Return to frontend for profile completion
+      }
+
+      // ✅ Existing user - save token and user
       if (res.data.token && res.data.user) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
+        toast.success('Google login successful');
       }
 
-      toast.success('Google login successful');
       return res.data;
 
     } catch (err) {
@@ -105,6 +112,38 @@ export const authService = {
       const errorMessage = err.response?.data?.message || 'Google authentication failed.';
       toast.error(errorMessage);
       throw err.response?.data || { message: errorMessage };
+    }
+  },
+
+  /**
+   * ✅ NEW: Complete Google Profile
+   */
+  async completeGoogleProfile(profileData) {
+    try {
+      console.log('📝 Completing Google profile...');
+      
+      const res = await api.post('/auth/google/complete-profile', profileData);
+      
+      if (!res.data.success) {
+        const errorMsg = res.data.message || 'Failed to complete profile';
+        toast.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // Save token and user data
+      if (res.data.token && res.data.user) {
+        localStorage.setItem('token', res.data.token);
+        localStorage.setItem('user', JSON.stringify(res.data.user));
+        console.log('✅ Profile completed and user saved');
+        toast.success('Account created successfully!');
+      }
+      
+      return res.data;
+    } catch (err) {
+      console.error('❌ Complete Google profile error:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to complete profile';
+      toast.error(errorMsg);
+      throw err.response?.data || { message: errorMsg };
     }
   },
 

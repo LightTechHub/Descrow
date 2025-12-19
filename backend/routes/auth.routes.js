@@ -1,3 +1,4 @@
+// backend/routes/auth.routes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
@@ -6,12 +7,21 @@ const emailService = require('../services/email.service');
 const jwt = require('jsonwebtoken');
 
 /**
- * ---------------- GOOGLE AUTH ----------------
+ * ============================================================
+ * 🔵 GOOGLE AUTHENTICATION
+ * ============================================================
  */
 router.post('/google', authController.googleAuth);
 
 /**
- * ---------------- REGISTER ----------------
+ * ✅ NEW: Complete Google profile after OAuth
+ */
+router.post('/google/complete-profile', authController.completeGoogleProfile);
+
+/**
+ * ============================================================
+ * 📝 REGISTER
+ * ============================================================
  */
 router.post(
   '/register',
@@ -26,7 +36,9 @@ router.post(
 );
 
 /**
- * ---------------- LOGIN ----------------
+ * ============================================================
+ * 🔑 LOGIN
+ * ============================================================
  */
 router.post(
   '/login',
@@ -38,63 +50,81 @@ router.post(
 );
 
 /**
- * ---------------- VERIFY EMAIL ----------------
+ * ============================================================
+ * ✅ EMAIL VERIFICATION
+ * ============================================================
  */
 router.post('/verify-email', authController.verifyEmail);
 
 /**
- * ---------------- RESEND VERIFICATION ----------------
+ * 📧 Resend verification email
  */
 router.post('/resend-verification', authController.resendVerification);
 
 /**
- * ---------------- FORGOT & RESET PASSWORD ----------------
+ * ============================================================
+ * 🔑 PASSWORD MANAGEMENT
+ * ============================================================
  */
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 
 /**
- * ---------------- REFRESH TOKEN ----------------
+ * ============================================================
+ * 🔄 TOKEN REFRESH
+ * ============================================================
  */
 router.post('/refresh-token', authController.refreshToken);
 
 /**
- * ---------------- DEV: TEST EMAIL ----------------
+ * ============================================================
+ * 🚪 LOGOUT
+ * ============================================================
  */
-router.get('/dev/test-email', async (req, res) => {
-  try {
-    const email = req.query.email;
-    if (!email) {
-      return res.status(400).json({
+router.post('/logout', authController.logout);
+
+/**
+ * ============================================================
+ * 🧪 DEV: TEST EMAIL (Development only)
+ * ============================================================
+ */
+if (process.env.NODE_ENV === 'development') {
+  router.get('/dev/test-email', async (req, res) => {
+    try {
+      const email = req.query.email;
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is required'
+        });
+      }
+
+      const testToken = jwt.sign(
+        { id: 'test-user-id' },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      await emailService.sendVerificationEmail(
+        email,
+        'Test User',
+        testToken
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `Test email sent to ${email}`,
+        token: testToken
+      });
+    } catch (error) {
+      console.error('❌ Dev test email error:', error);
+      res.status(500).json({
         success: false,
-        message: 'Email is required'
+        message: 'Failed to send test email',
+        error: error.message
       });
     }
-
-    const testToken = jwt.sign(
-      { id: 'test-user-id' },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    await emailService.sendVerificationEmail(
-      email,
-      'Test User',
-      testToken
-    );
-
-    res.status(200).json({
-      success: true,
-      message: `Test email sent to ${email}`
-    });
-  } catch (error) {
-    console.error('❌ Dev test email error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to send test email',
-      error: error.message
-    });
-  }
-});
+  });
+}
 
 module.exports = router;

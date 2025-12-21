@@ -1,151 +1,177 @@
 // File: src/App.jsx
 
-import React, { useEffect, useState, createContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
 
-import authService from './services/authService';
+// ==================== CORE COMPONENTS ====================
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+
+// ==================== AUTH ====================
+import { authService } from './services/authService';
+import { isTokenExpired, forceLogout } from './utils/auth.utils';
+
+// ==================== PUBLIC PAGES ====================
+import LandingPage from './pages/LandingPage';
+import Login from './pages/Login';
+import SignUpPage from './pages/SignUpPage';
+import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import ResendVerification from './pages/ResendVerification';
+import CompleteProfilePage from './pages/Auth/CompleteProfilePage';
+
+// ==================== FOOTER PAGES ====================
+import ContactPage from './pages/ContactPage';
+import AboutPage from './pages/AboutPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsPage from './pages/TermsPage';
+import DocsPage from './pages/DocsPage';
+import FAQPage from './pages/FAQPage';
+import BlogPage from './pages/BlogPage';
+import ReferralPage from './pages/ReferralPage';
+import RefundPolicyPage from './pages/RefundPolicyPage';
+import CareersPage from './pages/CareersPage';
+import APIPage from './pages/APIPage';
+import CookiesPage from './pages/CookiesPage';
+
+// ==================== USER PAGES ====================
 import UnifiedDashboard from './pages/UnifiedDashboard';
-import Login from './pages/Auth/Login';
-import Signup from './pages/Auth/Signup';
-import Loader from './components/Loader';
+import EscrowDetails from './pages/EscrowDetails';
+import ProfilePage from './pages/Profile/ProfilePage';
+import NotificationsPage from './pages/NotificationsPage';
+import PaymentPage from './pages/PaymentPage';
+import PaymentVerificationPage from './pages/PaymentVerificationPage';
 
-// ====================
-// Auth Context
-// ====================
-export const AuthContext = createContext(null);
+// ==================== ADMIN PAGES ====================
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import TransactionsPage from './pages/admin/TransactionsPage';
+import DisputesPage from './pages/admin/DisputesPage';
+import UsersPage from './pages/admin/UsersPage';
+import AnalyticsPage from './pages/admin/AnalyticsPage';
+import PaymentGatewaysPage from './pages/admin/PaymentGatewaysPage';
+import APIManagementPage from './pages/admin/APIManagementPage';
+import AdminManagementPage from './pages/admin/AdminManagementPage';
+import FeeManagementPage from './pages/admin/FeeManagementPage';
 
-// ====================
-// Axios Interceptor (SAFE)
-// ====================
+// ==================== SAFE AXIOS INTERCEPTOR ====================
 axios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const status = error.response?.status;
-    const url = error.config?.url || '';
+  res => res,
+  err => {
+    const status = err.response?.status;
+    const url = err.config?.url || '';
 
-    /**
-     * 🚨 IMPORTANT:
-     * Only force logout when AUTH endpoints fail
-     * This prevents random logouts on refresh or page load
-     */
+    // ONLY logout on auth-related failures
     if (status === 401 && url.includes('/auth')) {
-      authService.logout();
-      window.location.href = '/login';
+      forceLogout();
     }
 
-    return Promise.reject(error);
+    return Promise.reject(err);
   }
 );
 
-// ====================
-// Protected Route
-// ====================
-const ProtectedRoute = ({ children, user, loading }) => {
-  if (loading) return <Loader fullscreen />;
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
-};
+// ==================== LOADER ====================
+const FullscreenLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+    <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-blue-600" />
+  </div>
+);
 
-// ====================
-// App Component
-// ====================
-const App = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // ====================
-  // INIT AUTH (SAFE, NO STORAGE WIPE)
-  // ====================
-  useEffect(() => {
-    const initAuth = () => {
-      try {
-        const token = localStorage.getItem('token');
-
-        if (!token) {
-          setUser(null);
-          return;
-        }
-
-        const currentUser = authService.getCurrentUser();
-
-        if (currentUser) {
-          setUser(currentUser);
-        }
-      } catch (err) {
-        console.error('Auth init error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initAuth();
-  }, []);
-
-  // ====================
-  // TOKEN EXPIRY CHECK (INTERVAL ONLY)
-  // ====================
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const token = localStorage.getItem('token');
-      if (token && authService.isTokenExpired?.(token)) {
-        authService.logout();
-        window.location.href = '/login';
-      }
-    }, 60 * 1000); // every 1 minute
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // ====================
-  // AUTH CONTEXT VALUE
-  // ====================
-  const authContextValue = {
-    user,
-    setUser,
-    loading,
-    login: (userData, token) => {
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
-    },
-    logout: () => {
-      authService.logout();
-      setUser(null);
-    }
-  };
-
-  // ====================
-  // GLOBAL LOADING
-  // ====================
-  if (loading) {
-    return <Loader fullscreen />;
-  }
-
+// ==================== 404 ====================
+const NotFound = () => {
+  const location = useLocation();
   return (
-    <AuthContext.Provider value={authContextValue}>
-      <Router>
-        <Routes>
-          {/* ==================== AUTH ROUTES ==================== */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-
-          {/* ==================== PROTECTED ROUTES ==================== */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute user={user} loading={loading}>
-                <UnifiedDashboard />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* ==================== FALLBACK ==================== */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
-    </AuthContext.Provider>
+    <div className="min-h-screen flex items-center justify-center">
+      <h1 className="text-xl font-mono">404 — {location.pathname}</h1>
+    </div>
   );
 };
 
-export default App;
+// ==================== APP ====================
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [admin, setAdmin] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // ==================== INIT AUTH ====================
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const currentUser = authService.getCurrentUser();
+
+    if (token && currentUser?.verified) {
+      setUser(currentUser);
+    } else {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+
+    const adminToken = localStorage.getItem('adminToken');
+    const adminData = localStorage.getItem('admin');
+    if (adminToken && adminData) {
+      try { setAdmin(JSON.parse(adminData)); }
+      catch { localStorage.clear(); }
+    }
+
+    setLoading(false);
+  }, []);
+
+  // ==================== TOKEN EXPIRY CHECK ====================
+  useEffect(() => {
+    const check = () => {
+      const token = localStorage.getItem('token');
+      if (token && isTokenExpired(token)) forceLogout();
+    };
+    const interval = setInterval(check, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ==================== ROUTE GUARDS ====================
+  const ProtectedRoute = ({ children }) => {
+    if (loading) return <FullscreenLoader />;
+    if (!user) return <Navigate to="/login" replace />;
+    return children;
+  };
+
+  const AdminProtectedRoute = ({ children }) => {
+    if (loading) return <FullscreenLoader />;
+    if (!admin) return <Navigate to="/admin/login" replace />;
+    return children;
+  };
+
+  if (loading) return <FullscreenLoader />;
+
+  return (
+    <BrowserRouter>
+      <Toaster position="top-right" />
+      <Navbar user={user} />
+
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login setUser={setUser} />} />
+        <Route path="/signup" element={<SignUpPage setUser={setUser} />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/resend-verification" element={<ResendVerification />} />
+        <Route path="/complete-profile" element={<CompleteProfilePage setUser={setUser} />} />
+
+        <Route path="/dashboard" element={<ProtectedRoute><UnifiedDashboard /></ProtectedRoute>} />
+        <Route path="/escrow/:id" element={<ProtectedRoute><EscrowDetails /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+        <Route path="/payment/:escrowId" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
+        <Route path="/payment/verify" element={<ProtectedRoute><PaymentVerificationPage /></ProtectedRoute>} />
+
+        <Route path="/admin/login" element={<AdminLogin setAdmin={setAdmin} />} />
+        <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
+
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+
+      <Footer />
+    </BrowserRouter>
+  );
+}

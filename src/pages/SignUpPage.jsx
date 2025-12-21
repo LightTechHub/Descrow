@@ -1,4 +1,4 @@
-jsx// File: src/pages/SignUpPage.jsx - INPUT COLORS FIXED
+// File: src/pages/SignUpPage.jsx - INPUT COLORS FIXED
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {

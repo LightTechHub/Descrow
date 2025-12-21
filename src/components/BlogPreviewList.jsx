@@ -1,6 +1,7 @@
 // File: src/components/BlogPreviewList.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowRight, Calendar, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 
@@ -10,34 +11,52 @@ const BlogPreviewList = () => {
   const blogPosts = [
     {
       title: '5 Tips for Safe Online Trading',
-      excerpt: 'Learn how to protect yourself from scams and fraudulent sellers when trading online.',
+      excerpt: 'Learn how to protect yourself from scams and fraudulent sellers when trading online. Essential security practices every trader should know.',
       date: 'March 15, 2025',
-      link: '/blog/safe-online-trading'
+      readTime: '5 min read',
+      category: 'Security',
+      link: '/blog/safe-online-trading',
+      color: 'from-blue-500 to-blue-600'
     },
     {
       title: 'Understanding Escrow Services',
-      excerpt: 'A complete guide to how escrow services work and why they are essential for secure transactions.',
+      excerpt: 'A complete guide to how escrow services work and why they are essential for secure transactions in the digital age.',
       date: 'March 10, 2025',
-      link: '/blog/understanding-escrow'
+      readTime: '8 min read',
+      category: 'Education',
+      link: '/blog/understanding-escrow',
+      color: 'from-purple-500 to-purple-600'
     },
     {
       title: 'Cryptocurrency Payments Explained',
-      excerpt: 'Everything you need to know about accepting Bitcoin, Ethereum, and other cryptocurrencies.',
+      excerpt: 'Everything you need to know about accepting Bitcoin, Ethereum, and other cryptocurrencies for your business.',
       date: 'March 5, 2025',
-      link: '/blog/cryptocurrency-payments'
+      readTime: '6 min read',
+      category: 'Crypto',
+      link: '/blog/cryptocurrency-payments',
+      color: 'from-orange-500 to-orange-600'
     }
   ];
 
   return (
     <section className="py-20 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-300">
-            Latest from Our Blog
-          </h2>
-          <p className="text-xl text-gray-600 dark:text-gray-400 transition-colors duration-300">
-            Tips, guides, and industry insights
-          </p>
+        <div className="text-center mb-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="inline-flex items-center gap-2 bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-full mb-4">
+              <span className="text-sm font-semibold text-green-700 dark:text-green-300">📚 Blog</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-300">
+              Latest from Our Blog
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 transition-colors duration-300">
+              Tips, guides, and industry insights to help you succeed
+            </p>
+          </motion.div>
         </div>
 
         <div ref={ref} className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -50,33 +69,65 @@ const BlogPreviewList = () => {
             >
               <Link
                 to={post.link}
-                className="block bg-white dark:bg-gray-950 p-6 rounded-xl border border-gray-200 dark:border-gray-800 hover:shadow-lg transition-all duration-300"
+                className="group block bg-white dark:bg-gray-950 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 hover:shadow-2xl transition-all duration-300 h-full"
               >
-                <p className="text-sm text-blue-600 dark:text-blue-400 mb-2 transition-colors duration-300">
-                  {post.date}
-                </p>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3 transition-colors duration-300">
-                  {post.title}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4 transition-colors duration-300">
-                  {post.excerpt}
-                </p>
-                <span className="text-blue-600 dark:text-blue-400 font-semibold hover:underline transition-colors duration-200">
-                  Read More →
-                </span>
+                {/* Category Badge */}
+                <div className={`h-2 bg-gradient-to-r ${post.color}`}></div>
+                
+                <div className="p-8">
+                  {/* Category & Date */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className={`px-3 py-1 bg-gradient-to-r ${post.color} text-white text-xs font-semibold rounded-full`}>
+                      {post.category}
+                    </span>
+                    <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                      <Clock className="w-3 h-3" />
+                      <span>{post.readTime}</span>
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">
+                    {post.title}
+                  </h3>
+
+                  {/* Excerpt */}
+                  <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
+                    {post.excerpt}
+                  </p>
+
+                  {/* Meta Info */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-800">
+                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                      <Calendar className="w-4 h-4" />
+                      <span>{post.date}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-3 transition-all duration-200">
+                      <span>Read More</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
               </Link>
             </motion.div>
           ))}
         </div>
 
-        <div className="text-center mt-8">
+        {/* View All Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="text-center mt-12"
+        >
           <Link
             to="/blog"
-            className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200"
+            className="inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
-            View All Posts →
+            View All Posts
+            <ArrowRight className="w-5 h-5" />
           </Link>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

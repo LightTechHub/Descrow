@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import axios from 'axios';
 
 import authService from './services/authService';
-import Dashboard from './pages/Dashboard/Dashboard';
+import UnifiedDashboard from './pages/UnifiedDashboard';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
 import Loader from './components/Loader';
@@ -127,13 +127,13 @@ const App = () => {
           <Route path="/signup" element={<Signup />} />
 
           <Route
-            path="/dashboard/*"
+            path="/dashboard"
             element={
-              <ProtectedRoute user={user} loading={loading}>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+            <.ProtectedRoute>
+           <.UnifiedDashboard />
+          </ProtectedRoute>
+        }
+      />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

@@ -1,3 +1,4 @@
+// File: src/pages/Profile/SecurityTab.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield, 
@@ -13,8 +14,8 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import securityService from 'services/securityService';
-import profileService from 'services/profileService';
+import securityService from '../../services/securityService';
+import profileService from '../../services/profileService';
 import toast from 'react-hot-toast';
 
 const SecurityTab = ({ user, onUpdate }) => {
@@ -36,7 +37,6 @@ const SecurityTab = ({ user, onUpdate }) => {
     confirm: false
   });
 
-  // ✅ Prevent duplicate fetches
   const hasFetchedSecurity = useRef(false);
 
   useEffect(() => {
@@ -101,7 +101,7 @@ const SecurityTab = ({ user, onUpdate }) => {
         setShow2FASetup(false);
         setTwoFAData(null);
         setVerificationCode('');
-        hasFetchedSecurity.current = false; // ✅ Allow refetch
+        hasFetchedSecurity.current = false;
         fetch2FAStatus();
       }
     } catch (error) {
@@ -125,7 +125,7 @@ const SecurityTab = ({ user, onUpdate }) => {
 
       if (response.success) {
         toast.success('2FA disabled successfully');
-        hasFetchedSecurity.current = false; // ✅ Allow refetch
+        hasFetchedSecurity.current = false;
         fetch2FAStatus();
       }
     } catch (error) {
@@ -145,7 +145,7 @@ const SecurityTab = ({ user, onUpdate }) => {
       const response = await securityService.revokeSession(sessionId);
       if (response.success) {
         toast.success('Session revoked');
-        hasFetchedSecurity.current = false; // ✅ Allow refetch
+        hasFetchedSecurity.current = false;
         fetchSessions();
       }
     } catch (error) {
@@ -163,7 +163,7 @@ const SecurityTab = ({ user, onUpdate }) => {
       const response = await securityService.revokeAllSessions();
       if (response.success) {
         toast.success('All sessions revoked');
-        hasFetchedSecurity.current = false; // ✅ Allow refetch
+        hasFetchedSecurity.current = false;
         fetchSessions();
       }
     } catch (error) {

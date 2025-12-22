@@ -5,19 +5,14 @@ import { Menu, X, ChevronDown, Bell, Settings, User, LogOut, LayoutDashboard, Sh
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import ThemeToggle from './ThemeToggle';
-import { authService } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 
-export default function Navbar({ user: propUser }) {
+export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [user, setUser] = useState(propUser);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const currentUser = propUser || authService.getCurrentUser();
-    setUser(currentUser);
-  }, [propUser]);
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
@@ -26,11 +21,25 @@ export default function Navbar({ user: propUser }) {
   }, []);
 
   const handleLogout = useCallback(() => {
-    authService.logout();
+    logout();
     setOpen(false);
     setShowUserMenu(false);
     navigate('/login', { replace: true });
-  }, [navigate]);
+  }, [logout, navigate]);
+
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    
+    // If it's already a full URL (Google profile pic, external URL)
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // If it's a relative path from backend
+    const API_BASE = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com';
+    const baseUrl = API_BASE.replace(/\/api$/, '');
+    return `${baseUrl}/${imagePath.replace(/^\//, '')}`;
+  };
 
   const isAdmin = user?.role === 'admin' || user?.isAdmin;
 
@@ -117,13 +126,14 @@ export default function Navbar({ user: propUser }) {
             ) : (
               <>
                 {/* Notifications */}
-                <button
+                <Link
+                  to="/notifications"
                   className="relative p-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
                   title="Notifications"
                 >
                   <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
+                </Link>
 
                 {/* User Menu */}
                 <div className="relative">
@@ -133,15 +143,21 @@ export default function Navbar({ user: propUser }) {
                   >
                     {user.profilePicture ? (
                       <img
-                        src={user.profilePicture}
+                        src={getImageUrl(user.profilePicture)}
                         alt={user.name}
                         className="w-8 h-8 rounded-full object-cover border-2 border-blue-500"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
                       />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
-                        {user.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    ) : null}
+                    <div 
+                      className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold border-2 border-blue-500"
+                      style={{ display: user.profilePicture ? 'none' : 'flex' }}
+                    >
+                      {user.name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
                     <span className="font-medium text-gray-900 dark:text-white hidden lg:block">
                       {user.name?.split(' ')[0]}
                     </span>
@@ -308,15 +324,21 @@ export default function Navbar({ user: propUser }) {
                   <div className="flex items-center gap-3">
                     {user.profilePicture ? (
                       <img
-                        src={user.profilePicture}
+                        src={getImageUrl(user.profilePicture)}
                         alt={user.name}
                         className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
                       />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white text-lg font-bold">
-                        {user.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    ) : null}
+                    <div 
+                      className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white text-lg font-bold border-2 border-blue-500"
+                      style={{ display: user.profilePicture ? 'none' : 'flex' }}
+                    >
+                      {user.name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 dark:text-white truncate">
                         {user.name}

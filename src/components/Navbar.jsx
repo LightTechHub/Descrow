@@ -52,7 +52,7 @@ export default function Navbar({ user: propUser }) {
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
           >
             <Logo size="md" />
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            <span className="text-xl font-bold text-gray-900 dark:text-white">
               Dealcross
             </span>
           </Link>
@@ -109,7 +109,7 @@ export default function Navbar({ user: propUser }) {
                 </Link>
                 <Link
                   to="/signup"
-                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition shadow-lg shadow-blue-500/30"
+                  className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition shadow-lg"
                 >
                   Sign Up
                 </Link>
@@ -138,7 +138,7 @@ export default function Navbar({ user: propUser }) {
                         className="w-8 h-8 rounded-full object-cover border-2 border-blue-500"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
                         {user.name?.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -289,7 +289,7 @@ export default function Navbar({ user: propUser }) {
                   onClick={() => setOpen(false)}
                 >
                   <Logo size="md" />
-                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  <span className="text-xl font-bold text-gray-900 dark:text-white">
                     Dealcross
                   </span>
                 </Link>
@@ -304,7 +304,7 @@ export default function Navbar({ user: propUser }) {
 
               {/* User Info (Mobile) */}
               {user && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center gap-3">
                     {user.profilePicture ? (
                       <img
@@ -313,7 +313,7 @@ export default function Navbar({ user: propUser }) {
                         className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-lg font-bold">
+                      <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white text-lg font-bold">
                         {user.name?.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -404,7 +404,7 @@ export default function Navbar({ user: propUser }) {
                     <Link
                       to="/signup"
                       onClick={() => setOpen(false)}
-                      className="block w-full px-4 py-3 text-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg transition font-semibold shadow-lg"
+                      className="block w-full px-4 py-3 text-center bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-semibold shadow-lg"
                     >
                       Sign Up
                     </Link>

@@ -1,10 +1,10 @@
+// File: src/pages/Profile/SettingsTab.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bell, 
   Globe, 
   Moon, 
   Sun, 
-  DollarSign,
   Trash2,
   Save,
   Loader,
@@ -12,8 +12,8 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import notificationService from 'services/notificationService';
-import profileService from 'services/profileService';
+import notificationService from '../../services/notificationService';
+import profileService from '../../services/profileService';
 import toast from 'react-hot-toast';
 
 const SettingsTab = ({ user, onUpdate }) => {
@@ -49,7 +49,6 @@ const SettingsTab = ({ user, onUpdate }) => {
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  // ✅ Prevent duplicate fetches
   const hasFetchedSettings = useRef(false);
 
   useEffect(() => {
@@ -67,7 +66,6 @@ const SettingsTab = ({ user, onUpdate }) => {
       }
     } catch (error) {
       console.error('Failed to fetch notification settings:', error);
-      // ✅ Set default if error (silently fail)
       setNotificationSettings({
         email: {
           escrowUpdates: true,
@@ -393,7 +391,7 @@ const SettingsTab = ({ user, onUpdate }) => {
       </div>
 
       {/* Danger Zone - Delete Account */}
-      <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded-xl p-6">
+      <div className="bg-white dark:bg-gray-900 border-l-4 border-red-500 rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
             <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />

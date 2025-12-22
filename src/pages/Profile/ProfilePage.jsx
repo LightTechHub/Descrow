@@ -55,7 +55,6 @@ const ProfilePage = () => {
         const profileData = profileResponse.value.data;
         const userData = profileData.user || profileData;
         
-        // ✅ Ensure kycStatus structure is present
         if (!userData.kycStatus) {
           userData.kycStatus = {
             status: 'unverified',
@@ -73,7 +72,6 @@ const ProfilePage = () => {
         const kycData = kycResponse.value.data;
         setKycStatus(kycData);
         
-        // ✅ Stop polling if KYC is approved
         const isVerified = kycData.isKYCVerified && 
                           (kycData.status === 'approved' || kycData.status === 'completed');
         
@@ -100,7 +98,6 @@ const ProfilePage = () => {
     }
   }, [navigate]);
 
-  // ✅ Poll for KYC status updates when on KYC tab and not verified
   useEffect(() => {
     const isVerified = kycStatus?.isKYCVerified && 
                       (kycStatus?.status === 'approved' || kycStatus?.status === 'completed');
@@ -109,7 +106,7 @@ const ProfilePage = () => {
       pollIntervalRef.current = setInterval(() => {
         console.log('🔄 Polling KYC status...');
         fetchData(true);
-      }, 10000); // Poll every 10 seconds
+      }, 10000);
       
       return () => {
         if (pollIntervalRef.current) {
@@ -160,7 +157,6 @@ const ProfilePage = () => {
     fetchData();
   };
 
-  // ✅ NEW: Handle avatar upload
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
   };
@@ -169,13 +165,11 @@ const ProfilePage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('Please upload an image file');
       return;
     }
 
-    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Image must be less than 5MB');
       return;
@@ -188,7 +182,6 @@ const ProfilePage = () => {
       if (response.success) {
         toast.success('Profile picture updated successfully');
         
-        // ✅ Update user state with new avatar
         setUser(prev => ({
           ...prev,
           profilePicture: response.data.profilePicture || response.data.avatarUrl
@@ -199,7 +192,6 @@ const ProfilePage = () => {
       toast.error(error.message || 'Failed to upload avatar');
     } finally {
       setUploadingAvatar(false);
-      // Reset input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -261,7 +253,7 @@ const ProfilePage = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            {/* ✅ UPDATED: Avatar with upload functionality */}
+            {/* Avatar with upload functionality */}
             <div className="relative group">
               <input
                 ref={fileInputRef}
@@ -278,7 +270,7 @@ const ProfilePage = () => {
                   className="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-lg"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg">
+                <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg">
                   {user.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
               )}
@@ -362,7 +354,7 @@ const ProfilePage = () => {
 };
 
 const EmailVerificationWarning = () => (
-  <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+  <div className="mt-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-lg p-4">
     <div className="flex items-center gap-3">
       <Mail className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
       <div className="flex-1">
@@ -390,7 +382,7 @@ const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
   }
   
   return (
-    <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+    <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-lg p-4">
       <div className="flex items-center gap-3">
         <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
         <div className="flex-1">

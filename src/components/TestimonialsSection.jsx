@@ -10,11 +10,10 @@ const TestimonialsSection = () => {
   const testimonials = [
     {
       name: 'David Aderson',
-      role: 'SEO - Sarah Innovations',
+      role: 'CEO - Sarah Innovations',
       image: '👨‍💼',
       quote: 'Dealcross makes escrow payments, easy and secure, It\'s the best platform for protecting both parties in any transaction, Highly recommended.',
       rating: 5,
-      bgColor: 'from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20',
       verified: true
     },
     {
@@ -23,7 +22,6 @@ const TestimonialsSection = () => {
       image: '👩‍💼',
       quote: 'The best escrow service I\'ve used. My international transactions are now 100% secure and my customers love the protection it offers.',
       rating: 5,
-      bgColor: 'from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20',
       verified: true
     },
     {
@@ -32,7 +30,6 @@ const TestimonialsSection = () => {
       image: '👨‍💻',
       quote: 'Integrated the API in under 2 hours. Transaction disputes dropped to zero. This is exactly what our platform needed for trust and security.',
       rating: 5,
-      bgColor: 'from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20',
       verified: true
     }
   ];
@@ -67,7 +64,7 @@ const TestimonialsSection = () => {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: index * 0.1 }}
             >
-              <div className={`bg-gradient-to-br ${testimonial.bgColor} rounded-2xl p-8 border border-gray-200 dark:border-gray-800 hover:shadow-2xl transition-all duration-300 h-full flex flex-col`}>
+              <div className="bg-white dark:bg-gray-950 rounded-2xl p-8 border border-gray-200 dark:border-gray-800 hover:shadow-2xl transition-all duration-300 h-full flex flex-col">
                 {/* Quote Icon */}
                 <div className="mb-4">
                   <Quote className="w-10 h-10 text-blue-600 dark:text-blue-400 opacity-50" />
@@ -102,39 +99,41 @@ const TestimonialsSection = () => {
                       )}
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 transition-colors duration-300">
-                      {testimonial.role}​​​​​​​​​​​​​​​​
-                      </p>
+                      {testimonial.role}
+                    </p>
                   </div>
                 </div>
               </div>
             </motion.div>
           ))}
         </div>
+
         {/* Stats Section */}
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.6, delay: 0.4 }}
-      className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 text-center"
-    >
-      {[
-        { value: '10,000+', label: 'Active Users' },
-        { value: '$50M+', label: 'In Escrow' },
-        { value: '150+', label: 'Countries' },
-        { value: '99.9%', label: 'Uptime' }
-      ].map((stat, index) => (
-        <div key={index} className="bg-white dark:bg-gray-950 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-          <div className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-            {stat.value}
-          </div>
-          <div className="text-gray-600 dark:text-gray-400 text-sm">
-            {stat.label}
-          </div>
-        </div>
-      ))}
-    </motion.div>
-  </div>
-</section>
-);
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 text-center"
+        >
+          {[
+            { value: '10,000+', label: 'Active Users' },
+            { value: '$50M+', label: 'In Escrow' },
+            { value: '150+', label: 'Countries' },
+            { value: '99.9%', label: 'Uptime' }
+          ].map((stat, index) => (
+            <div key={index} className="bg-white dark:bg-gray-950 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
+              <div className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2">
+                {stat.value}
+              </div>
+              <div className="text-gray-600 dark:text-gray-400 text-sm">
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </motion.div>
+      </div>
+    </section>
+  );
 };
+
 export default TestimonialsSection;

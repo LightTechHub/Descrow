@@ -2,13 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Loader, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
-import { authService } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 import { GoogleLogin } from '@react-oauth/google';
 import { toast } from 'react-hot-toast';
 
-const Login = ({ setUser }) => {
+const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, googleLogin, isAuthenticated } = useAuth();
+  
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -17,6 +19,14 @@ const Login = ({ setUser }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('✅ Already authenticated, redirecting to dashboard');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     if (location.state?.message) {
@@ -41,7 +51,7 @@ const Login = ({ setUser }) => {
       setLoading(true);
       setError('');
       
-      const response = await authService.googleAuth({
+      const response = await googleLogin({
         credential: credentialResponse.credential
       });
       
@@ -53,28 +63,7 @@ const Login = ({ setUser }) => {
           return;
         }
 
-        try {
-          const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
-            headers: {
-              'Authorization': `Bearer ${response.token}`
-            }
-          });
-          
-          if (freshUserResponse.ok) {
-            const freshData = await freshUserResponse.json();
-            if (freshData.success && freshData.user) {
-              setUser(freshData.user);
-            } else {
-              setUser(response.user);
-            }
-          } else {
-            setUser(response.user);
-          }
-        } catch (fetchError) {
-          console.error('Failed to fetch fresh user data:', fetchError);
-          setUser(response.user);
-        }
-
+        toast.success('Login successful!');
         navigate('/dashboard', { replace: true });
       } else {
         setError(response.message || 'Google login failed');
@@ -102,7 +91,7 @@ const Login = ({ setUser }) => {
     try {
       setLoading(true);
       
-      const response = await authService.login({
+      const response = await login({
         email: formData.email.trim(),
         password: formData.password
       });
@@ -122,31 +111,8 @@ const Login = ({ setUser }) => {
         return;
       }
 
-      try {
-        const freshUserResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/users/me`, {
-          headers: {
-            'Authorization': `Bearer ${response.token}`
-          }
-        });
-        
-        if (freshUserResponse.ok) {
-          const freshData = await freshUserResponse.json();
-          if (freshData.success && freshData.user) {
-            setUser(freshData.user);
-          } else {
-            setUser(response.user);
-          }
-        } else {
-          setUser(response.user);
-        }
-      } catch (fetchError) {
-        console.error('Failed to fetch fresh user data:', fetchError);
-        setUser(response.user);
-      }
-
-      setTimeout(() => {
-        navigate('/dashboard', { replace: true });
-      }, 500);
+      toast.success('Login successful!');
+      navigate('/dashboard', { replace: true });
 
     } catch (err) {
       console.error('❌ Login error:', err);

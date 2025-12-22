@@ -1,407 +1,436 @@
-// File: src/services/profileService.js - WITH TRACKING
-
-import axios from 'axios';
-import { apiTracker } from '../utils/apiCallTracker';
+// File: src/services/profileService.js - FIXED & COMPLETE
+import api from '../config/api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  };
-};
-
 const profileService = {
-  // Get profile - WITH BLOCKING
+  // Get profile
   getProfile: async () => {
-    apiTracker.logCall('/profile', 'profileService.getProfile');
-    
-    return apiTracker.blockDuplicate('/profile', async () => {
-      const response = await axios.get(
-        `${API_URL}/profile`,
-        getAuthHeaders()
-      );
+    try {
+      const response = await api.get('/users/me');
       return response.data;
-    });
+    } catch (error) {
+      console.error('Get profile error:', error);
+      throw error;
+    }
   },
 
-  // Get KYC Status - WITH BLOCKING
+  // Get KYC Status
   getKYCStatus: async () => {
-    apiTracker.logCall('/users/profile', 'profileService.getKYCStatus');
-    
-    return apiTracker.blockDuplicate('/users/profile-kyc', async () => {
-      try {
-        const response = await axios.get(
-          `${API_URL}/users/profile`,
-          getAuthHeaders()
-        );
-        
-        if (response.data.success) {
-          return {
-            success: true,
-            data: {
-              status: response.data.data?.user?.kycStatus?.status || 'unverified',
-              tier: response.data.data?.user?.kycStatus?.tier || 'basic',
-              submittedAt: response.data.data?.user?.kycStatus?.submittedAt,
-              reviewedAt: response.data.data?.user?.kycStatus?.reviewedAt,
-              rejectionReason: response.data.data?.user?.kycStatus?.rejectionReason,
-              resubmissionAllowed: response.data.data?.user?.kycStatus?.resubmissionAllowed,
-              personalInfo: response.data.data?.user?.kycStatus?.personalInfo,
-              businessInfo: response.data.data?.user?.kycStatus?.businessInfo,
-              approvedBy: response.data.data?.user?.kycStatus?.approvedBy,
-              isKYCVerified: response.data.data?.user?.isKYCVerified || false
-            }
-          };
-        }
-        
+    try {
+      const response = await api.get('/users/profile');
+      
+      if (response.data.success) {
+        const kycData = response.data.data?.user?.kycStatus || {};
         return {
           success: true,
           data: {
-            status: 'unverified',
-            tier: 'basic',
-            isKYCVerified: false
+            status: kycData.status || 'unverified',
+            tier: kycData.tier || 'basic',
+            submittedAt: kycData.submittedAt,
+            reviewedAt: kycData.reviewedAt,
+            rejectionReason: kycData.rejectionReason,
+            resubmissionAllowed: kycData.resubmissionAllowed,
+            personalInfo: kycData.personalInfo || {},
+            businessInfo: kycData.businessInfo || {},
+            approvedBy: kycData.approvedBy,
+            isKYCVerified: response.data.data?.user?.isKYCVerified || false,
+            documents: kycData.documents || []
           }
         };
-        
-      } catch (error) {
-        console.error('Get KYC status error:', error);
-        
-        return {
-          success: false,
-          data: {
-            status: 'unverified',
-            tier: 'basic',
-            isKYCVerified: false
-          },
-          error: error.message
-        };
       }
-    });
+      
+      return {
+        success: true,
+        data: {
+          status: 'unverified',
+          tier: 'basic',
+          isKYCVerified: false,
+          documents: []
+        }
+      };
+      
+    } catch (error) {
+      console.error('Get KYC status error:', error);
+      return {
+        success: false,
+        data: {
+          status: 'unverified',
+          tier: 'basic',
+          isKYCVerified: false,
+          documents: []
+        },
+        error: error.message
+      };
+    }
   },
 
   // Update profile
   updateProfile: async (data) => {
-    const response = await axios.put(
-      `${API_URL}/profile`,
-      data,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.put('/profile', data);
+      return response.data;
+    } catch (error) {
+      console.error('Update profile error:', error);
+      throw error;
+    }
   },
 
   // Upload avatar
   uploadAvatar: async (file) => {
-    const formData = new FormData();
-    formData.append('avatar', file);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
 
-    const token = localStorage.getItem('token');
-    const response = await axios.post(
-      `${API_URL}/profile/avatar`,
-      formData,
-      {
+      const response = await api.post('/profile/avatar', formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
         }
-      }
-    );
-    return response.data;
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Upload avatar error:', error);
+      throw error;
+    }
   },
 
+  // KYC Methods
   startKYCVerification: async () => {
-    const response = await axios.post(
-      `${API_URL}/users/kyc/start`,
-      {},
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/users/kyc/start');
+      return response.data;
+    } catch (error) {
+      console.error('Start KYC error:', error);
+      throw error;
+    }
   },
 
   checkKYCStatus: async () => {
-    const response = await axios.get(
-      `${API_URL}/users/kyc/status`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/users/kyc/status');
+      return response.data;
+    } catch (error) {
+      console.error('Check KYC status error:', error);
+      throw error;
+    }
   },
 
-  // 🔥 NEW: Reset KYC Verification
   resetKYCVerification: async () => {
-    const response = await axios.post(
-      `${API_URL}/users/kyc/reset`,
-      {},
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/users/kyc/reset');
+      return response.data;
+    } catch (error) {
+      console.error('Reset KYC error:', error);
+      throw error;
+    }
   },
 
   submitKYC: async (kycData) => {
-    const response = await axios.post(
-      `${API_URL}/users/upload-kyc`,
-      kycData,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/users/upload-kyc', kycData);
+      return response.data;
+    } catch (error) {
+      console.error('Submit KYC error:', error);
+      throw error;
+    }
   },
 
+  // Tier Methods
   getTierInfo: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile/tier-info`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/tier-info');
+      return response.data;
+    } catch (error) {
+      console.error('Get tier info error:', error);
+      throw error;
+    }
   },
 
   calculateUpgradeBenefits: async (targetTier) => {
-    const response = await axios.get(
-      `${API_URL}/profile/upgrade-benefits`,
-      {
-        ...getAuthHeaders(),
+    try {
+      const response = await api.get('/profile/upgrade-benefits', {
         params: { targetTier }
-      }
-    );
-    return response.data;
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Calculate upgrade benefits error:', error);
+      throw error;
+    }
   },
 
   initiateTierUpgrade: async (upgradeData) => {
-    const response = await axios.post(
-      `${API_URL}/profile/initiate-upgrade`,
-      upgradeData,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/initiate-upgrade', upgradeData);
+      return response.data;
+    } catch (error) {
+      console.error('Initiate tier upgrade error:', error);
+      throw error;
+    }
   },
 
   completeTierUpgrade: async (paymentData) => {
-    const response = await axios.post(
-      `${API_URL}/profile/complete-upgrade`,
-      paymentData,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/complete-upgrade', paymentData);
+      return response.data;
+    } catch (error) {
+      console.error('Complete tier upgrade error:', error);
+      throw error;
+    }
   },
 
   cancelSubscription: async () => {
-    const response = await axios.post(
-      `${API_URL}/profile/cancel-subscription`,
-      {},
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/cancel-subscription');
+      return response.data;
+    } catch (error) {
+      console.error('Cancel subscription error:', error);
+      throw error;
+    }
   },
 
   renewSubscription: async (paymentReference) => {
-    const response = await axios.post(
-      `${API_URL}/profile/renew-subscription`,
-      { paymentReference },
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/renew-subscription', { paymentReference });
+      return response.data;
+    } catch (error) {
+      console.error('Renew subscription error:', error);
+      throw error;
+    }
   },
 
+  // Statistics
   getUserStatistics: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile/statistics`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/statistics');
+      return response.data;
+    } catch (error) {
+      console.error('Get user statistics error:', error);
+      throw error;
+    }
   },
 
+  // 2FA Methods
   enable2FA: async () => {
-    const response = await axios.post(
-      `${API_URL}/profile/enable-2fa`,
-      {},
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/enable-2fa');
+      return response.data;
+    } catch (error) {
+      console.error('Enable 2FA error:', error);
+      throw error;
+    }
   },
 
   verify2FA: async (token) => {
-    const response = await axios.post(
-      `${API_URL}/profile/verify-2fa`,
-      { token },
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/verify-2fa', { token });
+      return response.data;
+    } catch (error) {
+      console.error('Verify 2FA error:', error);
+      throw error;
+    }
   },
 
   disable2FA: async (password) => {
-    const response = await axios.post(
-      `${API_URL}/profile/disable-2fa`,
-      { password },
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/disable-2fa', { password });
+      return response.data;
+    } catch (error) {
+      console.error('Disable 2FA error:', error);
+      throw error;
+    }
   },
 
+  // Password & Account
   changePassword: async (currentPassword, newPassword) => {
-    const response = await axios.post(
-      `${API_URL}/profile/change-password`,
-      { currentPassword, newPassword },
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/change-password', {
+        currentPassword,
+        newPassword
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Change password error:', error);
+      throw error;
+    }
   },
 
   deleteAccount: async (password, reason) => {
-    const response = await axios.post(
-      `${API_URL}/profile/delete-account`,
-      { password, reason },
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/delete-account', {
+        password,
+        reason
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Delete account error:', error);
+      throw error;
+    }
   },
 
-  // Bank account methods
+  // Bank Account Methods
   getBankAccounts: async () => {
-    apiTracker.logCall('/bank/list', 'profileService.getBankAccounts');
-    
-    return apiTracker.blockDuplicate('/bank/list', async () => {
-      const response = await axios.get(
-        `${API_URL}/bank/list`,
-        getAuthHeaders()
-      );
+    try {
+      const response = await api.get('/bank/list');
       return response.data;
-    });
+    } catch (error) {
+      console.error('Get bank accounts error:', error);
+      throw error;
+    }
   },
 
   getBanks: async (params = {}) => {
-    const response = await axios.get(
-      `${API_URL}/bank/banks`,
-      {
-        ...getAuthHeaders(),
-        params
-      }
-    );
-    return response.data;
+    try {
+      const response = await api.get('/bank/banks', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Get banks error:', error);
+      throw error;
+    }
   },
 
   addBankAccount: async (data) => {
-    const response = await axios.post(
-      `${API_URL}/bank/add`,
-      data,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/bank/add', data);
+      return response.data;
+    } catch (error) {
+      console.error('Add bank account error:', error);
+      throw error;
+    }
   },
 
   deleteBankAccount: async (accountId) => {
-    const response = await axios.delete(
-      `${API_URL}/bank/${accountId}`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.delete(`/bank/${accountId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Delete bank account error:', error);
+      throw error;
+    }
   },
 
   setPrimaryBankAccount: async (accountId) => {
-    const response = await axios.put(
-      `${API_URL}/bank/primary/${accountId}`,
-      {},
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.put(`/bank/primary/${accountId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Set primary bank account error:', error);
+      throw error;
+    }
   },
 
   validateBankAccount: async (data) => {
-    const response = await axios.post(
-      `${API_URL}/bank/validate`,
-      data,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/bank/validate', data);
+      return response.data;
+    } catch (error) {
+      console.error('Validate bank account error:', error);
+      throw error;
+    }
   },
 
+  // Wallet & Transactions
   getWalletBalance: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile/wallet`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/wallet');
+      return response.data;
+    } catch (error) {
+      console.error('Get wallet balance error:', error);
+      throw error;
+    }
   },
 
   getTransactionHistory: async (params = {}) => {
-    const response = await axios.get(
-      `${API_URL}/profile/transactions`,
-      {
-        ...getAuthHeaders(),
-        params
-      }
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/transactions', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Get transaction history error:', error);
+      throw error;
+    }
   },
 
   withdrawFunds: async (withdrawalData) => {
-    const response = await axios.post(
-      `${API_URL}/profile/withdraw`,
-      withdrawalData,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/withdraw', withdrawalData);
+      return response.data;
+    } catch (error) {
+      console.error('Withdraw funds error:', error);
+      throw error;
+    }
   },
 
+  // Escrow & Disputes
   getEscrowStats: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile/escrow-stats`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/escrow-stats');
+      return response.data;
+    } catch (error) {
+      console.error('Get escrow stats error:', error);
+      throw error;
+    }
   },
 
   getDisputeHistory: async (params = {}) => {
-    const response = await axios.get(
-      `${API_URL}/profile/disputes`,
-      {
-        ...getAuthHeaders(),
-        params
-      }
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/disputes', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Get dispute history error:', error);
+      throw error;
+    }
   },
 
+  // Security Settings
   getSecuritySettings: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile/security-settings`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/security-settings');
+      return response.data;
+    } catch (error) {
+      console.error('Get security settings error:', error);
+      throw error;
+    }
   },
 
   updateSecuritySettings: async (settings) => {
-    const response = await axios.put(
-      `${API_URL}/profile/security-settings`,
-      settings,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.put('/profile/security-settings', settings);
+      return response.data;
+    } catch (error) {
+      console.error('Update security settings error:', error);
+      throw error;
+    }
   },
 
+  // API Keys
   getAPIKeys: async () => {
-    const response = await axios.get(
-      `${API_URL}/profile/api-keys`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.get('/profile/api-keys');
+      return response.data;
+    } catch (error) {
+      console.error('Get API keys error:', error);
+      throw error;
+    }
   },
 
   createAPIKey: async (keyData) => {
-    const response = await axios.post(
-      `${API_URL}/profile/api-keys`,
-      keyData,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.post('/profile/api-keys', keyData);
+      return response.data;
+    } catch (error) {
+      console.error('Create API key error:', error);
+      throw error;
+    }
   },
 
   deleteAPIKey: async (keyId) => {
-    const response = await axios.delete(
-      `${API_URL}/profile/api-keys/${keyId}`,
-      getAuthHeaders()
-    );
-    return response.data;
+    try {
+      const response = await api.delete(`/profile/api-keys/${keyId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Delete API key error:', error);
+      throw error;
+    }
   }
 };
 

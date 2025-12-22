@@ -11,7 +11,7 @@ const TestimonialsSection = () => {
     {
       name: 'David Aderson',
       role: 'CEO - Sarah Innovations',
-      image: '👨‍💼',
+      image: '/images/testimonial-david.jpg', // Replace with your image path
       quote: 'Dealcross makes escrow payments, easy and secure, It\'s the best platform for protecting both parties in any transaction, Highly recommended.',
       rating: 5,
       verified: true
@@ -19,7 +19,7 @@ const TestimonialsSection = () => {
     {
       name: 'Sarah Johnson',
       role: 'E-commerce Entrepreneur',
-      image: '👩‍💼',
+      image: '/images/testimonial-sarah.jpg', // Replace with your image path
       quote: 'The best escrow service I\'ve used. My international transactions are now 100% secure and my customers love the protection it offers.',
       rating: 5,
       verified: true
@@ -27,7 +27,7 @@ const TestimonialsSection = () => {
     {
       name: 'Michael Chen',
       role: 'Marketplace Owner',
-      image: '👨‍💻',
+      image: '/images/testimonial-michael.jpg', // Replace with your image path
       quote: 'Integrated the API in under 2 hours. Transaction disputes dropped to zero. This is exactly what our platform needed for trust and security.',
       rating: 5,
       verified: true
@@ -84,7 +84,11 @@ const TestimonialsSection = () => {
 
                 {/* Author Info */}
                 <div className="flex items-center gap-4 pt-6 border-t border-gray-300 dark:border-gray-700">
-                  <div className="text-5xl flex-shrink-0">{testimonial.image}</div>
+                  <img 
+                    src={testimonial.image}
+                    alt={testimonial.name}
+                    className="w-16 h-16 rounded-full object-cover flex-shrink-0"
+                  />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-gray-900 dark:text-white transition-colors duration-300">

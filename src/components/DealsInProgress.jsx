@@ -1,6 +1,6 @@
 // File: src/components/DealsInProgress.jsx
 import React, { useState, useEffect } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap, TrendingUp } from 'lucide-react';
 import API from '../utils/api';
 import { toast } from 'react-hot-toast';
 
@@ -147,29 +147,26 @@ const DealsInProgress = () => {
   const [allDeals, setAllDeals] = useState(mockDeals);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Fetch real deals from backend (FIXED ENDPOINT)
+  // Fetch real deals from backend
   useEffect(() => {
     const fetchDeals = async () => {
       try {
-        // ✅ FIXED: Changed from '/deals/public' to '/escrow/public'
         const res = await API.get('/escrow/public');
         
-        // Your backend returns { success: true, deals: array }
         if (res.data.success && Array.isArray(res.data.deals) && res.data.deals.length > 0) {
           const realDeals = res.data.deals.map((deal) => ({
-            buyer: 'User', // Backend doesn't return buyer/seller names for privacy
+            buyer: 'User',
             seller: 'Seller',
             itemName: deal.title || 'Transaction',
-            location: 'Online', // Backend doesn't return location
+            location: 'Online',
             condition: deal.category === 'services' ? 'N/A' : 'New',
             amount: `$${deal.amount}`,
-            status: 'Completed ✅', // These are completed deals from backend
+            status: 'Completed ✅',
           }));
           setAllDeals([...realDeals, ...mockDeals]);
         }
       } catch (err) {
         console.error('Failed to fetch real deals:', err.message);
-        // Keep using mock data if API fails
       }
     };
 
@@ -187,68 +184,117 @@ const DealsInProgress = () => {
   const currentDeal = allDeals[currentIndex];
 
   return (
-    <section className="py-12 bg-white dark:bg-gray-950 text-center transition-colors duration-300">
+    <section className="py-16 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <div className="max-w-6xl mx-auto px-4">
         {/* Section Title */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <Zap className="w-6 h-6 text-yellow-500 animate-pulse" />
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Deals in Progress
-          </h2>
-          <span className="px-3 py-1 bg-red-500 text-white text-xs font-semibold rounded-full animate-pulse">
-            LIVE
-          </span>
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-full mb-4">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-sm font-semibold text-green-700 dark:text-green-400">LIVE TRANSACTIONS</span>
+          </div>
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
+              Deals in Progress
+            </h2>
+          </div>
+          <p className="text-gray-600 dark:text-gray-400">
+            Real-time transactions happening right now on Dealcross
+          </p>
         </div>
 
-        {/* Deal Card */}
-        <div className="max-w-md mx-auto">
+        {/* Deal Card - Professional Clean Design */}
+        <div className="max-w-2xl mx-auto">
           <div
             key={currentIndex}
-            className="bg-blue-900 dark:bg-blue-800 text-white rounded-2xl shadow-xl p-8 transition-all duration-500 hover:shadow-2xl hover:scale-105"
+            className="bg-white dark:bg-gray-950 rounded-2xl shadow-lg border-2 border-gray-200 dark:border-gray-800 p-6 md:p-8 transition-all duration-500 hover:shadow-xl hover:border-blue-500 dark:hover:border-blue-400"
           >
-            <h3 className="text-xl font-semibold mb-4">
-              {currentDeal?.buyer} purchasing {currentDeal?.itemName} from{' '}
-              {currentDeal?.seller}
-            </h3>
-            <div className="space-y-2 text-left">
-              <p>
-                <strong>Location:</strong> {currentDeal?.location}
-              </p>
-              <p>
-                <strong>Condition:</strong> {currentDeal?.condition}
-              </p>
-              <p>
-                <strong>Amount:</strong> {currentDeal?.amount}
-              </p>
-              <p>
-                <strong>Status:</strong>{' '}
-                <span className="px-2 py-1 bg-white/20 rounded-md">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex-1">
+                <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white mb-2">
+                  {currentDeal?.itemName}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">{currentDeal?.buyer}</span>
+                  {' '} purchasing from {' '}
+                  <span className="font-semibold text-green-600 dark:text-green-400">{currentDeal?.seller}</span>
+                </p>
+              </div>
+              <div className="flex-shrink-0 ml-4">
+                <span className="inline-flex items-center px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">
                   {currentDeal?.status}
                 </span>
-              </p>
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 font-medium">Location</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  {currentDeal?.location}
+                </p>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 font-medium">Condition</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {currentDeal?.condition}
+                </p>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800 sm:col-span-2">
+                <p className="text-xs text-blue-600 dark:text-blue-400 mb-1 font-medium">Escrow Amount</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {currentDeal?.amount}
+                </p>
+              </div>
+            </div>
+
+            {/* Security Badge */}
+            <div className="mt-6 flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span className="font-medium">Protected by Dealcross Escrow</span>
             </div>
           </div>
         </div>
 
         {/* Progress Dots */}
-        <div className="flex justify-center gap-2 mt-6">
+        <div className="flex justify-center gap-2 mt-8">
           {allDeals.map((_, index) => (
-            <div
+            <button
               key={index}
+              onClick={() => setCurrentIndex(index)}
               className={`h-2 rounded-full transition-all duration-300 ${
                 index === currentIndex
                   ? 'w-8 bg-blue-600 dark:bg-blue-400'
-                  : 'w-2 bg-gray-300 dark:bg-gray-700'
+                  : 'w-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600'
               }`}
+              aria-label={`Go to transaction ${index + 1}`}
             />
           ))}
         </div>
 
         {/* Live Stats */}
         <div className="mt-8 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            🔄 Live updates every 7 seconds • {allDeals.length} active transactions worldwide
-          </p>
+          <div className="inline-flex items-center gap-2 bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-full border border-gray-200 dark:border-gray-700">
+            <svg className="w-4 h-4 text-green-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            </svg>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Live updates every 7 seconds • <span className="font-semibold text-blue-600 dark:text-blue-400">{allDeals.length}</span> active transactions worldwide
+            </span>
+          </div>
         </div>
       </div>
     </section>

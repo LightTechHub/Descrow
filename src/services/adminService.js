@@ -1,10 +1,8 @@
-// src/services/adminService.js - COMPLETE FIXED VERSION
-
+// src/services/adminService.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://dealcross.net/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
-// Create axios instance
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -13,7 +11,6 @@ const api = axios.create({
   timeout: 30000
 });
 
-// Add token to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('adminToken');
@@ -25,7 +22,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle 401 errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -38,10 +34,7 @@ api.interceptors.response.use(
   }
 );
 
-// ==================== ADMIN SERVICE ====================
-
 const adminService = {
-  // Login
   login: async (credentials) => {
     try {
       console.log('📡 Admin login request:', credentials.email);
@@ -66,25 +59,21 @@ const adminService = {
     }
   },
 
-  // Logout
   logout: () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('admin');
   },
 
-  // Dashboard
   getDashboardStats: async () => {
     const response = await api.get('/admin/dashboard');
     return response.data;
   },
 
-  // Transactions
   getTransactions: async (params = {}) => {
     const response = await api.get('/admin/transactions', { params });
     return response.data;
   },
 
-  // Disputes
   getDisputes: async (params = {}) => {
     const response = await api.get('/admin/disputes', { params });
     return response.data;
@@ -95,7 +84,6 @@ const adminService = {
     return response.data;
   },
 
-  // Users
   getUsers: async (params = {}) => {
     const response = await api.get('/admin/users', { params });
     return response.data;
@@ -116,7 +104,6 @@ const adminService = {
     return response.data;
   },
 
-  // Analytics
   getAnalytics: async (params = {}) => {
     const response = await api.get('/admin/analytics', { params });
     return response.data;
@@ -127,7 +114,6 @@ const adminService = {
     return response.data;
   },
 
-  // Admin Management
   getAdmins: async () => {
     const response = await api.get('/admin/admins');
     return response.data;
@@ -153,7 +139,6 @@ const adminService = {
     return response.data;
   },
 
-  // Fee Management
   getFeeSettings: async () => {
     const response = await api.get('/admin/fees');
     return response.data;
@@ -185,8 +170,5 @@ const adminService = {
   }
 };
 
-// Export default
 export default adminService;
-
-// Named export
 export { adminService };

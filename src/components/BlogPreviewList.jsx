@@ -16,7 +16,7 @@ const BlogPreviewList = () => {
       readTime: '5 min read',
       category: 'Security',
       link: '/blog/safe-online-trading',
-      color: 'from-blue-500 to-blue-600'
+      color: '#1e3a5f'
     },
     {
       title: 'Understanding Escrow Services',
@@ -25,7 +25,7 @@ const BlogPreviewList = () => {
       readTime: '8 min read',
       category: 'Education',
       link: '/blog/understanding-escrow',
-      color: 'from-purple-500 to-purple-600'
+      color: '#2d4a7c'
     },
     {
       title: 'Cryptocurrency Payments Explained',
@@ -34,12 +34,12 @@ const BlogPreviewList = () => {
       readTime: '6 min read',
       category: 'Crypto',
       link: '/blog/cryptocurrency-payments',
-      color: 'from-orange-500 to-orange-600'
+      color: '#10b981'
     }
   ];
 
   return (
-    <section className="py-20 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <section className="py-20 bg-[#f8fafc] dark:bg-[#0f1419] transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <motion.div
@@ -47,8 +47,8 @@ const BlogPreviewList = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex items-center gap-2 bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-full mb-4">
-              <span className="text-sm font-semibold text-green-700 dark:text-green-300">📚 Blog</span>
+            <div className="inline-flex items-center gap-2 bg-[#10b981] px-4 py-2 rounded-lg mb-4">
+              <span className="text-sm font-semibold text-white">📚 Blog</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-300">
               Latest from Our Blog
@@ -69,15 +69,18 @@ const BlogPreviewList = () => {
             >
               <Link
                 to={post.link}
-                className="group block bg-white dark:bg-gray-950 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 hover:shadow-2xl transition-all duration-300 h-full"
+                className="group block bg-white dark:bg-[#1e2936] rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-2xl hover:border-[#1e3a5f] dark:hover:border-[#2d4a7c] transition-all duration-300 h-full"
               >
                 {/* Category Badge */}
-                <div className={`h-2 bg-gradient-to-r ${post.color}`}></div>
+                <div className="h-2" style={{ backgroundColor: post.color }}></div>
                 
                 <div className="p-8">
                   {/* Category & Date */}
                   <div className="flex items-center justify-between mb-4">
-                    <span className={`px-3 py-1 bg-gradient-to-r ${post.color} text-white text-xs font-semibold rounded-full`}>
+                    <span 
+                      className="px-3 py-1 text-white text-xs font-semibold rounded-lg"
+                      style={{ backgroundColor: post.color }}
+                    >
                       {post.category}
                     </span>
                     <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -87,7 +90,7 @@ const BlogPreviewList = () => {
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-[#1e3a5f] dark:group-hover:text-[#2d4a7c] transition-colors duration-200">
                     {post.title}
                   </h3>
 
@@ -97,12 +100,12 @@ const BlogPreviewList = () => {
                   </p>
 
                   {/* Meta Info */}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                       <Calendar className="w-4 h-4" />
                       <span>{post.date}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-3 transition-all duration-200">
+                    <div className="flex items-center gap-2 text-[#1e3a5f] dark:text-[#2d4a7c] font-semibold group-hover:gap-3 transition-all duration-200">
                       <span>Read More</span>
                       <ArrowRight className="w-4 h-4" />
                     </div>
@@ -122,7 +125,7 @@ const BlogPreviewList = () => {
         >
           <Link
             to="/blog"
-            className="inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+            className="inline-flex items-center gap-3 px-8 py-4 bg-[#1e3a5f] dark:bg-[#2d4a7c] text-white rounded-xl font-semibold hover:bg-[#2d4a7c] dark:hover:bg-[#3d5a8c] transition-all duration-200 shadow-lg hover:shadow-xl"
           >
             View All Posts
             <ArrowRight className="w-5 h-5" />

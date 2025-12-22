@@ -36,7 +36,7 @@ const FAQPreview = () => {
   ];
 
   return (
-    <section id="faq" className="py-20 bg-white dark:bg-gray-950 transition-colors duration-300">
+    <section id="faq" className="py-20 bg-white dark:bg-[#0f1419] transition-colors duration-300">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <motion.div
@@ -44,9 +44,9 @@ const FAQPreview = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex items-center gap-2 bg-purple-100 dark:bg-purple-900/30 px-4 py-2 rounded-full mb-4">
-              <HelpCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">FAQ</span>
+            <div className="inline-flex items-center gap-2 bg-[#1e3a5f] dark:bg-[#2d4a7c] px-4 py-2 rounded-lg mb-4">
+              <HelpCircle className="w-5 h-5 text-white" />
+              <span className="text-sm font-semibold text-white">FAQ</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-300">
               Frequently Asked Questions
@@ -66,21 +66,21 @@ const FAQPreview = () => {
               transition={{ duration: 0.4, delay: index * 0.1 }}
             >
               <div
-                className={`bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 transition-all duration-300 overflow-hidden ${
+                className={`bg-[#f8fafc] dark:bg-[#1e2936] rounded-xl border-2 transition-all duration-300 overflow-hidden ${
                   openIndex === index
-                    ? 'border-blue-500 dark:border-blue-400 shadow-lg'
-                    : 'border-gray-200 dark:border-gray-800'
+                    ? 'border-[#1e3a5f] dark:border-[#2d4a7c] shadow-lg'
+                    : 'border-gray-200 dark:border-gray-700'
                 }`}
               >
                 <button
                   onClick={() => setOpenIndex(openIndex === index ? -1 : index)}
-                  className="w-full flex justify-between items-center p-6 text-left hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+                  className="w-full flex justify-between items-center p-6 text-left hover:bg-gray-50 dark:hover:bg-[#252f3f] transition-colors duration-200"
                 >
                   <span className="font-semibold text-lg text-gray-900 dark:text-white pr-8">
                     {faq.question}
                   </span>
                   <ChevronDown
-                    className={`w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 transition-transform duration-300 ${
+                    className={`w-6 h-6 text-[#1e3a5f] dark:text-[#2d4a7c] flex-shrink-0 transition-transform duration-300 ${
                       openIndex === index ? 'rotate-180' : ''
                     }`}
                   />
@@ -105,7 +105,7 @@ const FAQPreview = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, delay: 0.6 }}
-          className="mt-12 text-center bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl p-8 border border-blue-200 dark:border-blue-800"
+          className="mt-12 text-center bg-[#f8fafc] dark:bg-[#1e2936] rounded-2xl p-8 border border-gray-200 dark:border-gray-700"
         >
           <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
             Still have questions?
@@ -113,7 +113,7 @@ const FAQPreview = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Our support team is here to help you 24/7
           </p>
-          <button className="px-8 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all duration-200 shadow-lg">
+          <button className="px-8 py-3 bg-[#1e3a5f] dark:bg-[#2d4a7c] text-white rounded-xl font-semibold hover:bg-[#2d4a7c] dark:hover:bg-[#3d5a8c] transition-all duration-200 shadow-lg">
             Contact Support
           </button>
         </motion.div>

@@ -10,38 +10,32 @@ const PaymentMethods = () => {
     {
       icon: '💳',
       title: 'Credit & Debit Cards',
-      description: 'Visa, Mastercard, Amex',
-      color: 'from-blue-500 to-blue-600'
+      description: 'Visa, Mastercard, Amex'
     },
     {
       icon: '🏦',
       title: 'Bank Transfer',
-      description: 'Direct bank payments',
-      color: 'from-green-500 to-green-600'
+      description: 'Direct bank payments'
     },
     {
       icon: '₿',
       title: 'Cryptocurrency',
-      description: 'Bitcoin, Ethereum, USDT',
-      color: 'from-orange-500 to-orange-600'
+      description: 'Bitcoin, Ethereum, USDT'
     },
     {
       icon: '📱',
       title: 'Mobile Money',
-      description: 'M-Pesa, Airtel Money',
-      color: 'from-purple-500 to-purple-600'
+      description: 'M-Pesa, Airtel Money'
     },
     {
       icon: '💰',
       title: 'PayPal',
-      description: 'Global digital wallet',
-      color: 'from-indigo-500 to-indigo-600'
+      description: 'Global digital wallet'
     },
     {
       icon: '🌍',
       title: 'International',
-      description: 'Multi-currency support',
-      color: 'from-teal-500 to-teal-600'
+      description: 'Multi-currency support'
     }
   ];
 
@@ -92,7 +86,7 @@ const PaymentMethods = () => {
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, delay: 0.6 }}
-          className="mt-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-center text-white"
+          className="mt-16 bg-blue-600 rounded-2xl p-8 text-center text-white"
         >
           <h3 className="text-2xl font-bold mb-3">Instant Settlement</h3>
           <p className="text-blue-100 mb-6 max-w-2xl mx-auto">

@@ -5,7 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { Toaster } from 'react-hot-toast';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { UserProvider } from './context/UserContext';
+import { AuthProvider } from './contexts/AuthContext';
 import App from './App';
 import './index.css';
 import './i18n'; // Initialize translations
@@ -17,7 +17,7 @@ root.render(
     <GoogleOAuthProvider clientId="93715735-ch7proqtrq07jj1u3d12iunpsuhggjk1.apps.googleusercontent.com">
       <HelmetProvider>
         <BrowserRouter>
-          <UserProvider>
+          <AuthProvider>
             <App />
 
             {/* ✅ Global Toast Notifications */}
@@ -46,7 +46,7 @@ root.render(
                 },
               }}
             />
-          </UserProvider>
+          </AuthProvider>
         </BrowserRouter>
       </HelmetProvider>
     </GoogleOAuthProvider>

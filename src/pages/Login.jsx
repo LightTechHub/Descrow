@@ -255,7 +255,7 @@ const Login = ({ setUser }) => {
             {error && (
               <div className="mb-6 bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"/>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-red-800">{error}</p>
                     {error.toLowerCase().includes('verify') && (
@@ -312,7 +312,7 @@ const Login = ({ setUser }) => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white text-gray-900 placeholder-gray-400"
                     placeholder="you@example.com"
                     required
                     autoComplete="email"
@@ -332,7 +332,7 @@ const Login = ({ setUser }) => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white text-gray-900 placeholder-gray-400"
                     placeholder="Enter your password"
                     required
                     autoComplete="current-password"

@@ -21,8 +21,7 @@ const FastPayouts = () => {
         'Standard processing'
       ],
       highlight: false,
-      bgColor: 'bg-white dark:bg-gray-900',
-      buttonColor: 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+      buttonColor: 'bg-gray-600 hover:bg-gray-700'
     },
     {
       name: 'Basic',
@@ -36,8 +35,7 @@ const FastPayouts = () => {
         'API access'
       ],
       highlight: false,
-      bgColor: 'bg-white dark:bg-gray-900',
-      buttonColor: 'bg-blue-600 text-white hover:bg-blue-700'
+      buttonColor: 'bg-blue-600 hover:bg-blue-700'
     },
     {
       name: 'Pro',
@@ -52,11 +50,10 @@ const FastPayouts = () => {
         'Custom integration'
       ],
       highlight: true,
-      bgColor: 'bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20',
-      buttonColor: 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
+      buttonColor: 'bg-green-600 hover:bg-green-700'
     },
     {
-      name: 'Custom',
+      name: 'Enterprise',
       price: 'Contact',
       period: '',
       features: [
@@ -68,13 +65,12 @@ const FastPayouts = () => {
         'SLA guarantees'
       ],
       highlight: false,
-      bgColor: 'bg-white dark:bg-gray-900',
-      buttonColor: 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100'
+      buttonColor: 'bg-purple-600 hover:bg-purple-700'
     }
   ];
 
   return (
-    <section id="pricing" className="py-20 bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-950 transition-colors duration-300">
+    <section id="pricing" className="py-20 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <motion.div
@@ -102,15 +98,15 @@ const FastPayouts = () => {
             >
               {plan.highlight && (
                 <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 z-10">
-                  <span className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold shadow-lg">
+                  <span className="bg-green-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold shadow-lg">
                     Most Popular
                   </span>
                 </div>
               )}
 
-              <div className={`${plan.bgColor} rounded-2xl p-8 border-2 ${
+              <div className={`bg-white dark:bg-gray-950 rounded-2xl p-8 border-2 ${
                 plan.highlight 
-                  ? 'border-blue-500 dark:border-blue-400 shadow-2xl scale-105' 
+                  ? 'border-green-500 dark:border-green-400 shadow-2xl scale-105' 
                   : 'border-gray-200 dark:border-gray-800 shadow-lg'
               } transition-all duration-300 hover:shadow-xl h-full flex flex-col`}>
                 
@@ -151,9 +147,9 @@ const FastPayouts = () => {
 
                 <button
                   onClick={() => navigate('/signup')}
-                  className={`w-full py-3.5 rounded-xl font-semibold transition-all duration-200 shadow-lg ${plan.buttonColor}`}
+                  className={`w-full py-3.5 rounded-xl font-semibold transition-all duration-200 shadow-lg text-white ${plan.buttonColor}`}
                 >
-                  {plan.name === 'Custom' ? 'Contact Sales' : 'Get Started'}
+                  {plan.name === 'Enterprise' ? 'Contact Sales' : 'Get Started'}
                 </button>
               </div>
             </motion.div>

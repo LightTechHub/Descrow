@@ -9,10 +9,17 @@ const HeroSection = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  // User testimonial images - You can replace these with your uploaded images
+  const userImages = [
+    '/images/user1.jpg', // Replace with your image paths
+    '/images/user2.jpg',
+    '/images/user3.jpg'
+  ];
+
   return (
-    <section className="relative bg-[#1e3a5f] py-20 overflow-hidden">
-      {/* Subtle Background Elements */}
-      <div className="absolute inset-0 overflow-hidden opacity-10">
+    <section className="relative bg-white dark:bg-[#1e3a5f] py-20 overflow-hidden transition-colors duration-300">
+      {/* Subtle Background Elements - Only visible in dark mode */}
+      <div className="absolute inset-0 overflow-hidden opacity-0 dark:opacity-10 transition-opacity duration-300">
         <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400 rounded-full blur-3xl"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-400 rounded-full blur-3xl"></div>
       </div>
@@ -25,10 +32,10 @@ const HeroSection = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6 leading-tight transition-colors duration-300">
               {t('welcome_to_dealcross') || 'Secure Escrow Payments for Your Transactions'}
             </h1>
-            <p className="text-lg md:text-xl text-blue-200 mb-8 max-w-2xl">
+            <p className="text-lg md:text-xl text-gray-600 dark:text-blue-200 mb-8 max-w-2xl transition-colors duration-300">
               {t('your_trusted_escrow') || 'Trustworthy and easy-to-use escrow platform designed to protect buyers and sellers in financial transactions'}
             </p>
 
@@ -43,7 +50,7 @@ const HeroSection = () => {
               </button>
               <button
                 onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                className="px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white/30 text-white rounded-lg font-semibold hover:bg-white/20 transition-all duration-200 text-lg"
+                className="px-8 py-4 bg-gray-100 dark:bg-white/10 backdrop-blur-sm border-2 border-gray-300 dark:border-white/30 text-gray-900 dark:text-white rounded-lg font-semibold hover:bg-gray-200 dark:hover:bg-white/20 transition-all duration-200 text-lg"
               >
                 Learn More
               </button>
@@ -51,12 +58,27 @@ const HeroSection = () => {
 
             {/* Trust Badges */}
             <div className="flex items-center gap-3">
+              {/* Real User Images */}
               <div className="flex -space-x-2">
-                <div className="w-10 h-10 bg-blue-400 rounded-full border-2 border-white"></div>
-                <div className="w-10 h-10 bg-purple-400 rounded-full border-2 border-white"></div>
-                <div className="w-10 h-10 bg-pink-400 rounded-full border-2 border-white"></div>
+                {userImages.map((image, index) => (
+                  <img
+                    key={index}
+                    src={image}
+                    alt={`User ${index + 1}`}
+                    className="w-10 h-10 rounded-full border-2 border-white dark:border-[#1e3a5f] object-cover"
+                    onError={(e) => {
+                      // Fallback to colored circle if image fails to load
+                      e.target.style.display = 'none';
+                      e.target.nextElementSibling.style.display = 'block';
+                    }}
+                  />
+                ))}
+                {/* Fallback colored circles (hidden by default) */}
+                <div className="w-10 h-10 bg-blue-400 rounded-full border-2 border-white dark:border-[#1e3a5f] hidden"></div>
+                <div className="w-10 h-10 bg-purple-400 rounded-full border-2 border-white dark:border-[#1e3a5f] hidden"></div>
+                <div className="w-10 h-10 bg-pink-400 rounded-full border-2 border-white dark:border-[#1e3a5f] hidden"></div>
               </div>
-              <div className="text-blue-100">
+              <div className="text-gray-700 dark:text-blue-100 transition-colors duration-300">
                 <div className="flex items-center gap-1 mb-1">
                   {[...Array(5)].map((_, i) => (
                     <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />

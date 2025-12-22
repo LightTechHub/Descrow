@@ -8,13 +8,13 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // ✅ 30 second timeout
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// ✅ Request interceptor - Add token
+// Request interceptor - Add token
 api.interceptors.request.use(
   (config) => {
     const token = authService.getToken();
@@ -28,7 +28,7 @@ api.interceptors.request.use(
   }
 );
 
-// ✅ FIXED: Response interceptor - Only logout on REAL auth errors
+// Response interceptor - Handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -41,7 +41,7 @@ api.interceptors.response.use(
 
     const { status, data } = error.response;
 
-    // ✅ Only logout on SPECIFIC auth errors with error codes
+    // Only logout on SPECIFIC auth errors with error codes
     if (status === 401) {
       if (data.code === 'TOKEN_EXPIRED') {
         console.log('🔐 Token expired, logging out...');
@@ -55,17 +55,17 @@ api.interceptors.response.use(
         console.log('🔐 User not found, logging out...');
         authService.logout();
       }
-      // ✅ Don't logout on NO_TOKEN (user just not logged in yet)
+      // Don't logout on NO_TOKEN (user just not logged in yet)
       else if (data.code === 'NO_TOKEN') {
         // Silent - just means they need to login
       } else {
-        // ✅ Generic 401 without code - might be temporary, DON'T logout
+        // Generic 401 without code - might be temporary, DON'T logout
         console.warn('⚠️ 401 without error code, not logging out');
         toast.error(data.message || 'Authentication required');
       }
     }
 
-    // ✅ 403 Forbidden (permissions, not auth) - DON'T logout
+    // 403 Forbidden (permissions, not auth) - DON'T logout
     else if (status === 403) {
       if (data.code === 'ACCOUNT_SUSPENDED') {
         toast.error('Your account has been suspended');
@@ -75,15 +75,10 @@ api.interceptors.response.use(
       }
     }
 
-    // ✅ Server errors (500+) - DON'T logout
+    // Server errors (500+) - DON'T logout
     else if (status >= 500) {
       console.error('❌ Server error:', status);
       toast.error('Server error. Please try again.');
-    }
-
-    // ✅ Other client errors (400, 404, etc.) - DON'T logout
-    else if (status >= 400) {
-      // Handle normally, don't logout
     }
 
     return Promise.reject(error);

@@ -110,7 +110,7 @@ const ContactSection = () => {
               <h3 className="text-lg font-bold mb-4">Follow Us</h3>
               <div className="flex gap-3">
                 {['twitter', 'linkedin', 'facebook', 'instagram'].map((social, i) => (
-                  
+                  <a
                     key={i}
                     href={`https://${social}.com`}
                     target="_blank"

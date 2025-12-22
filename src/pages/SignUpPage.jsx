@@ -1,14 +1,16 @@
 // File: src/pages/SignUpPage.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Shield, Mail, Lock, User, Eye, EyeOff, Loader, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
-import { authService } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import toast from 'react-hot-toast';
 
-const SignUpPage = ({ setUser }) => {
+const SignUpPage = () => {
   const navigate = useNavigate();
+  const { register, googleLogin, isAuthenticated } = useAuth();
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -20,6 +22,14 @@ const SignUpPage = ({ setUser }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('✅ Already authenticated, redirecting to dashboard');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -61,15 +71,18 @@ const SignUpPage = ({ setUser }) => {
       setLoading(true);
       const decoded = jwtDecode(credentialResponse.credential);
       
-      const response = await authService.googleAuth({
-        email: decoded.email,
-        name: decoded.name,
-        googleId: decoded.sub,
-        picture: decoded.picture
+      const response = await googleLogin({
+        credential: credentialResponse.credential
       });
       
       if (response.success) {
-        setUser(response.user);
+        if (response.requiresProfileCompletion) {
+          navigate('/complete-profile', {
+            state: { googleData: response.googleData }
+          });
+          return;
+        }
+
         toast.success(`Welcome, ${response.user.name}!`);
         navigate('/dashboard', { replace: true });
       } else {
@@ -105,7 +118,7 @@ const SignUpPage = ({ setUser }) => {
 
     try {
       setLoading(true);
-      const response = await authService.register({
+      const response = await register({
         name: formData.name.trim(),
         email: formData.email.trim(),
         password: formData.password
@@ -187,7 +200,7 @@ const SignUpPage = ({ setUser }) => {
             
             <div className="flex items-start gap-3">
               <div className="p-2 bg-green-500/20 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-400" />
+              <CheckCircle className="w-5 h-5 text-green-400" />
               </div>
               <div>
                 <h3 className="font-semibold">24/7 Support</h3>

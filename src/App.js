@@ -1,6 +1,7 @@
 // File: src/App.jsx
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuth } from './contexts/AuthContext';
 
 import Navbar from './components/Navbar';
@@ -8,14 +9,15 @@ import Footer from './components/Footer';
 import ThemeToggle from './components/ThemeToggle';
 
 // ==================== PUBLIC PAGES ====================
-import LandingPage from './pages/LandingPage';
+import HomePage from './pages/HomePage';
 import Login from './pages/Login';
-import SignUpPage from './pages/SignUpPage';
+import UnifiedSignup from './pages/Auth/UnifiedSignup';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResendVerification from './pages/ResendVerification';
 import ResetPassword from './pages/ResetPassword';
 import CompleteProfilePage from './pages/Auth/CompleteProfilePage';
+import KYCVerificationPage from './pages/KYC/KYCVerificationPage';
 
 // ==================== FOOTER PAGES ====================
 import ContactPage from './pages/ContactPage';
@@ -32,7 +34,8 @@ import APIPage from './pages/APIPage';
 import CookiesPage from './pages/CookiesPage';
 
 // ==================== USER PAGES ====================
-import UnifiedDashboard from './pages/UnifiedDashboard';
+import Dashboard from './pages/Dashboard/Dashboard';
+import ApiDashboardPage from './pages/ApiDashboardPage';
 import EscrowDetails from './pages/EscrowDetails';
 import ProfilePage from './pages/Profile/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -110,10 +113,6 @@ function App() {
       return <Navigate to="/login" replace />;
     }
 
-    if (user && !user.verified) {
-      return <Navigate to="/login" replace />;
-    }
-
     return children;
   };
 
@@ -182,183 +181,204 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
-      {showNavbar() && <Navbar user={user} />}
+    <GoogleOAuthProvider clientId={process.env.REACT_APP_GOOGLE_CLIENT_ID}>
+      <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
+        {showNavbar() && <Navbar user={user} />}
 
-      <Routes>
-        {/* ==================== PUBLIC ROUTES ==================== */}
-        <Route path="/" element={<LandingPage />} />
-        <Route 
-          path="/login" 
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
-        />
-        <Route 
-          path="/signup" 
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <SignUpPage />} 
-        />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/resend-verification" element={<ResendVerification />} />
-        
-        {/* ✅ Complete Profile Route */}
-        <Route 
-          path="/complete-profile" 
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <CompleteProfilePage />} 
-        />
+        <Routes>
+          {/* ==================== PUBLIC ROUTES ==================== */}
+          <Route path="/" element={<HomePage />} />
+          <Route 
+            path="/login" 
+            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
+          />
+          <Route 
+            path="/signup" 
+            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <UnifiedSignup />} 
+          />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/resend-verification" element={<ResendVerification />} />
+          
+          {/* OAuth Complete Profile Route */}
+          <Route 
+            path="/complete-profile" 
+            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <CompleteProfilePage />} 
+          />
 
-        {/* ==================== FOOTER PAGES ==================== */}
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/docs" element={<DocsPage />} />
-        <Route path="/faq" element={<FAQPage />} />
-        <Route path="/blog" element={<BlogPage />} />
-        <Route path="/referral" element={<ReferralPage />} />
-        <Route path="/refund-policy" element={<RefundPolicyPage />} />
-        <Route path="/careers" element={<CareersPage />} />
-        <Route path="/api" element={<APIPage />} />
-        <Route path="/cookies" element={<CookiesPage />} />
+          {/* KYC Verification Route */}
+          <Route 
+            path="/kyc-verification" 
+            element={
+              <ProtectedRoute>
+                <KYCVerificationPage />
+              </ProtectedRoute>
+            } 
+          />
 
-        {/* ==================== USER ROUTES ==================== */}
-        <Route 
-          path="/dashboard" 
-          element={
-            <ProtectedRoute>
-              <UnifiedDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/escrow/:id" 
-          element={
-            <ProtectedRoute>
-              <EscrowDetails />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/profile" 
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/notifications" 
-          element={
-            <ProtectedRoute>
-              <NotificationsPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/payment/:escrowId" 
-          element={
-            <ProtectedRoute>
-              <PaymentPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/payment/verify" 
-          element={
-            <ProtectedRoute>
-              <PaymentVerificationPage />
-            </ProtectedRoute>
-          } 
-        />
+          {/* ==================== FOOTER PAGES ==================== */}
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/docs" element={<DocsPage />} />
+          <Route path="/faq" element={<FAQPage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route path="/referral" element={<ReferralPage />} />
+          <Route path="/refund-policy" element={<RefundPolicyPage />} />
+          <Route path="/careers" element={<CareersPage />} />
+          <Route path="/api" element={<APIPage />} />
+          <Route path="/cookies" element={<CookiesPage />} />
 
-        {/* Legacy redirects */}
-        <Route path="/buyer-dashboard" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/seller-dashboard" element={<Navigate to="/dashboard" replace />} />
+          {/* ==================== USER ROUTES ==================== */}
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/api-dashboard" 
+            element={
+              <ProtectedRoute>
+                <ApiDashboardPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/escrow/:id" 
+            element={
+              <ProtectedRoute>
+                <EscrowDetails />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/profile" 
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/notifications" 
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/payment/:escrowId" 
+            element={
+              <ProtectedRoute>
+                <PaymentPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/payment/verify" 
+            element={
+              <ProtectedRoute>
+                <PaymentVerificationPage />
+              </ProtectedRoute>
+            } 
+          />
 
-        {/* ==================== ADMIN ROUTES ==================== */}
-        <Route 
-          path="/admin/login" 
-          element={admin ? <Navigate to="/admin/dashboard" replace /> : <AdminLogin setAdmin={setAdmin} />} 
-        />
-        <Route 
-          path="/admin/dashboard" 
-          element={
-            <AdminProtectedRoute>
-              <AdminDashboard admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/transactions" 
-          element={
-            <AdminProtectedRoute requiredPermission="viewTransactions">
-              <TransactionsPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/disputes" 
-          element={
-            <AdminProtectedRoute requiredPermission="manageDisputes">
-              <DisputesPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/users" 
-          element={
-            <AdminProtectedRoute requiredPermission="verifyUsers">
-              <UsersPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/analytics" 
-          element={
-            <AdminProtectedRoute requiredPermission="viewAnalytics">
-              <AnalyticsPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/payments" 
-          element={
-            <AdminProtectedRoute requiredPermission="managePayments">
-              <PaymentGatewaysPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/api" 
-          element={
-            <AdminProtectedRoute requiredPermission="manageAPI">
-              <APIManagementPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/admins" 
-          element={
-            <AdminProtectedRoute requiredPermission="manageAdmins">
-              <AdminManagementPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin/fees" 
-          element={
-            <AdminProtectedRoute requiredPermission="manageFees">
-              <FeeManagementPage admin={admin} />
-            </AdminProtectedRoute>
-          } 
-        />
+          {/* Legacy redirects */}
+          <Route path="/buyer-dashboard" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/seller-dashboard" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/unified-dashboard" element={<Navigate to="/dashboard" replace />} />
 
-        {/* ==================== 404 ==================== */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+          {/* ==================== ADMIN ROUTES ==================== */}
+          <Route 
+            path="/admin/login" 
+            element={admin ? <Navigate to="/admin/dashboard" replace /> : <AdminLogin setAdmin={setAdmin} />} 
+          />
+          <Route 
+            path="/admin/dashboard" 
+            element={
+              <AdminProtectedRoute>
+                <AdminDashboard admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/transactions" 
+            element={
+              <AdminProtectedRoute requiredPermission="viewTransactions">
+                <TransactionsPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/disputes" 
+            element={
+              <AdminProtectedRoute requiredPermission="manageDisputes">
+                <DisputesPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/users" 
+            element={
+              <AdminProtectedRoute requiredPermission="verifyUsers">
+                <UsersPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/analytics" 
+            element={
+              <AdminProtectedRoute requiredPermission="viewAnalytics">
+                <AnalyticsPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/payments" 
+            element={
+              <AdminProtectedRoute requiredPermission="managePayments">
+                <PaymentGatewaysPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/api" 
+            element={
+              <AdminProtectedRoute requiredPermission="manageAPI">
+                <APIManagementPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/admins" 
+            element={
+              <AdminProtectedRoute requiredPermission="manageAdmins">
+                <AdminManagementPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/fees" 
+            element={
+              <AdminProtectedRoute requiredPermission="manageFees">
+                <FeeManagementPage admin={admin} />
+              </AdminProtectedRoute>
+            } 
+          />
 
-      {showFooter() && <Footer />}
-    </div>
+          {/* ==================== 404 ==================== */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+
+        {showFooter() && <Footer />}
+      </div>
+    </GoogleOAuthProvider>
   );
 }
 

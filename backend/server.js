@@ -51,6 +51,7 @@ const contactRoutes = require('./routes/contact.routes');
 const apiV1Routes = require('./routes/api.v1.routes');
 const businessRoutes = require('./routes/business.routes');
 const bankAccountRoutes = require('./routes/bankAccount.routes');
+const kycRoutes = require('./routes/kyc.routes'); // ✅ ADDED
 
 const app = express();
 
@@ -58,8 +59,6 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ==================== SECURITY MIDDLEWARE ====================
-
-// Helmet - Security headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
@@ -73,10 +72,7 @@ app.use(helmet({
   }
 }));
 
-// MongoDB Sanitization - Prevent NoSQL injection
 app.use(mongoSanitize());
-
-// Compression
 app.use(compression());
 
 // ==================== CORS CONFIGURATION ====================
@@ -93,9 +89,7 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    if (allowedOrigins.includes(origin)) return callback(null, true);
     console.log('❌ Blocked origin:', origin);
     callback(new Error('Not allowed by CORS'));
   },
@@ -128,13 +122,10 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ==================== RATE LIMITING ====================
-
 const generalLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 60,
   message: { success: false, message: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
   skip: (req) => req.path.includes('/webhook')
 });
 
@@ -145,121 +136,42 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true
 });
 
-const paymentLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  message: { success: false, message: 'Too many payment attempts, please wait.' }
-});
-
-const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 100,
-  skipFailedRequests: true
-});
-
-const profileLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 20,
-  message: { success: false, message: 'Too many profile requests. Please refresh the page.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-app.use('/api/payments/initialize', paymentLimiter);
-app.use('/api/payments/webhook', webhookLimiter);
-app.use('/api/profile', profileLimiter);
 
 // ==================== STATIC FILES ====================
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  maxAge: '7d',
-  etag: true,
-  setHeaders: (res, filePath) => {
-    // Set proper content type for images
-    if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
-      res.setHeader('Content-Type', 'image/jpeg');
-    } else if (filePath.endsWith('.png')) {
-      res.setHeader('Content-Type', 'image/png');
-    } else if (filePath.endsWith('.gif')) {
-      res.setHeader('Content-Type', 'image/gif');
-    } else if (filePath.endsWith('.webp')) {
-      res.setHeader('Content-Type', 'image/webp');
-    }
-  }
-}));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ==================== DATABASE CONNECTION ====================
-mongoose.connect(process.env.MONGODB_URI, {
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-})
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
-    console.log(`✅ MongoDB Connected: ${mongoose.connection.name}`);
-    console.log(`📊 Database Host: ${mongoose.connection.host}`);
-    
+    console.log(`✅ MongoDB Connected`);
     startSubscriptionCron();
-    console.log('⏰ Subscription cron jobs started');
   })
   .catch(err => {
     console.error('❌ MongoDB Connection Error:', err);
     process.exit(1);
   });
 
-mongoose.connection.on('error', err => {
-  console.error('❌ MongoDB error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.warn('⚠️ MongoDB disconnected. Attempting to reconnect...');
-});
-
-mongoose.connection.on('reconnected', () => {
-  console.log('✅ MongoDB reconnected');
-});
-
-// ==================== HEALTH CHECK ====================
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Dealcross API running',
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/health', async (req, res) => {
-  const healthCheck = {
-    success: true,
-    status: 'healthy',
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    memory: {
-      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-      unit: 'MB'
-    }
-  };
-
-  res.json(healthCheck);
+// ==================== HEALTH ====================
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, status: 'healthy' });
 });
 
 // ==================== API ROUTES ====================
 
-// Authentication & User Management
+// Auth & Users
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/verify-email', verifyRoutes);
 
-// Core Escrow Functionality
+// ✅ KYC ROUTES (ADDED)
+app.use('/api/kyc', kycRoutes);
+
+// Escrow & Core
 app.use('/api/escrow', escrowRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/delivery', deliveryRoutes);
@@ -267,217 +179,55 @@ app.use('/api/disputes', disputeRoutes);
 
 // Payments
 app.use('/api/payments', paymentRoutes);
-app.use('/api/payment', paymentRoutes);
 
 // Notifications
 app.use('/api/notifications', notificationRoutes);
 
-// Admin Panel
+// Admin
 app.use('/api/admin', adminRoutes);
 
-// Platform Settings
+// Platform
 app.use('/api/platform', platformSettingsRoutes);
 
-// API Keys Management
+// API Keys
 app.use('/api/api-keys', apiKeyRoutes);
 
-// Contact & Support
-app.use('/api/contact', contactRoutes);
-
-// Business Features
+// Business & Banking
 app.use('/api/business', businessRoutes);
-
-// Bank Account Management
 app.use('/api/bank', bankAccountRoutes);
 
 // Webhooks
 app.use('/api/webhooks', webhookRoutes);
 
-// Public API Routes (v1)
+// Public API
 app.use('/api/v1', apiV1Routes);
 
-// ==================== DEBUG ROUTES (DEVELOPMENT ONLY) ====================
-if (process.env.NODE_ENV === 'development') {
-  const Admin = require('./models/Admin.model');
-  
-  app.get('/api/debug/db-info', async (req, res) => {
-    try {
-      const dbName = mongoose.connection.name;
-      const collections = await mongoose.connection.db.listCollections().toArray();
-      const adminCount = await Admin.countDocuments();
-      
-      res.json({
-        success: true,
-        database: dbName,
-        host: mongoose.connection.host,
-        collections: collections.map(c => c.name),
-        adminCount,
-        connectionState: mongoose.connection.readyState
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
-    }
-  });
-
-  app.get('/api/debug/uploads', (req, res) => {
-    const uploadsPath = path.join(__dirname, 'uploads/avatars');
-    
-    try {
-      const files = fs.readdirSync(uploadsPath);
-      res.json({
-        success: true,
-        uploadsPath,
-        files,
-        fileCount: files.length
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        uploadsPath
-      });
-    }
-  });
-}
-
-// ==================== ERROR HANDLING ====================
-
-// 404 Handler
+// ==================== 404 ====================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'Route not found',
-    path: req.originalUrl,
-    method: req.method,
-    timestamp: new Date().toISOString()
+    path: req.originalUrl
   });
 });
 
-// Global Error Handler
+// ==================== GLOBAL ERROR ====================
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    path: req.originalUrl,
-    method: req.method,
-    timestamp: new Date().toISOString()
-  });
-
-  // Mongoose Validation Error
-  if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map(e => e.message);
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Error',
-      errors
-    });
-  }
-
-  // Mongoose Duplicate Key Error
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyPattern)[0];
-    return res.status(400).json({
-      success: false,
-      message: `${field} already exists`
-    });
-  }
-
-  // JWT Errors
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid token',
-      code: 'INVALID_TOKEN'
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Token expired',
-      code: 'TOKEN_EXPIRED'
-    });
-  }
-
-  // Multer Errors
-  if (err.name === 'MulterError') {
-    return res.status(400).json({
-      success: false,
-      message: err.message
-    });
-  }
-
-  // CORS Errors
-  if (err.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      success: false,
-      message: 'CORS policy violation'
-    });
-  }
-
-  // Default Error
+  console.error('❌ Error:', err.message);
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && {
-      stack: err.stack
-    })
+    message: err.message || 'Internal server error'
   });
 });
 
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
-  console.log('='.repeat(60));
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 API URL: http://localhost:${PORT}/api`);
-  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`✅ CORS Origins: ${allowedOrigins.length} allowed`);
-  console.log(`⏰ Cron jobs: ACTIVE`);
-  console.log(`📁 Upload directories: Created`);
-  console.log('='.repeat(60));
+  console.log(`📍 Frontend URL: ${process.env.FRONTEND_URL}`);
+  console.log(`📍 Backend URL: ${process.env.BACKEND_URL}`);
 });
 
 server.timeout = 30000;
-
-// ==================== GRACEFUL SHUTDOWN ====================
-const shutdown = async (signal) => {
-  console.log(`\n👋 ${signal} received. Starting graceful shutdown...`);
-
-  server.close(async () => {
-    console.log('💤 HTTP server closed');
-
-    try {
-      await mongoose.connection.close(false);
-      console.log('📦 MongoDB connection closed');
-      process.exit(0);
-    } catch (error) {
-      console.error('❌ Error during shutdown:', error);
-      process.exit(1);
-    }
-  });
-
-  setTimeout(() => {
-    console.error('⚠️ Forcing shutdown after timeout');
-    process.exit(1);
-  }, 10000);
-};
-
-['SIGINT', 'SIGTERM'].forEach(signal => {
-  process.on(signal, () => shutdown(signal));
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  shutdown('UNCAUGHT_EXCEPTION');
-});
 
 module.exports = app;

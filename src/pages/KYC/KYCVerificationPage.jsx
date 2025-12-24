@@ -306,3 +306,61 @@ const KYCVerificationPage = () => {
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
             <div className="flex items-start gap-3">
               <Shield className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div>
+            <p className="text-sm text-green-900 dark:text-green-100 font-medium mb-1">
+              Your Data is Secure
+            </p>
+            <p className="text-xs text-green-800 dark:text-green-200">
+              All documents are encrypted and stored securely. We never share your personal information.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="space-y-3">
+        {(kycData?.status === 'unverified' || !kycData?.status) && (
+          <button
+            onClick={handleStartVerification}
+            disabled={initiating}
+            className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {initiating ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                Starting Verification...
+              </>
+            ) : (
+              <>
+                Start Verification
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
+          </button>
+        )}
+
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="w-full px-6 py-3 border-2 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+        >
+          {kycData?.status === 'unverified' ? 'Skip for Now' : 'Back to Dashboard'}
+        </button>
+      </div>
+
+      {/* Estimated Time */}
+      <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-4">
+        ⏱️ Verification usually takes 5-10 minutes
+      </p>
+    </div>
+
+    {/* Help Section */}
+    <div className="mt-6 text-center">
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Need help?{' '}
+        <a href="mailto:support@dealcross.net" className="text-blue-600 hover:underline">
+          Contact Support
+        </a>
+      </p>
+    </div>
+  </div>
+</div>

@@ -1,8 +1,8 @@
-// backend/controllers/kyc.controller.js - KYC Management
+// backend/controllers/kyc.controller.js - UPDATED FOR YOUR USER MODEL
 const User = require('../models/User.model');
 const diditService = require('../services/didit.service');
 
-// Initiate KYC verification
+// ==================== INITIATE KYC ====================
 exports.initiateKYC = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -14,7 +14,8 @@ exports.initiateKYC = async (req, res) => {
       });
     }
 
-    if (user.kycVerified) {
+    // Check if already verified
+    if (user.isKYCVerified) {
       return res.status(400).json({
         success: false,
         message: 'KYC already verified'
@@ -22,29 +23,65 @@ exports.initiateKYC = async (req, res) => {
     }
 
     // Check if email is verified
-    if (!user.isEmailVerified) {
+    if (!user.verified) {
       return res.status(400).json({
         success: false,
-        message: 'Please verify your email first'
+        message: 'Please verify your email first',
+        action: 'verify_email'
       });
     }
 
-    // Initiate DiDIT verification (will automatically use correct flow based on accountType)
-    const verification = await diditService.initiateVerification(user);
+    // Check if already in progress
+    if (user.kycStatus?.status === 'pending' || user.kycStatus?.status === 'in_progress') {
+      // Check if session is expired
+      const sessionExpiry = user.kycStatus.diditSessionExpiresAt;
+      if (sessionExpiry && new Date() < sessionExpiry) {
+        return res.json({
+          success: true,
+          message: 'Verification already in progress',
+          data: {
+            verificationUrl: user.kycStatus.diditVerificationUrl,
+            sessionId: user.kycStatus.diditSessionId,
+            status: user.kycStatus.status,
+            expiresAt: user.kycStatus.diditSessionExpiresAt
+          }
+        });
+      }
+    }
 
-    // Save verification ID to user
-    user.kycVerificationId = verification.verificationId;
-    user.kycStatus = 'pending';
-    user.kycInitiatedAt = new Date();
+    // Create DiDIT verification session
+    const verification = await diditService.createVerificationSession(user._id, {
+      email: user.email,
+      phone: user.phone,
+      tier: user.tier
+    });
+
+    if (!verification.success) {
+      return res.status(500).json({
+        success: false,
+        message: verification.message || 'Failed to create verification session',
+        error: verification.error
+      });
+    }
+
+    // Update user with DiDIT session info
+    user.kycStatus = {
+      status: 'pending',
+      submittedAt: new Date(),
+      diditSessionId: verification.data.sessionId,
+      diditVerificationUrl: verification.data.verificationUrl,
+      diditSessionExpiresAt: verification.data.expiresAt
+    };
+
     await user.save();
 
     res.json({
       success: true,
-      message: `${user.accountType === 'business' ? 'Business' : 'Identity'} verification initiated`,
+      message: 'Verification session created successfully',
       data: {
-        verificationUrl: verification.verificationUrl,
-        verificationType: verification.flowType,
-        expiresAt: verification.expiresAt
+        verificationUrl: verification.data.verificationUrl,
+        sessionId: verification.data.sessionId,
+        expiresAt: verification.data.expiresAt
       }
     });
 
@@ -52,16 +89,17 @@ exports.initiateKYC = async (req, res) => {
     console.error('KYC initiation error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to initiate KYC verification'
+      message: 'Failed to initiate KYC verification',
+      error: error.message
     });
   }
 };
 
-// Get KYC status
+// ==================== GET KYC STATUS ====================
 exports.getKYCStatus = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .select('kycVerified kycStatus kycVerificationId kycInitiatedAt accountType');
+      .select('isKYCVerified kycStatus verified tier');
 
     if (!user) {
       return res.status(404).json({
@@ -70,20 +108,28 @@ exports.getKYCStatus = async (req, res) => {
       });
     }
 
-    let verificationStatus = null;
-    if (user.kycVerificationId) {
-      verificationStatus = await diditService.getVerificationStatus(user.kycVerificationId);
+    // If has DiDIT session, check current status
+    let externalStatus = null;
+    if (user.kycStatus?.diditSessionId) {
+      externalStatus = await diditService.getVerificationStatus(
+        user.kycStatus.diditSessionId
+      );
     }
 
     res.json({
       success: true,
       data: {
-        kycVerified: user.kycVerified,
-        kycStatus: user.kycStatus,
-        kycInitiatedAt: user.kycInitiatedAt,
-        accountType: user.accountType,
-        verificationType: user.accountType === 'business' ? 'Business AML/KYC-B' : 'Individual KYC',
-        externalStatus: verificationStatus
+        isKYCVerified: user.isKYCVerified,
+        status: user.kycStatus?.status || 'unverified',
+        submittedAt: user.kycStatus?.submittedAt,
+        verifiedAt: user.kycStatus?.verifiedAt,
+        rejectionReason: user.kycStatus?.rejectionReason,
+        sessionId: user.kycStatus?.diditSessionId,
+        verificationUrl: user.kycStatus?.diditVerificationUrl,
+        expiresAt: user.kycStatus?.diditSessionExpiresAt,
+        externalStatus: externalStatus?.data || null,
+        emailVerified: user.verified,
+        tier: user.tier
       }
     });
 
@@ -96,89 +142,255 @@ exports.getKYCStatus = async (req, res) => {
   }
 };
 
-// DiDIT Webhook Handler - Individual KYC
-exports.handleIndividualKYCWebhook = async (req, res) => {
+// ==================== DIDIT WEBHOOK HANDLER ====================
+exports.handleDiditWebhook = async (req, res) => {
   try {
-    const userId = req.params.userId;
-    const webhookData = req.body;
+    console.log('📥 DiDIT Webhook received:', req.body);
 
-    console.log('Individual KYC Webhook received:', { userId, status: webhookData.status });
+    // Verify webhook signature if configured
+    const signature = req.headers['x-didit-signature'];
+    if (signature && process.env.DIDIT_WEBHOOK_SECRET) {
+      const rawBody = JSON.stringify(req.body);
+      const isValid = diditService.verifyWebhookSignature(rawBody, signature);
+      
+      if (!isValid) {
+        console.error('❌ Invalid webhook signature');
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid signature'
+        });
+      }
+    }
 
-    const result = await diditService.handleWebhook(webhookData);
+    // Process webhook event
+    const event = await diditService.processWebhookEvent(req.body);
+    const userId = event.userId;
+
+    if (!userId) {
+      console.error('❌ No userId in webhook event');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing user ID'
+      });
+    }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      console.error('❌ User not found:', userId);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    // Update user based on verification result
-    if (result.status === 'completed' && result.data.score >= 70) {
-      user.kycVerified = true;
-      user.kycStatus = 'approved';
-      user.kycVerifiedAt = new Date();
-      user.kycData = {
-        verificationType: 'individual',
-        score: result.data.score,
-        checks: result.data.checks,
-        riskLevel: result.data.riskLevel
+    console.log(`📝 Updating KYC status for user ${userId}: ${event.type}`);
+
+    // Update user KYC status based on event type
+    if (event.type === 'completed' && event.verified) {
+      // ✅ APPROVED
+      user.kycStatus = {
+        ...user.kycStatus,
+        status: 'approved',
+        verifiedAt: new Date(),
+        reviewedAt: new Date(),
+        verificationResult: event.verificationData
       };
-    } else if (result.status === 'failed') {
-      user.kycStatus = 'rejected';
-      user.kycRejectionReason = 'Verification failed. Please try again or contact support.';
+      user.isKYCVerified = true;
+
+      console.log('✅ KYC Approved for user:', userId);
+
+      // TODO: Send approval email
+      // await emailService.sendKYCApprovalEmail(user);
+
+    } else if (event.type === 'failed') {
+      // ❌ REJECTED
+      user.kycStatus = {
+        ...user.kycStatus,
+        status: 'rejected',
+        reviewedAt: new Date(),
+        rejectionReason: event.failureReason || 'Verification failed',
+        verificationResult: event.verificationData
+      };
+      user.isKYCVerified = false;
+
+      console.log('❌ KYC Rejected for user:', userId);
+
+      // TODO: Send rejection email
+      // await emailService.sendKYCRejectionEmail(user);
+
+    } else if (event.type === 'expired') {
+      // ⏰ EXPIRED
+      user.kycStatus = {
+        ...user.kycStatus,
+        status: 'expired',
+        reviewedAt: new Date(),
+        rejectionReason: 'Verification session expired'
+      };
+
+      console.log('⏰ KYC Session Expired for user:', userId);
+
+    } else if (event.type === 'in_progress') {
+      // 🔄 IN PROGRESS
+      user.kycStatus = {
+        ...user.kycStatus,
+        status: 'in_progress'
+      };
+
+      console.log('🔄 KYC In Progress for user:', userId);
     }
 
     await user.save();
 
-    // Send notification email
-    // await emailService.sendKYCStatusEmail(user);
-
-    res.json({ success: true, message: 'Webhook processed' });
+    res.json({
+      success: true,
+      message: 'Webhook processed successfully'
+    });
 
   } catch (error) {
-    console.error('Individual KYC webhook error:', error);
-    res.status(500).json({ success: false, message: 'Webhook processing failed' });
+    console.error('❌ DiDIT webhook processing error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Webhook processing failed',
+      error: error.message
+    });
   }
 };
 
-// DiDIT Webhook Handler - Business AML/KYC
-exports.handleBusinessKYCWebhook = async (req, res) => {
+// ==================== RETRY KYC ====================
+exports.retryKYC = async (req, res) => {
   try {
-    const userId = req.params.userId;
-    const webhookData = req.body;
+    const user = await User.findById(req.user._id);
 
-    console.log('Business KYC Webhook received:', { userId, status: webhookData.status });
-
-    const result = await diditService.handleWebhook(webhookData);
-
-    const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    // Business verification requires higher score
-    if (result.status === 'completed' && result.data.score >= 80) {
-      user.kycVerified = true;
-      user.kycStatus = 'approved';
-      user.kycVerifiedAt = new Date();
-      user.kycData = {
-        verificationType: 'business',
-        score: result.data.score,
-        checks: result.data.checks,
-        riskLevel: result.data.riskLevel,
-        uboVerified: result.data.checks.ubo_verification === 'passed',
-        amlCleared: result.data.checks.aml_screening === 'passed'
-      };
-    } else if (result.status === 'failed') {
-      user.kycStatus = 'rejected';
-      user.kycRejectionReason = 'Business verification failed. Please ensure all documents are valid.';
+    // Only allow retry if rejected or expired
+    if (user.kycStatus?.status !== 'rejected' && user.kycStatus?.status !== 'expired') {
+      return res.status(400).json({
+        success: false,
+        message: 'KYC retry not allowed in current status',
+        currentStatus: user.kycStatus?.status
+      });
     }
+
+    // Reset KYC status
+    user.kycStatus = {
+      status: 'unverified'
+    };
+    user.isKYCVerified = false;
 
     await user.save();
 
-    res.json({ success: true, message: 'Business webhook processed' });
+    res.json({
+      success: true,
+      message: 'KYC reset. You can now start a new verification.'
+    });
 
   } catch (error) {
-    console.error('Business KYC webhook error:', error);
-    res.status(500).json({ success: false, message: 'Webhook processing failed' });
+    console.error('Retry KYC error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retry KYC'
+    });
+  }
+};
+
+// ==================== ADMIN: MANUAL APPROVE ====================
+exports.adminApproveKYC = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { notes } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.kycStatus = {
+      ...user.kycStatus,
+      status: 'approved',
+      verifiedAt: new Date(),
+      reviewedAt: new Date(),
+      reviewedBy: req.user._id,
+      rejectionReason: notes || 'Manually approved by admin'
+    };
+    user.isKYCVerified = true;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'KYC manually approved',
+      data: {
+        userId,
+        status: 'approved',
+        verifiedAt: user.kycStatus.verifiedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin approve KYC error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to approve KYC'
+    });
+  }
+};
+
+// ==================== ADMIN: MANUAL REJECT ====================
+exports.adminRejectKYC = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required'
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.kycStatus = {
+      ...user.kycStatus,
+      status: 'rejected',
+      reviewedAt: new Date(),
+      reviewedBy: req.user._id,
+      rejectionReason: reason
+    };
+    user.isKYCVerified = false;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'KYC manually rejected',
+      data: {
+        userId,
+        status: 'rejected',
+        reason
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin reject KYC error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reject KYC'
+    });
   }
 };

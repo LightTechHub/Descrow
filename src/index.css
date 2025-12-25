@@ -14,7 +14,6 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  touch-action: manipulation; /* Prevents double-tap zoom / gestures */
 }
 
 /* ============================================
@@ -27,11 +26,11 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  overflow-x: hidden; /* Prevent horizontal scrolling */
+  overflow-x: hidden;
   width: 100%;
   position: relative;
-  background-color: theme('colors.white'); /* default background */
-  color: theme('colors.gray.900'); /* default text */
+  background-color: theme('colors.white');
+  color: theme('colors.gray.900');
 }
 
 html {
@@ -48,38 +47,151 @@ html {
 
 .dark {
   color-scheme: dark;
-  background-color: theme('colors.gray.950'); /* dark body bg */
-  color: theme('colors.gray.100'); /* dark text */
+  background-color: theme('colors.gray.950');
+  color: theme('colors.gray.100');
 }
 
 /* ============================================
-   MOBILE ZOOM PREVENTION (iOS SAFARI FIX)
+   ✅ MOBILE OPTIMIZATION (iOS/Android Fix)
    ============================================ */
+
+/* Prevent zoom on input focus - CRITICAL for mobile */
 input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="number"],
 input[type="tel"],
 input[type="url"],
+input[type="search"],
 textarea,
 select {
-  font-size: 16px !important; /* Prevent zoom on input focus */
+  font-size: 16px !important; /* Prevents iOS zoom */
 }
 
-/* Additional safety for small screens */
-@media screen and (max-width: 768px) {
-  input,
-  textarea,
-  select {
-    font-size: 16px !important;
+/* Better touch targets for mobile (minimum 44x44px) */
+button,
+a,
+[role="button"],
+input[type="submit"],
+input[type="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+}
+
+/* Improve touch feedback */
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: rgba(59, 130, 246, 0.1);
+  tap-highlight-color: rgba(59, 130, 246, 0.1);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Remove tap delay on mobile */
+a,
+button,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}
+
+/* Smooth scrolling for mobile */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
   }
 }
 
 /* ============================================
-   SCROLLBAR STYLING (Optional Enhancement)
+   ✅ RESPONSIVE SPACING UTILITIES
+   ============================================ */
+
+/* Container max-widths with better spacing */
+.container-responsive {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    max-width: 1280px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container-responsive {
+    max-width: 1536px;
+  }
+}
+
+/* Section spacing */
+section {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+@media (min-width: 768px) {
+  section {
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+  }
+}
+
+/* ============================================
+   ✅ MODAL FIXES FOR MOBILE
+   ============================================ */
+
+/* Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+/* Better modal spacing on mobile */
+@media (max-width: 768px) {
+  .modal-content {
+    max-height: 85vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Larger touch targets in modals */
+  .modal-content button {
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+  }
+  
+  /* Better form input spacing */
+  .modal-content input,
+  .modal-content textarea,
+  .modal-content select {
+    padding: 0.875rem 1rem;
+  }
+}
+
+/* ============================================
+   SCROLLBAR STYLING
    ============================================ */
 ::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -105,4 +217,59 @@ select {
 
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
+}
+
+/* ============================================
+   ✅ FOCUS VISIBLE (Better Accessibility)
+   ============================================ */
+*:focus-visible {
+  outline: 2px solid theme('colors.blue.600');
+  outline-offset: 2px;
+}
+
+.dark *:focus-visible {
+  outline-color: theme('colors.blue.400');
+}
+
+/* Remove focus outline for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================
+   ✅ SAFE AREA INSETS (iPhone Notch Support)
+   ============================================ */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+  
+  header,
+  footer {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* ============================================
+   ✅ ANIMATION PERFORMANCE
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* GPU acceleration for smooth animations */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
 }

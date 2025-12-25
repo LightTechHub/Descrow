@@ -1,4 +1,4 @@
-// File: src/components/Navbar.jsx
+// File: src/components/Navbar.jsx - FIXED VERSION
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X, ChevronDown, Bell, Settings, User, LogOut, LayoutDashboard, Shield } from 'lucide-react';
@@ -30,6 +30,11 @@ export default function Navbar({ user: propUser }) {
     setOpen(false);
     setShowUserMenu(false);
     navigate('/login', { replace: true });
+  }, [navigate]);
+
+  // ✅ FIX: Added notification click handler
+  const handleNotificationClick = useCallback(() => {
+    navigate('/notifications');
   }, [navigate]);
 
   const isAdmin = user?.role === 'admin' || user?.isAdmin;
@@ -116,13 +121,16 @@ export default function Navbar({ user: propUser }) {
               </>
             ) : (
               <>
-                {/* Notifications */}
+                {/* ✅ FIXED: Notifications with onClick handler */}
                 <button
+                  onClick={handleNotificationClick}
                   className="relative p-2.5 hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition"
                   title="Notifications"
+                  aria-label="View notifications"
+                  type="button"
                 >
                   <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#ef4444] rounded-full"></span>
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#ef4444] rounded-full" aria-hidden="true"></span>
                 </button>
 
                 {/* User Menu */}
@@ -130,6 +138,9 @@ export default function Navbar({ user: propUser }) {
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
                     className="flex items-center gap-3 px-3 py-2 hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition"
+                    aria-label="User menu"
+                    aria-expanded={showUserMenu}
+                    type="button"
                   >
                     {user.profilePicture ? (
                       <img
@@ -155,6 +166,7 @@ export default function Navbar({ user: propUser }) {
                         <div
                           className="fixed inset-0 z-10"
                           onClick={() => setShowUserMenu(false)}
+                          aria-hidden="true"
                         />
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
@@ -221,6 +233,7 @@ export default function Navbar({ user: propUser }) {
                           <div className="border-t border-gray-200 dark:border-gray-700 py-2">
                             <button
                               onClick={handleLogout}
+                              type="button"
                               className="flex items-center gap-3 w-full px-4 py-2.5 hover:bg-[#fef2f2] dark:hover:bg-[#ef4444]/10 transition text-[#ef4444]"
                             >
                               <LogOut className="w-4 h-4" />
@@ -246,6 +259,7 @@ export default function Navbar({ user: propUser }) {
               aria-expanded={open}
               aria-controls="mobile-menu"
               aria-label="Toggle mobile navigation"
+              type="button"
               className="p-2 hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition"
             >
               {open ? (
@@ -296,133 +310,144 @@ export default function Navbar({ user: propUser }) {
                 <button
                   onClick={() => setOpen(false)}
                   aria-label="Close menu"
-                  className="p-2 hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition"
-                >
-                  <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
-                </button>
+                  type="button"
+                  className="p-2 hover:bg-[#f8​​​​​​​​​​​​​​​​fafc] dark:hover:bg-[#252f3f] rounded-lg transition”
+                   <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                 </button>
               </div>
-
               {/* User Info (Mobile) */}
-              {user && (
-                <div className="mb-6 p-4 bg-[#f8fafc] dark:bg-[#252f3f] rounded-xl border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-3">
-                    {user.profilePicture ? (
-                      <img
-                        src={user.profilePicture}
-                        alt={user.name}
-                        className="w-12 h-12 rounded-full object-cover border-2 border-[#1e3a5f] dark:border-[#2d4a7c]"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-[#1e3a5f] dark:bg-[#2d4a7c] flex items-center justify-center text-white text-lg font-bold">
-                        {user.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 dark:text-white truncate">
-                        {user.name}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                        {user.email}
-                      </p>
-                    </div>
+          {user && (
+            <div className="mb-6 p-4 bg-[#f8fafc] dark:bg-[#252f3f] rounded-xl border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                {user.profilePicture ? (
+                  <img
+                    src={user.profilePicture}
+                    alt={user.name}
+                    className="w-12 h-12 rounded-full object-cover border-2 border-[#1e3a5f] dark:border-[#2d4a7c]"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-[#1e3a5f] dark:bg-[#2d4a7c] flex items-center justify-center text-white text-lg font-bold">
+                    {user.name?.charAt(0).toUpperCase()}
                   </div>
-                  {user.tier && (
-                    <span className="inline-block mt-2 px-3 py-1 bg-[#1e3a5f] dark:bg-[#2d4a7c] text-white text-xs font-semibold rounded-lg">
-                      {user.tier.toUpperCase()} TIER
-                    </span>
-                  )}
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 dark:text-white truncate">
+                    {user.name}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                    {user.email}
+                  </p>
                 </div>
+              </div>
+              {user.tier && (
+                <span className="inline-block mt-2 px-3 py-1 bg-[#1e3a5f] dark:bg-[#2d4a7c] text-white text-xs font-semibold rounded-lg">
+                  {user.tier.toUpperCase()} TIER
+                </span>
               )}
+            </div>
+          )}
 
-              {/* Sidebar Links */}
-              <div className="space-y-2 mb-6">
-                {[
-                  { to: '/', label: 'Home', icon: '🏠' },
-                  { to: '/about', label: 'About', icon: 'ℹ️' },
-                  { to: '/contact', label: 'Contact', icon: '📧' },
-                ].map((link) => (
+          {/* Sidebar Links */}
+          <div className="space-y-2 mb-6">
+            {[
+              { to: '/', label: 'Home', icon: '🏠' },
+              { to: '/about', label: 'About', icon: 'ℹ️' },
+              { to: '/contact', label: 'Contact', icon: '📧' },
+            ].map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
+              >
+                <span className="text-xl">{link.icon}</span>
+                <span>{link.label}</span>
+              </Link>
+            ))}
+
+            {user && (
+              <>
+                <Link
+                  to="/dashboard"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
+                >
+                  <LayoutDashboard className="w-5 h-5" />
+                  <span>Dashboard</span>
+                </Link>
+
+                <Link
+                  to="/profile"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
+                >
+                  <User className="w-5 h-5" />
+                  <span>Profile</span>
+                </Link>
+
+                {/* ✅ ADDED: Notifications link in mobile menu */}
+                <Link
+                  to="/notifications"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
+                >
+                  <Bell className="w-5 h-5" />
+                  <span>Notifications</span>
+                </Link>
+
+                {isAdmin && (
                   <Link
-                    key={link.to}
-                    to={link.to}
+                    to="/admin/dashboard"
                     role="menuitem"
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
                   >
-                    <span className="text-xl">{link.icon}</span>
-                    <span>{link.label}</span>
+                    <Shield className="w-5 h-5" />
+                    <span>Admin Panel</span>
                   </Link>
-                ))}
-
-                {user && (
-                  <>
-                    <Link
-                      to="/dashboard"
-                      role="menuitem"
-                      onClick={() => setOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
-                    >
-                      <LayoutDashboard className="w-5 h-5" />
-                      <span>Dashboard</span>
-                    </Link>
-
-                    <Link
-                      to="/profile"
-                      role="menuitem"
-                      onClick={() => setOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
-                    >
-                      <User className="w-5 h-5" />
-                      <span>Profile</span>
-                    </Link>
-
-                    {isAdmin && (
-                      <Link
-                        to="/admin/dashboard"
-                        role="menuitem"
-                        onClick={() => setOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
-                      >
-                        <Shield className="w-5 h-5" />
-                        <span>Admin Panel</span>
-                      </Link>
-                    )}
-                  </>
                 )}
-              </div>
+              </>
+            )}
+          </div>
 
-              {/* Auth Section */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                {!user ? (
-                  <div className="space-y-3">
-                    <Link
-                      to="/login"
-                      onClick={() => setOpen(false)}
-                      className="block w-full px-4 py-3 text-center text-gray-700 dark:text-gray-300 bg-[#f8fafc] dark:bg-[#252f3f] hover:bg-gray-200 dark:hover:bg-[#2d3e50] rounded-lg transition font-semibold"
-                    >
-                      Login
-                    </Link>
-                    <Link
-                      to="/signup"
-                      onClick={() => setOpen(false)}
-                      className="block w-full px-4 py-3 text-center bg-[#1e3a5f] dark:bg-[#2d4a7c] hover:bg-[#2d4a7c] dark:hover:bg-[#3d5a8c] text-white rounded-lg transition font-semibold shadow-lg"
-                    >
-                      Sign Up
-                    </Link>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-[#fef2f2] dark:bg-[#ef4444]/10 hover:bg-[#fee2e2] dark:hover:bg-[#ef4444]/20 rounded-lg transition font-semibold text-[#ef4444]"
-                  >
-                    <LogOut className="w-5 h-5" />
-                    <span>Logout</span>
-                  </button>
-                )}
+          {/* Auth Section */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            {!user ? (
+              <div className="space-y-3">
+                <Link
+                  to="/login"
+                  onClick={() => setOpen(false)}
+                  className="block w-full px-4 py-3 text-center text-gray-700 dark:text-gray-300 bg-[#f8fafc] dark:bg-[#252f3f] hover:bg-gray-200 dark:hover:bg-[#2d3e50] rounded-lg transition font-semibold"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/signup"
+                  onClick={() => setOpen(false)}
+                  className="block w-full px-4 py-3 text-center bg-[#1e3a5f] dark:bg-[#2d4a7c] hover:bg-[#2d4a7c] dark:hover:bg-[#3d5a8c] text-white rounded-lg transition font-semibold shadow-lg"
+                >
+                  Sign Up
+                </Link>
               </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-    </nav>
-  );
+            ) : (
+              <button
+                onClick={handleLogout}
+                type="button"
+                className="flex items-center justify-center gap-3 w-full px-4 py-3 bg-[#fef2f2] dark:bg-[#ef4444]/10 hover:bg-[#fee2e2] dark:hover:bg-[#ef4444]/20 rounded-lg transition font-semibold text-[#ef4444]"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Logout</span>
+              </button>
+            )}
+          </div>
+        </motion.aside>
+      </>
+    )}
+  </AnimatePresence>
+</nav>
+);
 }

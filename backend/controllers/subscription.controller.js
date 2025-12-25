@@ -1,9 +1,33 @@
-// backend/controllers/subscription.controller.js - TIER UPGRADE LOGIC
+backend/controllers/subscription.controller.js - TIER UPGRADE LOGIC WITH AUTO API KEY GENERATION
 const User = require('../models/User.model');
 const Subscription = require('../models/Subscription.model');
 const Payment = require('../models/Payment.model');
+const APIKey = require('../models/APIKey.model');
 const { getTierPricing, calculateUpgradeCost, getAllTiersInCurrency } = require('../config/pricing.config');
 const paystackService = require('../services/paystack.service');
+const crypto = require('crypto');
+
+// Helper function to generate API credentials
+const generateApiCredentials = () => {
+  const apiKey = `dk_live_${crypto.randomBytes(24).toString('hex')}`;
+  const apiSecret = crypto.randomBytes(32).toString('hex');
+  const hashedSecret = crypto.createHash('sha256').update(apiSecret).digest('hex');
+  
+  return { apiKey, apiSecret, hashedSecret };
+};
+
+// Helper function to get rate limits based on tier
+const getRateLimitsForTier = (tier) => {
+  const limits = {
+    free: { requestsPerMinute: 10, requestsPerHour: 100, requestsPerDay: 1000 },
+    starter: { requestsPerMinute: 30, requestsPerHour: 500, requestsPerDay: 5000 },
+    growth: { requestsPerMinute: 60, requestsPerHour: 1000, requestsPerDay: 10000 },
+    enterprise: { requestsPerMinute: 120, requestsPerHour: 5000, requestsPerDay: 50000 },
+    api: { requestsPerMinute: 200, requestsPerHour: 10000, requestsPerDay: 100000 }
+  };
+  
+  return limits[tier] || limits.free;
+};
 
 // ==================== GET ALL TIERS ====================
 exports.getTiers = async (req, res) => {
@@ -47,7 +71,8 @@ exports.getCurrentSubscription = async (req, res) => {
         currentTier: user.tier,
         tierInfo: currentTierInfo,
         subscription: subscription || null,
-        usage: user.monthlyUsage
+        usage: user.monthlyUsage,
+        apiAccess: user.apiAccess || { enabled: false }
       }
     });
 
@@ -358,10 +383,73 @@ exports.verifyPayment = async (req, res) => {
       }
     });
 
-    // If API tier, enable API access
-    if (payment.tier === 'api') {
-      user.apiAccess.enabled = true;
-      await user.save();
+    // ✅ AUTO-GENERATE API KEYS FOR API TIER
+    let apiCredentials = null;
+    if (payment.tier === 'api' || payment.tier === 'enterprise') {
+      try {
+        // Enable API access
+        user.apiAccess = {
+          enabled: true,
+          createdAt: new Date(),
+          lastUsedAt: null,
+          requestCount: 0
+        };
+
+        // Generate API credentials
+        const { apiKey, apiSecret, hashedSecret } = generateApiCredentials();
+        const rateLimits = getRateLimitsForTier(payment.tier);
+        const webhookSecret = 'whsec_' + crypto.randomBytes(32).toString('hex');
+
+        // Create API key record
+        await APIKey.create({
+          userId: user._id,
+          businessName: user.businessName || user.fullName,
+          businessEmail: user.email,
+          name: 'Production API Key (Auto-generated)',
+          apiKey,
+          apiSecret: hashedSecret,
+          status: 'active',
+          environment: 'production',
+          rateLimit: rateLimits,
+          webhookSecret,
+          permissions: {
+            createEscrow: true,
+            viewEscrow: true,
+            updateEscrow: true,
+            deleteEscrow: false,
+            releasePayment: true,
+            refunds: payment.tier === 'api',
+            webhooks: true,
+            viewTransactions: true
+          },
+          metadata: {
+            createdBy: 'auto_upgrade',
+            notes: `Auto-generated on ${payment.tier} tier upgrade`,
+            tier: payment.tier
+          }
+        });
+
+        // Update user with API key reference
+        user.apiAccess.apiKey = apiKey;
+        user.apiAccess.createdAt = new Date();
+        await user.save();
+
+        // Store credentials to return (only time they'll see the secret)
+        apiCredentials = {
+          apiKey,
+          apiSecret, // ⚠️ Only shown once!
+          webhookSecret,
+          rateLimits,
+          warning: '⚠️ IMPORTANT: Save these credentials now! The secret will never be shown again.'
+        };
+
+        console.log('✅ API keys auto-generated for user:', user._id);
+
+      } catch (apiError) {
+        console.error('❌ Failed to auto-generate API keys:', apiError);
+        // Don't fail the entire upgrade, just log the error
+        // User can manually generate keys later from dashboard
+      }
     }
 
     res.json({
@@ -375,7 +463,8 @@ exports.verifyPayment = async (req, res) => {
           amount: payment.amount,
           currency: payment.currency,
           paidAt: payment.paidAt
-        }
+        },
+        ...(apiCredentials && { apiCredentials }) // Include API creds if generated
       }
     });
 
@@ -412,12 +501,16 @@ exports.cancelSubscription = async (req, res) => {
     subscription.autoRenew = false;
     await subscription.save();
 
+    // Note: Don't immediately revoke API keys, let them work until period end
+    // A cron job should handle this
+
     res.json({
       success: true,
       message: 'Subscription cancelled successfully',
       data: {
         subscription,
-        note: 'You will have access until the end of your current billing period'
+        note: 'You will have access until the end of your current billing period',
+        accessUntil: subscription.currentPeriodEnd
       }
     });
 
@@ -426,6 +519,50 @@ exports.cancelSubscription = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to cancel subscription'
+    });
+  }
+};
+
+// ==================== REACTIVATE SUBSCRIPTION ====================
+exports.reactivateSubscription = async (req, res) => {
+  try {
+    const subscription = await Subscription.findOne({
+      userId: req.user._id,
+      status: 'cancelled'
+    });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'No cancelled subscription found'
+      });
+    }
+
+    // Check if still within billing period
+    if (new Date() > subscription.currentPeriodEnd) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subscription period has ended. Please create a new subscription.'
+      });
+    }
+
+    subscription.status = 'active';
+    subscription.autoRenew = true;
+    subscription.cancelledAt = null;
+    subscription.cancelReason = null;
+    await subscription.save();
+
+    res.json({
+      success: true,
+      message: 'Subscription reactivated successfully',
+      data: { subscription }
+    });
+
+  } catch (error) {
+    console.error('Reactivate subscription error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reactivate subscription'
     });
   }
 };

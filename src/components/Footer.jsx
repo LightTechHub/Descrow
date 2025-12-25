@@ -1,4 +1,4 @@
-// File: src/components/Footer.jsx - ULTIMATE SEO OPTIMIZED + CLEAN VERSION
+// File: src/components/Footer.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, Phone, MapPin } from 'lucide-react';
@@ -37,28 +37,28 @@ const Footer = () => {
       icon: FaFacebookF, 
       url: 'https://facebook.com/dealcross', 
       label: 'Facebook', 
-      color: 'hover:text-blue-600',
+      color: 'hover:text-[#1877f2]',
       ariaLabel: 'Follow us on Facebook'
     },
     { 
       icon: FaTwitter, 
       url: 'https://twitter.com/dealcross', 
       label: 'Twitter', 
-      color: 'hover:text-blue-400',
+      color: 'hover:text-[#1da1f2]',
       ariaLabel: 'Follow us on Twitter'
     },
     { 
       icon: FaInstagram, 
       url: 'https://instagram.com/dealcross', 
       label: 'Instagram', 
-      color: 'hover:text-pink-500',
+      color: 'hover:text-[#e4405f]',
       ariaLabel: 'Follow us on Instagram'
     },
     { 
       icon: FaLinkedinIn, 
       url: 'https://linkedin.com/company/dealcross', 
       label: 'LinkedIn', 
-      color: 'hover:text-blue-700',
+      color: 'hover:text-[#0077b5]',
       ariaLabel: 'Connect with us on LinkedIn'
     },
     { 
@@ -117,7 +117,7 @@ const Footer = () => {
       <footer
         role="contentinfo"
         aria-label="Site footer"
-        className="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 transition-colors duration-300"
+        className="bg-[#f8fafc] dark:bg-[#0f1419] border-t border-gray-200 dark:border-gray-700 transition-colors duration-300"
         itemScope
         itemType="https://schema.org/WPFooter"
       >
@@ -135,7 +135,7 @@ const Footer = () => {
                 itemProp="url"
               >
                 <Shield 
-                  className="w-8 h-8 text-blue-600 mr-2 group-hover:scale-110 transition-transform" 
+                  className="w-8 h-8 text-[#1e3a5f] dark:text-[#2d4a7c] mr-2 group-hover:scale-110 transition-transform" 
                   aria-hidden="true"
                 />
                 <span 
@@ -158,7 +158,7 @@ const Footer = () => {
               <address className="space-y-3 mb-6 not-italic" itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
                 <a
                   href="mailto:support@dealcross.net"
-                  className="flex items-center gap-3 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition group"
+                  className="flex items-center gap-3 text-gray-600 dark:text-gray-400 hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition group"
                   itemProp="email"
                   aria-label="Email support at support@dealcross.net"
                 >
@@ -168,7 +168,7 @@ const Footer = () => {
 
                 <a
                   href="tel:+15551234567"
-                  className="flex items-center gap-3 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition group"
+                  className="flex items-center gap-3 text-gray-600 dark:text-gray-400 hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition group"
                   itemProp="telephone"
                   aria-label="Call us at +1 555-123-4567"
                 >
@@ -196,7 +196,7 @@ const Footer = () => {
                       target="_blank"
                       rel="noopener noreferrer nofollow"
                       aria-label={social.ariaLabel}
-                      className={`text-gray-500 dark:text-gray-400 ${social.color} transition-all duration-200 transform hover:scale-110 focus:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded`}
+                      className={`text-gray-500 dark:text-gray-400 ${social.color} transition-all duration-200 transform hover:scale-110 focus:scale-110 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] dark:focus:ring-[#2d4a7c] rounded`}
                       itemProp="sameAs"
                     >
                       <Icon className="w-5 h-5" aria-hidden="true" />
@@ -219,7 +219,7 @@ const Footer = () => {
                   <li key={idx}>
                     <Link
                       to={link.path}
-                      className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition text-sm focus:text-blue-600 focus:outline-none focus:underline"
+                      className="text-gray-600 dark:text-gray-400 hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition text-sm focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                       title={link.description}
                     >
                       {link.name}
@@ -242,7 +242,7 @@ const Footer = () => {
                   <li key={idx}>
                     <Link
                       to={link.path}
-                      className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition text-sm focus:text-blue-600 focus:outline-none focus:underline"
+                      className="text-gray-600 dark:text-gray-400 hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition text-sm focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                       title={link.description}
                     >
                       {link.name}
@@ -265,7 +265,7 @@ const Footer = () => {
                   <li key={idx}>
                     <Link
                       to={link.path}
-                      className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition text-sm focus:text-blue-600 focus:outline-none focus:underline"
+                      className="text-gray-600 dark:text-gray-400 hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition text-sm focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                       title={link.description}
                     >
                       {link.name}
@@ -288,7 +288,7 @@ const Footer = () => {
                   <li key={idx}>
                     <Link
                       to={link.path}
-                      className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition text-sm focus:text-blue-600 focus:outline-none focus:underline"
+                      className="text-gray-600 dark:text-gray-400 hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition text-sm focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                       title={link.description}
                     >
                       {link.name}
@@ -300,7 +300,7 @@ const Footer = () => {
           </div>
 
           {/* Bottom Bar */}
-          <div className="border-t border-gray-200 dark:border-gray-800 pt-8">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               <p className="text-sm text-gray-600 dark:text-gray-400 text-center md:text-left">
                 © {currentYear} <span itemProp="name">Dealcross</span>. All rights reserved.
@@ -309,28 +309,28 @@ const Footer = () => {
               <nav aria-label="Footer quick links" className="flex flex-wrap justify-center gap-6 text-sm text-gray-600 dark:text-gray-400">
                 <Link 
                   to="/privacy-policy" 
-                  className="hover:text-blue-600 dark:hover:text-blue-400 transition focus:text-blue-600 focus:outline-none focus:underline"
+                  className="hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                   title="Read our privacy policy"
                 >
                   Privacy
                 </Link>
                 <Link 
                   to="/terms" 
-                  className="hover:text-blue-600 dark:hover:text-blue-400 transition focus:text-blue-600 focus:outline-none focus:underline"
+                  className="hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                   title="Read our terms of service"
                 >
                   Terms
                 </Link>
                 <Link 
                   to="/cookies" 
-                  className="hover:text-blue-600 dark:hover:text-blue-400 transition focus:text-blue-600 focus:outline-none focus:underline"
+                  className="hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                   title="Learn about our cookie policy"
                 >
                   Cookies
                 </Link>
                 <Link 
                   to="/docs" 
-                  className="hover:text-blue-600 dark:hover:text-blue-400 transition focus:text-blue-600 focus:outline-none focus:underline"
+                  className="hover:text-[#1e3a5f] dark:hover:text-[#2d4a7c] transition focus:text-[#1e3a5f] dark:focus:text-[#2d4a7c] focus:outline-none focus:underline"
                   title="Get help and documentation"
                 >
                   Help
@@ -340,7 +340,7 @@ const Footer = () => {
           </div>
 
           {/* Trust Badges with Tooltips */}
-          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-800">
+          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
             <div 
               className="flex flex-wrap justify-center items-center gap-8 text-gray-500 dark:text-gray-600"
               role="list"
@@ -353,8 +353,8 @@ const Footer = () => {
                   role="listitem"
                   title={badge.description}
                 >
-                  <Shield className="w-4 h-4 group-hover:text-blue-600 transition" aria-hidden="true" />
-                  <span className="text-xs font-medium group-hover:text-blue-600 transition">
+                  <Shield className="w-4 h-4 group-hover:text-[#1e3a5f] dark:group-hover:text-[#2d4a7c] transition" aria-hidden="true" />
+                  <span className="text-xs font-medium group-hover:text-[#1e3a5f] dark:group-hover:text-[#2d4a7c] transition">
                     {badge.label}
                   </span>
                 </div>
@@ -362,8 +362,8 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Newsletter Signup (Optional but great for SEO/engagement) */}
-          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-800">
+          {/* Newsletter Signup */}
+          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
             <div className="max-w-md mx-auto text-center">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Stay Updated
@@ -376,12 +376,12 @@ const Footer = () => {
                   type="email"
                   placeholder="Enter your email"
                   aria-label="Email address for newsletter"
-                  className="flex-1 px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+                  className="flex-1 px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-[#1e3a5f] dark:focus:ring-[#2d4a7c] focus:border-transparent bg-white dark:bg-[#1e2936] text-gray-900 dark:text-white"
                   required
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="px-4 py-2 bg-[#1e3a5f] dark:bg-[#2d4a7c] hover:bg-[#2d4a7c] dark:hover:bg-[#3d5a8c] text-white text-sm font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] dark:focus:ring-[#2d4a7c] focus:ring-offset-2"
                   aria-label="Subscribe to newsletter"
                 >
                   Subscribe

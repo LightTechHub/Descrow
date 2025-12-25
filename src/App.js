@@ -42,6 +42,10 @@ import NotificationsPage from './pages/NotificationsPage';
 import PaymentPage from './pages/PaymentPage';
 import PaymentVerificationPage from './pages/PaymentVerificationPage';
 
+// ==================== SUBSCRIPTION PAGES ====================
+import UpgradePage from './pages/Subscription/UpgradePage';
+import PaymentCallbackPage from './pages/Subscription/PaymentCallbackPage';
+
 // ==================== ADMIN PAGES ====================
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -167,7 +171,8 @@ function App() {
       '/escrow',
       '/profile',
       '/notifications',
-      '/payment'
+      '/payment',
+      '/upgrade'
     ];
     return !noFooterRoutes.some(route => path.startsWith(route));
   };
@@ -285,6 +290,24 @@ function App() {
             element={
               <ProtectedRoute>
                 <PaymentVerificationPage />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* ==================== SUBSCRIPTION ROUTES ==================== */}
+          <Route 
+            path="/upgrade" 
+            element={
+              <ProtectedRoute>
+                <UpgradePage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/upgrade/callback" 
+            element={
+              <ProtectedRoute>
+                <PaymentCallbackPage />
               </ProtectedRoute>
             } 
           />

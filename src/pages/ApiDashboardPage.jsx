@@ -577,3 +577,6 @@ const ApiDashboardPage = () => {
     )}
   </div>
 </div>
+);
+};
+export default ApiDashboardPage;

@@ -1,4 +1,4 @@
-// backend/services/didit.service.js - Corrected for Didit API v2
+// backend/services/didit.service.js - UPDATED WITH DUAL WORKFLOW SUPPORT
 const axios = require('axios');
 const crypto = require('crypto');
 
@@ -6,10 +6,12 @@ class DiditService {
   constructor() {
     this.apiKey = process.env.DIDIT_API_KEY;
     this.webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
-    this.workflowId = process.env.DIDIT_WORKFLOW_ID;
     this.baseUrl = process.env.DIDIT_API_URL || 'https://verification.didit.me';
     
-    // Log configuration on startup (safely)
+    // TWO SEPARATE WORKFLOW IDs - Individual vs Business
+    this.individualFlowId = process.env.DIDIT_INDIVIDUAL_FLOW_ID;
+    this.businessFlowId = process.env.DIDIT_BUSINESS_FLOW_ID;
+    
     this.logConfiguration();
   }
 
@@ -17,24 +19,26 @@ class DiditService {
    * Log configuration without exposing secrets
    */
   logConfiguration() {
-    console.log('🔑 Didit Service Configuration:');
+    console.log('🔑 DiDIT Service Configuration:');
     console.log('   Base URL:', this.baseUrl);
     console.log('   API Key:', this.apiKey ? `${this.apiKey.substring(0, 10)}...` : '❌ NOT SET');
-    console.log('   Workflow ID:', this.workflowId ? `${this.workflowId.substring(0, 20)}...` : '❌ NOT SET');
+    console.log('   Individual Flow:', this.individualFlowId ? `${this.individualFlowId.substring(0, 20)}...` : '❌ NOT SET');
+    console.log('   Business Flow:', this.businessFlowId ? `${this.businessFlowId.substring(0, 20)}...` : '❌ NOT SET');
     console.log('   Webhook Secret:', this.webhookSecret ? 'SET ✅' : '❌ NOT SET');
     
     if (!this.apiKey) {
       console.error('❌ CRITICAL: DIDIT_API_KEY is missing!');
     }
-    
-    if (!this.workflowId) {
-      console.error('❌ CRITICAL: DIDIT_WORKFLOW_ID is missing!');
-      console.error('   Get this from Didit Business Console > Workflows');
+    if (!this.individualFlowId) {
+      console.error('❌ WARNING: DIDIT_INDIVIDUAL_FLOW_ID is missing!');
+    }
+    if (!this.businessFlowId) {
+      console.error('❌ WARNING: DIDIT_BUSINESS_FLOW_ID is missing!');
     }
   }
 
   /**
-   * Generate authentication headers for Didit API v2
+   * Generate authentication headers for DiDIT API v2
    */
   getHeaders() {
     if (!this.apiKey) {
@@ -49,21 +53,40 @@ class DiditService {
   }
 
   /**
+   * Get appropriate workflow ID based on account type
+   */
+  getWorkflowId(accountType) {
+    if (accountType === 'business') {
+      if (!this.businessFlowId) {
+        console.warn('⚠️ Business workflow ID not set, falling back to individual');
+        return this.individualFlowId;
+      }
+      return this.businessFlowId;
+    } else {
+      if (!this.individualFlowId) {
+        throw new Error('Individual workflow ID not configured');
+      }
+      return this.individualFlowId;
+    }
+  }
+
+  /**
    * Validate configuration before making requests
    */
-  validateConfiguration() {
+  validateConfiguration(accountType = 'individual') {
     const errors = [];
     
     if (!this.apiKey) {
       errors.push('DIDIT_API_KEY is not set');
     }
     
-    if (!this.workflowId) {
-      errors.push('DIDIT_WORKFLOW_ID is not set - get this from Didit Business Console');
+    const workflowId = this.getWorkflowId(accountType);
+    if (!workflowId) {
+      errors.push(`DIDIT_${accountType.toUpperCase()}_FLOW_ID is not set`);
     }
     
     if (errors.length > 0) {
-      console.error('❌ Didit configuration errors:', errors);
+      console.error('❌ DiDIT configuration errors:', errors);
       return {
         valid: false,
         errors
@@ -74,134 +97,150 @@ class DiditService {
   }
 
   /**
- * Create a verification session for a user
- */
-async createVerificationSession(userId, userData) {
-  try {
-    // Validate configuration
-    if (!this.apiKey || !this.workflowId) {
+   * Create a verification session for a user (supports both individual and business)
+   */
+  async createVerificationSession(userId, userData) {
+    try {
+      // Determine account type
+      const accountType = userData.accountType || 'individual';
+      
+      // Validate configuration
+      const configCheck = this.validateConfiguration(accountType);
+      if (!configCheck.valid) {
+        return {
+          success: false,
+          message: 'KYC service is not properly configured',
+          error: {
+            detail: configCheck.errors.join(', ')
+          }
+        };
+      }
+
+      const workflowId = this.getWorkflowId(accountType);
+
+      console.log(`🔄 Creating DiDIT ${accountType} verification session for user:`, userId);
+
+      const requestBody = {
+        workflow_id: workflowId,
+        callback: `${process.env.BACKEND_URL}/api/kyc/webhooks/didit`,
+        vendor_data: userId.toString(),
+        
+        // Success/Cancel URLs
+        success_url: `${process.env.FRONTEND_URL}/kyc-verification?status=success&session={session_id}`,
+        cancel_url: `${process.env.FRONTEND_URL}/kyc-verification?status=cancelled`,
+        
+        metadata: {
+          user_id: userId.toString(),
+          account_type: accountType,
+          tier: userData.tier || 'starter',
+          platform: 'dealcross',
+          timestamp: new Date().toISOString()
+        },
+        
+        contact_details: {
+          email: userData.email,
+          email_lang: 'en',
+          phone: userData.phone || null
+        }
+      };
+
+      // Add business-specific metadata if applicable
+      if (accountType === 'business' && userData.businessInfo) {
+        requestBody.metadata = {
+          ...requestBody.metadata,
+          company_name: userData.businessInfo.companyName,
+          company_type: userData.businessInfo.companyType,
+          industry: userData.businessInfo.industry,
+          registration_number: userData.businessInfo.registrationNumber
+        };
+      }
+
+      const endpoint = `${this.baseUrl}/v2/session/`;
+
+      console.log('📤 Request details:', {
+        url: endpoint,
+        accountType,
+        workflowId: workflowId ? `${workflowId.substring(0, 20)}...` : 'NOT SET',
+        successUrl: requestBody.success_url,
+        callbackUrl: requestBody.callback
+      });
+
+      const response = await axios.post(
+        endpoint,
+        requestBody,
+        {
+          headers: this.getHeaders(),
+          timeout: 30000
+        }
+      );
+
+      console.log(`✅ DiDIT ${accountType} session created:`, response.data.session_id);
+
+      return {
+        success: true,
+        data: {
+          sessionId: response.data.session_id,
+          sessionToken: response.data.session_token,
+          sessionNumber: response.data.session_number,
+          verificationUrl: response.data.url,
+          accountType,
+          expiresAt: response.data.expires_at || new Date(Date.now() + 24 * 60 * 60 * 1000)
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ DiDIT create session error:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        requestUrl: error.config?.url
+      });
+
+      let errorMessage = 'Failed to create verification session';
+      let errorDetail = error.response?.data?.detail || error.response?.data?.message || error.message;
+
+      if (error.response?.status === 401) {
+        errorMessage = 'Authentication failed with KYC provider';
+        errorDetail = 'Invalid API credentials. Please verify your credentials.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Access forbidden';
+        errorDetail = 'Your API key does not have permission for this action.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Workflow not found';
+        errorDetail = 'The configured workflow ID does not exist. Please verify DIDIT_WORKFLOW_ID.';
+      } else if (error.response?.status === 422) {
+        errorMessage = 'Invalid request data';
+        errorDetail = error.response?.data?.detail || 'Please check the request parameters.';
+      } else if (error.response?.status === 429) {
+        errorMessage = 'Rate limit exceeded';
+        errorDetail = 'Too many requests. Please try again later.';
+      }
+      
       return {
         success: false,
-        message: 'KYC service is not properly configured',
+        message: errorMessage,
         error: {
-          detail: 'Missing API key or Workflow ID. Please contact support.'
+          detail: errorDetail,
+          status: error.response?.status
         }
       };
     }
-
-    console.log('🔄 Creating Didit verification session for user:', userId);
-
-    const requestBody = {
-      workflow_id: this.workflowId,
-      callback: `${process.env.BACKEND_URL}/api/webhooks/didit`, // ✅ For server webhook
-      vendor_data: userId.toString(),
-      
-      // ✅ SUCCESS/CANCEL URLs - Where users are redirected after verification
-      success_url: `${process.env.FRONTEND_URL}/profile?tab=kyc&status=success&session={session_id}`,
-      cancel_url: `${process.env.FRONTEND_URL}/profile?tab=kyc&status=cancelled`,
-      
-      metadata: {
-        user_id: userId.toString(),
-        tier: userData.tier || 'starter',
-        platform: 'dealcross',
-        timestamp: new Date().toISOString()
-      },
-      contact_details: {
-        email: userData.email,
-        email_lang: 'en',
-        phone: userData.phone || null
-      }
-    };
-
-    // Construct the correct endpoint URL
-    const endpoint = `${this.baseUrl}/v2/session/`;
-
-    console.log('📤 Request details:', {
-      url: endpoint,
-      method: 'POST',
-      workflowId: this.workflowId ? `${this.workflowId.substring(0, 20)}...` : 'NOT SET',
-      successUrl: requestBody.success_url,
-      callbackUrl: requestBody.callback
-    });
-
-    const response = await axios.post(
-      endpoint,
-      requestBody,
-      {
-        headers: this.getHeaders(),
-        timeout: 30000
-      }
-    );
-
-    console.log('✅ Didit session created:', response.data.session_id);
-
-    return {
-      success: true,
-      data: {
-        sessionId: response.data.session_id,
-        sessionToken: response.data.session_token,
-        sessionNumber: response.data.session_number,
-        verificationUrl: response.data.url,
-        expiresAt: response.data.expires_at || new Date(Date.now() + 24 * 60 * 60 * 1000)
-      }
-    };
-
-  } catch (error) {
-    console.error('❌ Didit create session error:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      requestUrl: error.config?.url
-    });
-
-    let errorMessage = 'Failed to create verification session';
-    let errorDetail = error.response?.data?.detail || error.response?.data?.message || error.message;
-
-    if (error.response?.status === 401) {
-      errorMessage = 'Authentication failed with KYC provider';
-      errorDetail = 'Invalid API credentials. Please verify your credentials in Render environment variables.';
-    } else if (error.response?.status === 403) {
-      errorMessage = 'Access forbidden';
-      errorDetail = 'Your API key does not have permission for this action.';
-    } else if (error.response?.status === 404) {
-      errorMessage = 'Workflow not found';
-      errorDetail = 'The configured workflow ID does not exist. Please verify DIDIT_WORKFLOW_ID.';
-    } else if (error.response?.status === 422) {
-      errorMessage = 'Invalid request data';
-      errorDetail = error.response?.data?.detail || 'Please check the request parameters.';
-    } else if (error.response?.status === 429) {
-      errorMessage = 'Rate limit exceeded';
-      errorDetail = 'Too many requests. Please try again later.';
-    }
-    
-    return {
-      success: false,
-      message: errorMessage,
-      error: {
-        detail: errorDetail,
-        status: error.response?.status
-      }
-    };
   }
-}
 
   /**
    * Get verification session status and decision
    */
   async getVerificationStatus(sessionId) {
     try {
-      // Validate configuration first
-      const configCheck = this.validateConfiguration();
-      if (!configCheck.valid) {
+      if (!this.apiKey) {
         return {
           success: false,
-          message: 'KYC service is not properly configured',
-          error: configCheck.errors
+          message: 'KYC service not configured'
         };
       }
 
-      console.log('🔍 Checking Didit verification status:', sessionId);
+      console.log('🔍 Checking DiDIT verification status:', sessionId);
 
       const endpoint = `${this.baseUrl}/v2/session/${sessionId}/decision/`;
 
@@ -215,7 +254,7 @@ async createVerificationSession(userId, userData) {
 
       const data = response.data;
 
-      // Map Didit v2 status
+      // Map DiDIT v2 status
       let status = 'pending';
       let verified = false;
 
@@ -244,14 +283,17 @@ async createVerificationSession(userId, userData) {
             document: data.document_verification || {},
             liveness: data.liveness_check || {},
             address: data.address_verification || {},
-            aml: data.aml_screening || {}
+            aml: data.aml_screening || {},
+            // Business-specific
+            company: data.company_verification || {},
+            ubo: data.ubo_verification || {}
           },
           completedAt: data.completed_at,
           failureReason: data.rejection_reason || data.failure_reason
         }
       };
     } catch (error) {
-      console.error('❌ Didit get status error:', {
+      console.error('❌ DiDIT get status error:', {
         status: error.response?.status,
         data: error.response?.data,
         message: error.message
@@ -266,7 +308,7 @@ async createVerificationSession(userId, userData) {
   }
 
   /**
-   * Verify webhook signature from Didit
+   * Verify webhook signature from DiDIT
    */
   verifyWebhookSignature(rawBody, signature) {
     try {
@@ -275,7 +317,6 @@ async createVerificationSession(userId, userData) {
         return false;
       }
 
-      // Didit webhook signature verification
       const expectedSignature = crypto
         .createHmac('sha256', this.webhookSecret)
         .update(rawBody)
@@ -296,13 +337,13 @@ async createVerificationSession(userId, userData) {
   }
 
   /**
-   * Process webhook event from Didit
+   * Process webhook event from DiDIT
    */
   async processWebhookEvent(event) {
     try {
       const { status, vendor_data, session_id, workflow_id } = event;
 
-      console.log('📥 Processing Didit webhook:', {
+      console.log('📥 Processing DiDIT webhook:', {
         status,
         sessionId: session_id,
         workflowId: workflow_id
@@ -335,7 +376,10 @@ async createVerificationSession(userId, userData) {
           document: event.document_verification || {},
           liveness: event.liveness_check || {},
           address: event.address_verification || {},
-          aml: event.aml_screening || {}
+          aml: event.aml_screening || {},
+          // Business-specific
+          company: event.company_verification || {},
+          ubo: event.ubo_verification || {}
         },
         failureReason: event.rejection_reason || event.failure_reason
       };
@@ -361,10 +405,10 @@ async createVerificationSession(userId, userData) {
         }
       );
 
-      console.log('✅ Didit session cancelled:', sessionId);
+      console.log('✅ DiDIT session cancelled:', sessionId);
       return { success: true };
     } catch (error) {
-      console.error('❌ Didit cancel session error:', error.response?.data || error.message);
+      console.error('❌ DiDIT cancel session error:', error.response?.data || error.message);
       return { 
         success: false, 
         error: error.response?.data?.message || error.message 
@@ -377,8 +421,7 @@ async createVerificationSession(userId, userData) {
    */
   async healthCheck() {
     try {
-      // Validate configuration
-      const configCheck = this.validateConfiguration();
+      const configCheck = this.validateConfiguration('individual');
       if (!configCheck.valid) {
         return {
           success: false,
@@ -386,7 +429,6 @@ async createVerificationSession(userId, userData) {
         };
       }
 
-      // Try to fetch sessions list to verify credentials
       const endpoint = `${this.baseUrl}/v2/session/`;
       
       const response = await axios.get(
@@ -398,17 +440,18 @@ async createVerificationSession(userId, userData) {
         }
       );
 
-      console.log('✅ Didit API health check passed');
+      console.log('✅ DiDIT API health check passed');
       return {
         success: true,
-        message: 'Didit API connection successful',
+        message: 'DiDIT API connection successful',
         data: {
           baseUrl: this.baseUrl,
-          workflowConfigured: !!this.workflowId
+          individualFlowConfigured: !!this.individualFlowId,
+          businessFlowConfigured: !!this.businessFlowId
         }
       };
     } catch (error) {
-      console.error('❌ Didit API health check failed:', {
+      console.error('❌ DiDIT API health check failed:', {
         status: error.response?.status,
         message: error.response?.data || error.message
       });

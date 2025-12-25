@@ -51,7 +51,8 @@ const contactRoutes = require('./routes/contact.routes');
 const apiV1Routes = require('./routes/api.v1.routes');
 const businessRoutes = require('./routes/business.routes');
 const bankAccountRoutes = require('./routes/bankAccount.routes');
-const kycRoutes = require('./routes/kyc.routes'); // ✅ ADDED
+const kycRoutes = require('./routes/kyc.routes');
+const subscriptionRoutes = require('./routes/subscription.routes'); // ✅ ADDED
 
 const app = express();
 
@@ -154,9 +155,14 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
-// ==================== HEALTH ====================
+// ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, status: 'healthy' });
+  res.json({ 
+    success: true, 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // ==================== API ROUTES ====================
@@ -168,8 +174,11 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/verify-email', verifyRoutes);
 
-// ✅ KYC ROUTES (ADDED)
+// KYC
 app.use('/api/kyc', kycRoutes);
+
+// Subscription (✅ ADDED)
+app.use('/api/subscription', subscriptionRoutes);
 
 // Escrow & Core
 app.use('/api/escrow', escrowRoutes);
@@ -196,38 +205,127 @@ app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/bank', bankAccountRoutes);
 
+// Contact
+app.use('/api/contact', contactRoutes);
+
 // Webhooks
 app.use('/api/webhooks', webhookRoutes);
 
 // Public API
 app.use('/api/v1', apiV1Routes);
 
-// ==================== 404 ====================
+// ==================== 404 HANDLER ====================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'Route not found',
-    path: req.originalUrl
+    path: req.originalUrl,
+    method: req.method
   });
 });
 
-// ==================== GLOBAL ERROR ====================
+// ==================== GLOBAL ERROR HANDLER ====================
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err.message);
+  console.error('❌ Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method
+  });
+
+  // Handle specific error types
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation error',
+      errors: Object.values(err.errors).map(e => e.message)
+    });
+  }
+
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid token'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Token expired'
+    });
+  }
+
+  if (err.name === 'CastError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid ID format'
+    });
+  }
+
+  // Default error response
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal server error'
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
+});
+
+// ==================== GRACEFUL SHUTDOWN ====================
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Process terminated');
+    mongoose.connection.close(false, () => {
+      console.log('✅ MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('👋 SIGINT received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Process terminated');
+    mongoose.connection.close(false, () => {
+      console.log('✅ MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+// ==================== UNHANDLED ERRORS ====================
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
 });
 
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📍 Frontend URL: ${process.env.FRONTEND_URL}`);
-  console.log(`📍 Backend URL: ${process.env.BACKEND_URL}`);
+  console.log(`
+╔════════════════════════════════════════╗
+║   🚀 SERVER STARTED SUCCESSFULLY       ║
+╠════════════════════════════════════════╣
+║   Port: ${PORT}                        ║
+║   Environment: ${process.env.NODE_ENV || 'development'}
+║   Frontend: ${process.env.FRONTEND_URL}
+║   Backend: ${process.env.BACKEND_URL}
+╚════════════════════════════════════════╝
+  `);
 });
 
+// Set server timeout
 server.timeout = 30000;
+
+// Keep alive timeout
+server.keepAliveTimeout = 65000;
+
+// Headers timeout
+server.headersTimeout = 66000;
 
 module.exports = app;

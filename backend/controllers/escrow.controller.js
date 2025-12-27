@@ -1,1364 +1,1330 @@
-const Escrow = require('../models/Escrow.model');
-const User = require('../models/User.model');
-const mongoose = require('mongoose');
-const feeConfig = require('../config/fee.config');
-const { notifyEscrowParties, createNotification } = require('../utils/notificationHelper');
+const Escrow = require(’../models/Escrow.model’);
+const User = require(’../models/User.model’);
+const mongoose = require(‘mongoose’);
+const feeConfig = require(’../config/fee.config’);
+const { notifyEscrowParties, createNotification } = require(’../utils/notificationHelper’);
 
-/**
- * Create new escrow (Buyer initiates) - WITH FILE UPLOAD SUPPORT
- */
+// ==================== CREATE ESCROW ====================
 exports.createEscrow = async (req, res) => {
-  try {
-    const { 
-      title, 
-      description, 
-      amount, 
-      currency, 
-      sellerEmail, 
-      category, 
-      deliveryMethod 
-    } = req.body;
+try {
+const {
+title, description, amount, currency, currencyType, transactionType,
+sellerEmail, category, deliveryMethod, participants, milestones,
+agentEmail, inspectorEmail, arbitratorEmail, metadata, customTerms,
+inspectionPeriodDays, autoReleaseDays, shippingAddress, tags
+} = req.body;
 
-    const buyerId = req.user.id;
+```
+const buyerId = req.user.id;
 
-    // Validate required fields
-    if (!title || !description || !amount || !sellerEmail) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: title, description, amount, sellerEmail'
-      });
-    }
-
-    // Validate amount
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid amount is required'
-      });
-    }
-
-    // Validate currency
-    const supportedCurrencies = ['USD', 'NGN', 'EUR', 'GBP', 'CAD', 'AUD', 'KES', 'GHS', 'ZAR', 'XOF', 'XAF'];
-    if (!supportedCurrencies.includes(currency)) {
-      return res.status(400).json({
-        success: false,
-        message: `Unsupported currency. Supported: ${supportedCurrencies.join(', ')}`
-      });
-    }
-
-    // Find seller by email
-    const seller = await User.findOne({ email: sellerEmail.toLowerCase() });
-    if (!seller) {
-      return res.status(404).json({
-        success: false,
-        message: 'Seller not found with this email'
-      });
-    }
-
-    // Prevent self-dealing
-    if (seller._id.toString() === buyerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'You cannot create an escrow with yourself'
-      });
-    }
-
-   // Get buyer with tier info
-const buyer = await User.findById(buyerId);
-
-if (!buyer) {
-  return res.status(404).json({
+// Validation
+if (!title || !description || !amount || !sellerEmail) {
+  return res.status(400).json({
     success: false,
-    message: 'Buyer not found'
+    message: 'Missing required fields: title, description, amount, sellerEmail'
   });
 }
 
-// ✅ SAME CHECK AS BANK ACCOUNT - Check if user has bank account
-if (!buyer.hasBankAccount) {
+const parsedAmount = parseFloat(amount);
+if (isNaN(parsedAmount) || parsedAmount <= 0) {
+  return res.status(400).json({ success: false, message: 'Valid amount required' });
+}
+
+// Validate currency
+const allCurrencies = [...Escrow.SUPPORTED_CURRENCIES.FIAT, ...Escrow.SUPPORTED_CURRENCIES.CRYPTO];
+if (!allCurrencies.includes(currency)) {
+  return res.status(400).json({ success: false, message: `Unsupported currency` });
+}
+
+// Validate transaction type
+if (transactionType && !Object.values(Escrow.ESCROW_TYPES).includes(transactionType)) {
+  return res.status(400).json({ success: false, message: `Invalid transaction type` });
+}
+
+// Find seller
+const seller = await User.findOne({ email: sellerEmail.toLowerCase() });
+if (!seller) {
+  return res.status(404).json({ success: false, message: 'Seller not found' });
+}
+
+if (seller._id.toString() === buyerId) {
+  return res.status(400).json({ success: false, message: 'Cannot create escrow with yourself' });
+}
+
+// Get buyer
+const buyer = await User.findById(buyerId);
+if (!buyer || !buyer.hasBankAccount) {
   return res.status(403).json({
     success: false,
-    message: 'Please add a bank account before creating escrow',
+    message: 'Bank account required',
     requiresVerification: true,
     verificationType: 'bank_account'
   });
 }
 
-console.log('✅ User has bank account, can create escrow');
-  
-    // ✅ FIX 3: Check tier limits
-    const canCreate = buyer.canCreateTransaction(parsedAmount, currency);
-    if (!canCreate.allowed) {
-      return res.status(403).json({
-        success: false,
-        message: canCreate.reason,
-        limit: canCreate.limit,
-        current: canCreate.current,
-        upgradeRequired: true,
-        currentTier: buyer.tier,
-        suggestedTier: buyer.tier === 'starter' ? 'growth' : 'enterprise'
-      });
-    }
+// Check tier limits
+const canCreate = buyer.canCreateTransaction(parsedAmount, currency);
+if (!canCreate.allowed) {
+  return res.status(403).json({
+    success: false,
+    message: canCreate.reason,
+    upgradeRequired: true,
+    currentTier: buyer.tier
+  });
+}
 
-    // Calculate tier-based fees
-    const feeBreakdown = await feeConfig.calculateSimpleFees(
-      parsedAmount,
-      currency
-    );
+// Check milestone support
+if (milestones && milestones.length > 0) {
+  const tierLimits = buyer.getTierLimits();
+  if (!tierLimits.milestonePayments) {
+    return res.status(403).json({
+      success: false,
+      message: 'Milestone payments require Growth tier or higher',
+      upgradeRequired: true
+    });
+  }
+}
 
-    // Handle file attachments
-    let attachments = [];
-    if (req.files && req.files.length > 0) {
-      attachments = req.files.map(file => ({
-        filename: file.filename,
-        originalName: file.originalname,
-        url: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
-        uploadedAt: new Date()
-      }));
-    }
+// Calculate fees
+const feeBreakdown = await feeConfig.calculateSimpleFees(parsedAmount, currency);
 
-    // Create escrow with tier-based payment
-    const escrowData = {
-      title: title.trim(),
-      description: description.trim(),
-      amount: parsedAmount,
-      currency: currency,
-      buyer: buyerId,
-      seller: seller._id,
-      buyerTier: buyer.tier,
-      sellerTier: seller.tier,
-      category: category || 'other',
-      delivery: {
-        method: deliveryMethod || 'physical'
-      },
-      payment: {
-        amount: feeBreakdown.amount,
-        buyerFee: feeBreakdown.buyerFee,
-        sellerFee: feeBreakdown.sellerFee,
-        platformFee: feeBreakdown.totalPlatformFee,
-        buyerPays: feeBreakdown.buyerPays,
-        sellerReceives: feeBreakdown.sellerReceives,
-        buyerFeePercentage: feeBreakdown.buyerFeePercentage,
-        sellerFeePercentage: feeBreakdown.sellerFeePercentage
-      },
-      attachments: attachments,
-      timeline: [{
-        status: 'pending',
-        timestamp: new Date(),
-        actor: buyerId,
-        note: 'Escrow created by buyer'
-      }]
-    };
+// Handle attachments
+let attachments = [];
+if (req.files && req.files.length > 0) {
+  attachments = req.files.map(file => ({
+    filename: file.filename,
+    originalName: file.originalname,
+    url: file.path,
+    mimetype: file.mimetype,
+    size: file.size,
+    uploadedBy: buyerId,
+    uploadedByRole: 'buyer',
+    uploadedAt: new Date()
+  }));
+}
 
-    const escrow = await Escrow.create(escrowData);
+// Build participants
+const escrowParticipants = [
+  {
+    user: buyerId,
+    role: 'buyer',
+    status: 'accepted',
+    hasApproved: true,
+    approvedAt: new Date()
+  },
+  {
+    user: seller._id,
+    role: 'seller',
+    status: 'invited',
+    invitedAt: new Date()
+  }
+];
 
-    // Increment monthly usage
-    buyer.monthlyUsage.transactionCount += 1;
-    await buyer.save();
+// Add optional participants
+if (agentEmail) {
+  const agent = await User.findOne({ email: agentEmail.toLowerCase() });
+  if (agent && agent.capabilities?.canBeAgent) {
+    escrowParticipants.push({
+      user: agent._id,
+      role: 'agent',
+      status: 'invited',
+      invitedAt: new Date()
+    });
+  }
+}
 
-    // Notify seller
+if (inspectorEmail) {
+  const inspector = await User.findOne({ email: inspectorEmail.toLowerCase() });
+  if (inspector && inspector.capabilities?.canBeInspector) {
+    escrowParticipants.push({
+      user: inspector._id,
+      role: 'inspector',
+      status: 'invited',
+      invitedAt: new Date()
+    });
+  }
+}
+
+if (arbitratorEmail) {
+  const arbitrator = await User.findOne({ email: arbitratorEmail.toLowerCase() });
+  if (arbitrator && arbitrator.capabilities?.canBeArbitrator) {
+    escrowParticipants.push({
+      user: arbitrator._id,
+      role: 'arbitrator',
+      status: 'invited',
+      invitedAt: new Date()
+    });
+  }
+}
+
+// Process milestones
+let processedMilestones = [];
+if (milestones && milestones.length > 0) {
+  const totalMilestoneAmount = milestones.reduce((sum, m) => sum + parseFloat(m.amount), 0);
+  if (Math.abs(totalMilestoneAmount - parsedAmount) > 0.01) {
+    return res.status(400).json({
+      success: false,
+      message: `Milestone amounts must sum to total amount`
+    });
+  }
+
+  processedMilestones = milestones.map((m, index) => ({
+    id: `MS${Date.now()}${index}`,
+    title: m.title,
+    description: m.description || '',
+    amount: parseFloat(m.amount),
+    percentage: (parseFloat(m.amount) / parsedAmount) * 100,
+    deliverables: m.deliverables || [],
+    dueDate: m.dueDate ? new Date(m.dueDate) : undefined,
+    status: 'pending'
+  }));
+}
+
+// Determine currency type
+const determinedCurrencyType = currencyType || 
+  (Escrow.SUPPORTED_CURRENCIES.CRYPTO.includes(currency) ? 'crypto' : 'fiat');
+
+// Create escrow
+const escrowData = {
+  title: title.trim(),
+  description: description.trim(),
+  amount: parsedAmount,
+  currency,
+  currencyType: determinedCurrencyType,
+  transactionType: transactionType || 'custom',
+  buyer: buyerId,
+  seller: seller._id,
+  buyerTier: buyer.tier,
+  sellerTier: seller.tier,
+  participants: escrowParticipants,
+  milestones: processedMilestones,
+  currentMilestone: processedMilestones.length > 0 ? 0 : undefined,
+  category: category || 'other',
+  delivery: {
+    method: deliveryMethod || 'physical',
+    shippingAddress: shippingAddress || undefined,
+    autoReleaseEnabled: autoReleaseDays ? true : false,
+    autoReleaseDays: autoReleaseDays || 7
+  },
+  payment: {
+    amount: feeBreakdown.amount,
+    buyerFee: feeBreakdown.buyerFee,
+    sellerFee: feeBreakdown.sellerFee,
+    platformFee: feeBreakdown.totalPlatformFee,
+    buyerPays: feeBreakdown.buyerPays,
+    sellerReceives: feeBreakdown.sellerReceives,
+    buyerFeePercentage: feeBreakdown.buyerFeePercentage,
+    sellerFeePercentage: feeBreakdown.sellerFeePercentage,
+    remainingAmount: parsedAmount
+  },
+  attachments,
+  terms: {
+    customTerms: customTerms || undefined,
+    agreedByBuyer: true,
+    buyerAgreedAt: new Date(),
+    inspectionPeriodDays: inspectionPeriodDays || 3
+  },
+  metadata: metadata || {},
+  tags: tags || [],
+  timeline: [{
+    status: 'pending',
+    timestamp: new Date(),
+    actor: buyerId,
+    actorRole: 'buyer',
+    note: 'Escrow created by buyer'
+  }]
+};
+
+const escrow = await Escrow.create(escrowData);
+
+// Update buyer stats
+buyer.monthlyUsage.transactionCount += 1;
+buyer.stats.totalTransactions += 1;
+buyer.stats.asBuyer.totalTransactions += 1;
+await buyer.save();
+
+// Notify participants
+await createNotification(
+  seller._id,
+  'escrow_created',
+  'New Escrow Request',
+  `${buyer.name} created an escrow: "${title}"`,
+  `/escrow/${escrow._id}`,
+  { escrowId: escrow._id, amount: parsedAmount, currency }
+);
+
+for (const participant of escrowParticipants) {
+  if (participant.role !== 'buyer' && participant.role !== 'seller') {
     await createNotification(
-      seller._id,
-      'escrow_created',
-      'New Escrow Request',
-      `${buyer.name} wants to create a ${currency} ${parsedAmount} escrow deal with you: "${title}"`,
+      participant.user,
+      'escrow_invitation',
+      `Invited as ${participant.role}`,
+      `You've been invited to participate as ${participant.role}`,
       `/escrow/${escrow._id}`,
-      { 
-        escrowId: escrow._id, 
-        amount: parsedAmount, 
-        currency: currency,
-        otherParty: buyer.name 
-      }
+      { escrowId: escrow._id, role: participant.role }
     );
-
-    // Populate and return
-    await escrow.populate('buyer seller', 'firstName lastName email profilePicture tier');
-
-    console.log('✅ Escrow created successfully:', escrow._id);
-
-    res.status(201).json({
-      success: true,
-      message: 'Escrow created successfully. Waiting for seller acceptance.',
-      data: {
-        escrow: {
-          ...escrow.toObject(),
-          feeBreakdown,
-          buyerTier: buyer.tier,
-          tierLimits: buyer.getTierLimits(),
-          attachmentsCount: attachments.length
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Create escrow error:', error);
-    
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to create escrow'
-    });
   }
+}
+
+await escrow.populate([
+  { path: 'buyer', select: 'name email profilePicture tier' },
+  { path: 'seller', select: 'name email profilePicture tier' },
+  { path: 'participants.user', select: 'name email profilePicture capabilities' }
+]);
+
+res.status(201).json({
+  success: true,
+  message: 'Escrow created successfully',
+  data: {
+    escrow: {
+      ...escrow.toObject(),
+      feeBreakdown,
+      buyerTier: buyer.tier,
+      tierLimits: buyer.getTierLimits()
+    }
+  }
+});
+```
+
+} catch (error) {
+console.error(‘Create escrow error:’, error);
+res.status(500).json({ success: false, message: error.message || ‘Failed to create escrow’ });
+}
 };
 
-/**
- * Check if user can create escrow (verification + tier check)
- */
-exports.checkCanCreateEscrow = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { amount, currency = 'USD' } = req.query;
+// ==================== MILESTONE MANAGEMENT ====================
+exports.addMilestone = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const { title, description, amount, percentage, deliverables, dueDate } = req.body;
 
-    // Fresh fetch of user
-    const user = await User.findById(userId).select('+kycStatus');
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    const checks = {
-      emailVerified: user.verified,
-      kycVerified: user.isKYCVerified && user.kycStatus?.status === 'approved',
-      kycStatus: user.kycStatus?.status || 'unverified',
-      tier: user.tier
-    };
+if (escrow.buyer.toString() !== userId && escrow.seller.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
 
-    // Check if can create
-    let canCreate = true;
-    let blockingReason = null;
-    let requiresAction = null;
+if (!['pending', 'accepted'].includes(escrow.status)) {
+  return res.status(400).json({ success: false, message: 'Cannot add milestones after funding' });
+}
 
-    if (!checks.emailVerified) {
-      canCreate = false;
-      blockingReason = 'Email verification required';
-      requiresAction = 'verify_email';
-    } else if (!checks.kycVerified) {
-      canCreate = false;
-      blockingReason = 'KYC verification required';
-      requiresAction = 'complete_kyc';
-    }
+await escrow.addMilestone({ title, description, amount, percentage, deliverables, dueDate });
+await escrow.populate('buyer seller', 'name email');
 
-    // If amount provided, check tier limits
-    let tierCheck = null;
-    if (amount && canCreate) {
-      const parsedAmount = parseFloat(amount);
-      if (!isNaN(parsedAmount)) {
-        tierCheck = user.canCreateTransaction(parsedAmount, currency);
-        if (!tierCheck.allowed) {
-          canCreate = false;
-          blockingReason = tierCheck.reason;
-          requiresAction = 'upgrade_tier';
-        }
-      }
-    }
+res.json({ success: true, message: 'Milestone added', data: { escrow } });
+```
 
-    res.json({
-      success: true,
-      data: {
-        canCreate,
-        blockingReason,
-        requiresAction,
-        checks,
-        tierCheck,
-        tierLimits: user.getTierLimits()
-      }
-    });
-
-  } catch (error) {
-    console.error('Check can create escrow error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check escrow creation eligibility'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to add milestone’ });
+}
 };
 
-/**
- * Calculate fees for amount (preview before creating) - ENHANCED WITH CURRENCY SUPPORT
- */
-exports.calculateFeePreview = async (req, res) => {
-  try {
-    const { amount, currency = 'USD' } = req.query;
-    const userId = req.user.id;
+exports.submitMilestone = async (req, res) => {
+try {
+const { id, milestoneId } = req.params;
+const userId = req.user.id;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid amount is required'
-      });
-    }
+```
+const escrow = await Escrow.findById(id);
+if (!escrow || escrow.seller.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
 
-    // Validate currency
-    const supportedCurrencies = ['USD', 'NGN', 'EUR', 'GBP', 'CAD', 'AUD', 'KES', 'GHS', 'ZAR', 'XOF', 'XAF'];
-    if (!supportedCurrencies.includes(currency)) {
-      return res.status(400).json({
-        success: false,
-        message: `Unsupported currency. Supported: ${supportedCurrencies.join(', ')}`
-      });
-    }
+const milestone = escrow.milestones.find(m => m.id === milestoneId);
+if (!milestone) {
+  return res.status(404).json({ success: false, message: 'Milestone not found' });
+}
 
-    // Get user's tier
-    const user = await User.findById(userId);
-    const userTier = user.tier || 'starter';
+milestone.status = 'submitted';
+milestone.submittedAt = new Date();
 
-    // Calculate fees based on user's tier and currency
-    const feeBreakdown = await feeConfig.calculateSimpleFees(
-      parseFloat(amount),
-      currency
-    );
+if (req.files) {
+  milestone.attachments = req.files.map(f => ({
+    filename: f.filename,
+    originalName: f.originalname,
+    url: f.path,
+    uploadedAt: new Date(),
+    uploadedBy: userId
+  }));
+}
 
-    // Get tier info
-    const tierInfo = await feeConfig.getTierInfo(userTier);
+escrow.timeline.push({
+  status: 'milestone_submitted',
+  actor: userId,
+  actorRole: 'seller',
+  note: `Milestone "${milestone.title}" submitted`,
+  timestamp: new Date()
+});
 
-    // Check if amount within limits
-    const withinLimit = await feeConfig.isAmountWithinLimit(
-      parseFloat(amount),
-      currency,
-      userTier
-    );
+await escrow.save();
+await createNotification(escrow.buyer, 'milestone_submitted', 'Milestone Ready', 
+  `Seller submitted: "${milestone.title}"`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
 
-    res.json({
-      success: true,
-      data: {
-        feeBreakdown,
-        userTier,
-        tierInfo,
-        withinLimit,
-        upgradeAvailable: !withinLimit,
-        currency: currency
-      }
-    });
+res.json({ success: true, message: 'Milestone submitted', data: { escrow, milestone } });
+```
 
-  } catch (error) {
-    console.error('Calculate fees error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to calculate fees'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to submit milestone’ });
+}
 };
 
-/**
- * Get user's escrows with filtering and pagination - FIXED FOR FRONTEND
- */
+exports.approveMilestone = async (req, res) => {
+try {
+const { id, milestoneId } = req.params;
+const userId = req.user.id;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow || escrow.buyer.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+
+await escrow.updateMilestone(milestoneId, 'approved');
+const milestone = escrow.milestones.find(m => m.id === milestoneId);
+
+escrow.timeline.push({
+  status: 'milestone_approved',
+  actor: userId,
+  actorRole: 'buyer',
+  note: `Milestone "${milestone.title}" approved`,
+  timestamp: new Date()
+});
+
+const approvedIndex = escrow.milestones.findIndex(m => m.id === milestoneId);
+if (approvedIndex !== -1) escrow.currentMilestone = approvedIndex + 1;
+
+const allApproved = escrow.milestones.every(m => ['approved', 'paid'].includes(m.status));
+if (allApproved) escrow.status = 'completed';
+
+await escrow.save();
+await createNotification(escrow.seller, 'milestone_approved', 'Milestone Approved',
+  `Buyer approved: "${milestone.title}"`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
+
+res.json({ success: true, message: 'Milestone approved', data: { escrow, milestone } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to approve milestone’ });
+}
+};
+
+exports.rejectMilestone = async (req, res) => {
+try {
+const { id, milestoneId } = req.params;
+const userId = req.user.id;
+const { rejectionReason } = req.body;
+
+```
+if (!rejectionReason) {
+  return res.status(400).json({ success: false, message: 'Rejection reason required' });
+}
+
+const escrow = await Escrow.findById(id);
+if (!escrow || escrow.buyer.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+
+await escrow.updateMilestone(milestoneId, 'rejected', { rejectionReason });
+const milestone = escrow.milestones.find(m => m.id === milestoneId);
+
+escrow.timeline.push({
+  status: 'milestone_rejected',
+  actor: userId,
+  actorRole: 'buyer',
+  note: `Milestone "${milestone.title}" rejected: ${rejectionReason}`,
+  timestamp: new Date()
+});
+
+await escrow.save();
+await createNotification(escrow.seller, 'milestone_rejected', 'Milestone Rejected',
+  `Buyer rejected: "${milestone.title}"`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
+
+res.json({ success: true, message: 'Milestone rejected', data: { escrow, milestone } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to reject milestone’ });
+}
+};
+
+// ==================== PARTICIPANT MANAGEMENT ====================
+exports.addParticipant = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const { email, role, compensation, compensationPercentage } = req.body;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
+
+if (escrow.buyer.toString() !== userId && escrow.seller.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+
+const participant = await User.findOne({ email: email.toLowerCase() });
+if (!participant || !participant.canParticipateAs(role)) {
+  return res.status(400).json({ success: false, message: 'User not authorized for this role' });
+}
+
+await escrow.addParticipant(participant._id, role, compensation || 0, compensationPercentage || 0);
+await createNotification(participant._id, 'escrow_invitation', `Invited as ${role}`,
+  `You've been invited as ${role}`, `/escrow/${escrow._id}`, { escrowId: escrow._id, role });
+
+res.json({ success: true, message: `${role} added`, data: { escrow } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: error.message });
+}
+};
+
+exports.acceptInvitation = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
+
+const participant = escrow.participants.find(
+  p => p.user.toString() === userId && p.status === 'invited'
+);
+
+if (!participant) {
+  return res.status(404).json({ success: false, message: 'No invitation found' });
+}
+
+participant.status = 'accepted';
+participant.respondedAt = new Date();
+escrow.timeline.push({
+  status: 'participant_accepted',
+  actor: userId,
+  actorRole: participant.role,
+  note: `${participant.role} accepted`,
+  timestamp: new Date()
+});
+
+await escrow.save();
+await createNotification(escrow.buyer, 'participant_accepted', `${participant.role} Accepted`,
+  `${participant.role} accepted invitation`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
+
+res.json({ success: true, message: 'Invitation accepted', data: { escrow } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to accept invitation’ });
+}
+};
+
+exports.declineInvitation = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
+
+const participant = escrow.participants.find(
+  p => p.user.toString() === userId && p.status === 'invited'
+);
+
+if (!participant) {
+  return res.status(404).json({ success: false, message: 'No invitation found' });
+}
+
+participant.status = 'declined';
+participant.respondedAt = new Date();
+
+await escrow.save();
+res.json({ success: true, message: 'Invitation declined' });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to decline invitation’ });
+}
+};
+
+// ==================== INSPECTION ====================
+exports.scheduleInspection = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const { inspectorEmail, scheduledDate, fee } = req.body;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow || escrow.buyer.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+
+const inspector = await User.findOne({ email: inspectorEmail.toLowerCase() });
+if (!inspector || !inspector.capabilities?.canBeInspector) {
+  return res.status(404).json({ success: false, message: 'Inspector not found' });
+}
+
+await escrow.scheduleInspection(inspector._id, new Date(scheduledDate), fee || 0);
+await createNotification(inspector._id, 'inspection_scheduled', 'Inspection Scheduled',
+  `Assigned to inspect: "${escrow.title}"`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
+
+res.json({ success: true, message: 'Inspection scheduled', data: { escrow } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to schedule inspection’ });
+}
+};
+
+exports.completeInspection = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const { summary, details, passed, issues, recommendations } = req.body;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow || !escrow.inspection.inspector || 
+    escrow.inspection.inspector.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
+
+let photos = [];
+if (req.files) photos = req.files.map(f => f.path);
+
+const report = { summary, details, photos, passed, issues, recommendations };
+await escrow.completeInspection(report);
+await createNotification(escrow.buyer, 'inspection_completed', 'Inspection Completed',
+  `Inspection ${passed ? 'passed' : 'failed'}`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
+
+res.json({ success: true, message: 'Inspection completed', data: { escrow } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to complete inspection’ });
+}
+};
+
+// ==================== ESCROW QUERIES ====================
 exports.getMyEscrows = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { status, page = 1, limit = 20, role = 'all', search = '' } = req.query;
+try {
+const userId = req.user.id;
+const { status, page = 1, limit = 20, role = ‘all’, search = ‘’, transactionType } = req.query;
 
-    console.log('Fetching escrows for user:', userId, 'role:', role, 'status:', status);
+```
+let query = {};
 
-    // Build query based on role (buyer, seller, or all)
-    let query = {};
-    
-    if (role === 'buyer') {
-      query.buyer = userId;
-    } else if (role === 'seller') {
-      query.seller = userId;
-    } else {
-      // 'all' or default - show both buying and selling
-      query.$or = [{ buyer: userId }, { seller: userId }];
-    }
+if (role === 'buyer') query.buyer = userId;
+else if (role === 'seller') query.seller = userId;
+else if (role === 'all') {
+  query.$or = [
+    { buyer: userId },
+    { seller: userId },
+    { 'participants.user': userId }
+  ];
+} else {
+  query['participants.user'] = userId;
+  query['participants.role'] = role;
+}
 
-    // Add status filter if provided
-    if (status && status !== 'all') {
-      query.status = status;
-    }
+if (status && status !== 'all') query.status = status;
+if (transactionType) query.transactionType = transactionType;
+if (search) {
+  query.$or = [
+    { title: { $regex: search, $options: 'i' } },
+    { description: { $regex: search, $options: 'i' } }
+  ];
+}
 
-    // Add search filter if provided
-    if (search) {
-      query.$or = [
-        ...(query.$or || []),
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { escrowId: { $regex: search, $options: 'i' } }
-      ];
-    }
+const escrows = await Escrow.find(query)
+  .populate('buyer seller participants.user', 'name email profilePicture')
+  .sort({ createdAt: -1 })
+  .limit(limit * 1)
+  .skip((page - 1) * limit)
+  .lean();
 
-    console.log('Final query:', JSON.stringify(query));
+const total = await Escrow.countDocuments(query);
 
-    const escrows = await Escrow.find(query)
-      .populate('buyer', 'firstName lastName email profilePicture')
-      .populate('seller', 'firstName lastName email profilePicture')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .lean();
-
-    console.log('Found escrows:', escrows.length);
-
-    // Format the data properly for frontend
-    const formattedEscrows = escrows.map(escrow => {
-      // Determine user role
-      const isBuyer = escrow.buyer && escrow.buyer._id.toString() === userId;
-      const userRole = isBuyer ? 'buyer' : 'seller';
-      
-      // Determine other party
-      const otherParty = isBuyer ? escrow.seller : escrow.buyer;
-
-      return {
-        _id: escrow._id,
-        escrowId: escrow.escrowId,
-        title: escrow.title,
-        description: escrow.description,
-        amount: escrow.amount ? parseFloat(escrow.amount.toString()) : 0,
-        currency: escrow.currency || 'USD',
-        status: escrow.status,
-        category: escrow.category,
-        deliveryMethod: escrow.delivery?.method,
-        
-        // User info
-        userRole: userRole,
-        
-        // Party info
-        buyer: escrow.buyer ? {
-          _id: escrow.buyer._id,
-          firstName: escrow.buyer.firstName,
-          lastName: escrow.buyer.lastName,
-          email: escrow.buyer.email,
-          profilePicture: escrow.buyer.profilePicture
-        } : null,
-        
-        seller: escrow.seller ? {
-          _id: escrow.seller._id,
-          firstName: escrow.seller.firstName,
-          lastName: escrow.seller.lastName,
-          email: escrow.seller.email,
-          profilePicture: escrow.seller.profilePicture
-        } : null,
-        
-        // Other party (for easy access)
-        otherParty: otherParty ? {
-          _id: otherParty._id,
-          firstName: otherParty.firstName,
-          lastName: otherParty.lastName,
-          email: otherParty.email,
-          profilePicture: otherParty.profilePicture
-        } : null,
-
-        // Payment info - MATCH FRONTEND EXPECTATIONS
-        payment: escrow.payment ? {
-          buyerPays: escrow.payment.buyerPays ? parseFloat(escrow.payment.buyerPays.toString()) : 0,
-          sellerReceives: escrow.payment.sellerReceives ? parseFloat(escrow.payment.sellerReceives.toString()) : 0,
-          buyerFee: escrow.payment.buyerFee ? parseFloat(escrow.payment.buyerFee.toString()) : 0,
-          sellerFee: escrow.payment.sellerFee ? parseFloat(escrow.payment.sellerFee.toString()) : 0
-        } : {
-          buyerPays: 0,
-          sellerReceives: 0,
-          buyerFee: 0,
-          sellerFee: 0
-        },
-
-        // Dates
-        createdAt: escrow.createdAt,
-        updatedAt: escrow.updatedAt,
-
-        // Additional info
-        attachmentsCount: escrow.attachments ? escrow.attachments.length : 0,
-        timeline: escrow.timeline || [],
-        chatUnlocked: escrow.chatUnlocked || false
-      };
-    });
-
-    const total = await Escrow.countDocuments(query);
-
-    console.log('Sending response with', formattedEscrows.length, 'escrows');
-
-    // RETURN EXACT STRUCTURE FRONTEND EXPECTS
-    res.json({
-      success: true,
-      data: {
-        escrows: formattedEscrows, // Frontend expects "escrows" array
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / limit)
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Get my escrows error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch escrows',
-      error: error.message
-    });
+res.json({
+  success: true,
+  data: {
+    escrows,
+    pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) }
   }
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to fetch escrows’ });
+}
 };
 
-/**
- * Get dashboard statistics for user - FIXED FOR FRONTEND
- */
-exports.getDashboardStats = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    console.log('Fetching dashboard stats for user:', userId);
-
-    // Get counts for different statuses for buying
-    const buyingStats = await Escrow.aggregate([
-      { $match: { buyer: new mongoose.Types.ObjectId(userId) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-
-    // Get counts for different statuses for selling
-    const sellingStats = await Escrow.aggregate([
-      { $match: { seller: new mongoose.Types.ObjectId(userId) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-
-    // Convert to object format that frontend expects
-    const buyingStatsObj = buyingStats.reduce((acc, stat) => {
-      acc[stat._id] = stat.count;
-      return acc;
-    }, {});
-
-    const sellingStatsObj = sellingStats.reduce((acc, stat) => {
-      acc[stat._id] = stat.count;
-      return acc;
-    }, {});
-
-    // Calculate totals
-    const totalBuying = await Escrow.countDocuments({ buyer: userId });
-    const totalSelling = await Escrow.countDocuments({ seller: userId });
-
-    // RETURN EXACT STRUCTURE FRONTEND EXPECTS
-    const stats = {
-      buying: {
-        total: totalBuying,
-        pending: buyingStatsObj.pending || 0,
-        accepted: buyingStatsObj.accepted || 0,
-        funded: buyingStatsObj.funded || 0,
-        delivered: buyingStatsObj.delivered || 0,
-        completed: buyingStatsObj.completed || 0,
-        cancelled: buyingStatsObj.cancelled || 0,
-        disputed: buyingStatsObj.disputed || 0
-      },
-      selling: {
-        total: totalSelling,
-        pending: sellingStatsObj.pending || 0,
-        accepted: sellingStatsObj.accepted || 0,
-        funded: sellingStatsObj.funded || 0,
-        delivered: sellingStatsObj.delivered || 0,
-        completed: sellingStatsObj.completed || 0,
-        cancelled: sellingStatsObj.cancelled || 0,
-        disputed: sellingStatsObj.disputed || 0
-      }
-    };
-
-    console.log('Dashboard stats:', stats);
-
-    res.json({
-      success: true,
-      data: stats // Frontend expects data.buying and data.selling
-    });
-
-  } catch (error) {
-    console.error('Get dashboard stats error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch dashboard statistics',
-      error: error.message
-    });
-  }
-};
-
-/**
- * Get escrow by ID - FIXED FOR FRONTEND (ENHANCED VERSION)
- */
 exports.getEscrowById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
+try {
+const { id } = req.params;
+const userId = req.user.id;
 
-    console.log('Fetching escrow details for ID:', id, 'User ID:', userId);
+```
+let escrow = mongoose.Types.ObjectId.isValid(id) 
+  ? await Escrow.findById(id) 
+  : await Escrow.findOne({ escrowId: id });
 
-    let escrow;
-    
-    // Try by MongoDB _id first, then by escrowId
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      escrow = await Escrow.findById(id)
-        .populate('buyer', 'firstName lastName email profilePicture phone')
-        .populate('seller', 'firstName lastName email profilePicture phone')
-        .populate('attachments.uploadedBy', 'firstName lastName email')
-        .populate('timeline.actor', 'firstName lastName email')
-        .populate('delivery.proof.submittedBy', 'firstName lastName email')
-        .populate('dispute.raisedBy', 'firstName lastName email')
-        .populate('dispute.resolvedBy', 'firstName lastName email');
-    } else {
-      escrow = await Escrow.findOne({ escrowId: id })
-        .populate('buyer', 'firstName lastName email profilePicture phone')
-        .populate('seller', 'firstName lastName email profilePicture phone')
-        .populate('attachments.uploadedBy', 'firstName lastName email')
-        .populate('timeline.actor', 'firstName lastName email')
-        .populate('delivery.proof.submittedBy', 'firstName lastName email')
-        .populate('dispute.raisedBy', 'firstName lastName email')
-        .populate('dispute.resolvedBy', 'firstName lastName email');
-    }
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+if (!escrow.canUserAccess(userId)) {
+  return res.status(403).json({ success: false, message: 'Access denied' });
+}
 
-    // Check if user has access to this escrow
-    const isBuyer = escrow.buyer && escrow.buyer._id.toString() === userId;
-    const isSeller = escrow.seller && escrow.seller._id.toString() === userId;
-    
-    if (!isBuyer && !isSeller && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied to this escrow'
-      });
-    }
+await escrow.populate([
+  { path: 'buyer seller', select: 'name email profilePicture phone' },
+  { path: 'participants.user', select: 'name email profilePicture capabilities' },
+  { path: 'inspection.inspector dispute.arbitrator', select: 'name email' }
+]);
 
-    // Format the escrow data properly for frontend
-    const formattedEscrow = {
-      _id: escrow._id,
-      escrowId: escrow.escrowId,
-      title: escrow.title,
-      description: escrow.description,
-      amount: escrow.amount ? parseFloat(escrow.amount.toString()) : 0,
-      currency: escrow.currency || 'USD',
-      status: escrow.status,
-      category: escrow.category,
-      buyerTier: escrow.buyerTier,
-      sellerTier: escrow.sellerTier,
-      chatUnlocked: escrow.chatUnlocked || false,
-      visibility: escrow.visibility || 'private',
-      
-      // Parties information
-      buyer: escrow.buyer ? {
-        _id: escrow.buyer._id,
-        firstName: escrow.buyer.firstName,
-        lastName: escrow.buyer.lastName,
-        email: escrow.buyer.email,
-        profilePicture: escrow.buyer.profilePicture,
-        phone: escrow.buyer.phone
-      } : null,
-      
-      seller: escrow.seller ? {
-        _id: escrow.seller._id,
-        firstName: escrow.seller.firstName,
-        lastName: escrow.seller.lastName,
-        email: escrow.seller.email,
-        profilePicture: escrow.seller.profilePicture,
-        phone: escrow.seller.phone
-      } : null,
-
-      // Payment information - ensure all fields are present
-      payment: escrow.payment ? {
-        method: escrow.payment.method,
-        reference: escrow.payment.reference,
-        transactionId: escrow.payment.transactionId,
-        paymentId: escrow.payment.paymentId,
-        amount: escrow.payment.amount ? parseFloat(escrow.payment.amount.toString()) : 0,
-        buyerFee: escrow.payment.buyerFee ? parseFloat(escrow.payment.buyerFee.toString()) : 0,
-        sellerFee: escrow.payment.sellerFee ? parseFloat(escrow.payment.sellerFee.toString()) : 0,
-        platformFee: escrow.payment.platformFee ? parseFloat(escrow.payment.platformFee.toString()) : 0,
-        buyerPays: escrow.payment.buyerPays ? parseFloat(escrow.payment.buyerPays.toString()) : 0,
-        sellerReceives: escrow.payment.sellerReceives ? parseFloat(escrow.payment.sellerReceives.toString()) : 0,
-        buyerFeePercentage: escrow.payment.buyerFeePercentage || 0,
-        sellerFeePercentage: escrow.payment.sellerFeePercentage || 0,
-        paidAt: escrow.payment.paidAt,
-        verifiedAt: escrow.payment.verifiedAt,
-        paidOutAt: escrow.payment.paidOutAt,
-        gatewayResponse: escrow.payment.gatewayResponse
-      } : {
-        method: null,
-        reference: null,
-        amount: 0,
-        buyerFee: 0,
-        sellerFee: 0,
-        platformFee: 0,
-        buyerPays: 0,
-        sellerReceives: 0,
-        buyerFeePercentage: 0,
-        sellerFeePercentage: 0
-      },
-
-      // Delivery information
-      delivery: {
-        method: escrow.delivery?.method || 'physical',
-        trackingNumber: escrow.delivery?.trackingNumber,
-        deliveredAt: escrow.delivery?.deliveredAt,
-        confirmedAt: escrow.delivery?.confirmedAt,
-        autoReleaseAt: escrow.delivery?.autoReleaseAt,
-        notes: escrow.delivery?.notes,
-        proof: escrow.delivery?.proof ? {
-          method: escrow.delivery.proof.method,
-          courierName: escrow.delivery.proof.courierName,
-          trackingNumber: escrow.delivery.proof.trackingNumber,
-          vehicleType: escrow.delivery.proof.vehicleType,
-          plateNumber: escrow.delivery.proof.plateNumber,
-          driverName: escrow.delivery.proof.driverName,
-          driverPhoto: escrow.delivery.proof.driverPhoto,
-          vehiclePhoto: escrow.delivery.proof.vehiclePhoto,
-          gpsEnabled: escrow.delivery.proof.gpsEnabled || false,
-          gpsTrackingId: escrow.delivery.proof.gpsTrackingId,
-          methodDescription: escrow.delivery.proof.methodDescription,
-          estimatedDelivery: escrow.delivery.proof.estimatedDelivery,
-          packagePhotos: escrow.delivery.proof.packagePhotos || [],
-          additionalNotes: escrow.delivery.proof.additionalNotes,
-          submittedAt: escrow.delivery.proof.submittedAt,
-          submittedBy: escrow.delivery.proof.submittedBy
-        } : null,
-        evidence: escrow.delivery?.evidence || []
-      },
-
-      // Dispute information
-      dispute: escrow.dispute ? {
-        isDisputed: escrow.dispute.isDisputed || false,
-        raisedBy: escrow.dispute.raisedBy,
-        raisedAt: escrow.dispute.raisedAt,
-        reason: escrow.dispute.reason,
-        description: escrow.dispute.description,
-        evidence: escrow.dispute.evidence || [],
-        status: escrow.dispute.status || 'pending',
-        resolution: escrow.dispute.resolution,
-        resolvedAt: escrow.dispute.resolvedAt,
-        resolvedBy: escrow.dispute.resolvedBy
-      } : {
-        isDisputed: false,
-        status: 'pending',
-        evidence: []
-      },
-
-      // Attachments
-      attachments: escrow.attachments ? escrow.attachments.map(att => ({
-        _id: att._id,
-        filename: att.filename,
-        originalName: att.originalName,
-        url: att.url,
-        mimetype: att.mimetype,
-        size: att.size,
-        uploadedAt: att.uploadedAt,
-        uploadedBy: att.uploadedBy
-      })) : [],
-
-      // Timeline
-      timeline: escrow.timeline ? escrow.timeline.map(event => ({
-        _id: event._id,
-        status: event.status,
-        timestamp: event.timestamp,
-        actor: event.actor,
-        note: event.note
-      })) : [],
-
-      // Chat
-      chat: escrow.chat || [],
-
-      // Ratings
-      rating: escrow.rating || {
-        buyerRating: null,
-        sellerRating: null
-      },
-
-      // Dates
-      createdAt: escrow.createdAt,
-      updatedAt: escrow.updatedAt,
-      expiresAt: escrow.expiresAt
-    };
-
-    console.log('Sending formatted escrow data for:', formattedEscrow.title);
-
-    // ✅ FIXED: Return escrow in data.escrow for frontend setEscrow(response.data.escrow)
-    res.json({
-      success: true,
-      data: {
-        escrow: formattedEscrow, // ✅ WRAPPED: Now frontend can use response.data.escrow
-        userRole: isBuyer ? 'buyer' : isSeller ? 'seller' : 'admin'
-      }
-    });
-
-  } catch (error) {
-    console.error('Get escrow by ID error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch escrow details',
-      error: error.message
-    });
-  }
+const formattedEscrow = {
+  ...escrow.toObject(),
+  amount: escrow.amount ? parseFloat(escrow.amount.toString()) : 0,
+  payment: escrow.payment ? {
+    ...escrow.payment,
+    amount: escrow.payment.amount ? parseFloat(escrow.payment.amount.toString()) : 0,
+    buyerPays: escrow.payment.buyerPays ? parseFloat(escrow.payment.buyerPays.toString()) : 0,
+    sellerReceives: escrow.payment.sellerReceives ? parseFloat(escrow.payment.sellerReceives.toString()) : 0,
+    buyerFee: escrow.payment.buyerFee ? parseFloat(escrow.payment.buyerFee.toString()) : 0,
+    sellerFee: escrow.payment.sellerFee ? parseFloat(escrow.payment.sellerFee.toString()) : 0
+  } : {}
 };
 
-/**
- * Get GPS tracking information - FIXED
- */
-exports.getGPSTracking = async (req, res) => {
-  try {
-    const { gpsTrackingId } = req.params;
-    const userId = req.user.id;
-
-    // Find escrow with this GPS tracking ID
-    const escrow = await Escrow.findOne({
-      'delivery.proof.gpsTrackingId': gpsTrackingId,
-      $or: [{ buyer: userId }, { seller: userId }]
-    });
-
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tracking information not found'
-      });
-    }
-
-    // Return basic tracking info
-    const trackingData = {
-      trackingId: gpsTrackingId,
-      status: 'active',
-      lastUpdate: new Date(),
-      escrowTitle: escrow.title,
-      estimatedDelivery: escrow.delivery?.proof?.estimatedDelivery || null
-    };
-
-    res.json({
-      success: true,
-      data: trackingData
-    });
-
-  } catch (error) {
-    console.error('Get GPS tracking error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch tracking information'
-    });
+res.json({
+  success: true,
+  data: {
+    escrow: formattedEscrow,
+    userRole: escrow.getUserRoles(userId),
+    requiresAction: escrow.requiresUserAction(userId)
   }
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to fetch escrow’ });
+}
 };
 
-/**
- * Upload delivery proof - FIXED
- */
-exports.uploadDeliveryProof = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
-    const {
-      method,
-      courierName,
-      trackingNumber,
-      vehicleType,
-      plateNumber,
-      driverName,
-      gpsEnabled,
-      methodDescription,
-      estimatedDelivery,
-      additionalNotes,
-      packagePhotos = [],
-      driverPhoto,
-      vehiclePhoto
-    } = req.body;
+exports.getDashboardStats = async (req, res) => {
+try {
+const userId = req.user.id;
+const allEscrows = await Escrow.find({
+$or: [{ buyer: userId }, { seller: userId }, { ‘participants.user’: userId }]
+});
 
-    const escrow = await Escrow.findById(id);
-
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
-
-    // Check if user is the seller
-    if (escrow.seller.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only seller can upload delivery proof'
-      });
-    }
-
-    // Check if escrow can have delivery proof uploaded
-    if (!['funded', 'accepted'].includes(escrow.status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot upload delivery proof in current status'
-      });
-    }
-
-    // Update delivery proof
-    escrow.delivery.proof = {
-      method: method || 'other',
-      courierName,
-      trackingNumber,
-      vehicleType,
-      plateNumber,
-      driverName,
-      driverPhoto,
-      vehiclePhoto,
-      gpsEnabled: gpsEnabled === 'true',
-      methodDescription,
-      estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : undefined,
-      packagePhotos: Array.isArray(packagePhotos) ? packagePhotos : [packagePhotos],
-      additionalNotes,
-      submittedAt: new Date(),
-      submittedBy: userId
-    };
-
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'delivered',
-      timestamp: new Date(),
-      actor: userId,
-      note: 'Delivery proof uploaded by seller'
-    });
-
-    await escrow.save();
-
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
-
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Delivery proof uploaded successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Upload delivery proof error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to upload delivery proof'
-    });
-  }
+```
+const stats = {
+  total: allEscrows.length,
+  buying: {
+    total: allEscrows.filter(e => e.buyer.toString() === userId).length,
+    pending: allEscrows.filter(e => e.buyer.toString() === userId && e.status === 'pending').length,
+    funded: allEscrows.filter(e => e.buyer.toString() === userId && e.status === 'funded').length,
+    completed: allEscrows.filter(e => e.buyer.toString() === userId && e.status === 'completed').length
+  },
+  selling: {
+    total: allEscrows.filter(e => e.seller.toString() === userId).length,
+    pending: allEscrows.filter(e => e.seller.toString() === userId && e.status === 'pending').length,
+    delivered: allEscrows.filter(e => e.seller.toString() === userId && e.status === 'delivered').length,
+    completed: allEscrows.filter(e => e.seller.toString() === userId && e.status === 'completed').length
+  },
+  asAgent: allEscrows.filter(e => e.participants?.some(p => p.user.toString() === userId && p.role === 'agent')).length,
+  asArbitrator: allEscrows.filter(e => e.participants?.some(p => p.user.toString() === userId && p.role === 'arbitrator')).length,
+  asInspector: allEscrows.filter(e => e.participants?.some(p => p.user.toString() === userId && p.role === 'inspector')).length,
+  disputed: allEscrows.filter(e => e.status === 'disputed').length,
+  requiresAction: allEscrows.filter(e => e.requiresUserAction && e.requiresUserAction(userId)).length
 };
 
-/**
- * Accept escrow (seller) - FIXED
- */
+res.json({ success: true, data: stats });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to fetch stats’ });
+}
+};
+
 exports.acceptEscrow = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
+try {
+const { id } = req.params;
+const userId = req.user.id;
 
-    const escrow = await Escrow.findById(id);
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+const isSeller = escrow.seller.toString() === userId;
+const participant = escrow.participants.find(p => p.user.toString() === userId);
 
-    // Check if user is the seller
-    if (escrow.seller.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only seller can accept escrow'
-      });
-    }
+if (!isSeller && !participant) {
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+}
 
-    // Check if escrow can be accepted
-    if (escrow.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Escrow cannot be accepted in current status'
-      });
-    }
+if (isSeller && escrow.status === 'pending') {
+  escrow.status = 'accepted';
+  escrow.chatUnlocked = true;
+  escrow.timeline.push({
+    status: 'accepted',
+    timestamp: new Date(),
+    actor: userId,
+    actorRole: 'seller',
+    note: 'Accepted by seller'
+  });
+}
 
-    // Update status
-    escrow.status = 'accepted';
-    escrow.chatUnlocked = true;
+if (participant) {
+  participant.status = 'accepted';
+  participant.hasApproved = true;
+  participant.approvedAt = new Date();
+}
 
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'accepted',
-      timestamp: new Date(),
-      actor: userId,
-      note: 'Escrow accepted by seller'
-    });
+await escrow.save();
+await escrow.populate('buyer seller participants.user', 'name email');
 
-    await escrow.save();
+res.json({ 
+  success: true, 
+  message: 'Escrow accepted', 
+  data: { escrow: escrow.toObject() } 
+});
+```
 
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
-
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Escrow accepted successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Accept escrow error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to accept escrow'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to accept escrow’ });
+}
 };
 
-/**
- * Fund escrow (buyer payment) - FIXED
- */
+exports.calculateFeePreview = async (req, res) => {
+try {
+const { amount, currency = ‘USD’, transactionType } = req.query;
+const userId = req.user.id;
+
+```
+if (!amount || amount <= 0) {
+  return res.status(400).json({ success: false, message: 'Valid amount required' });
+}
+
+const allCurrencies = [
+  'USD', 'EUR', 'GBP', 'NGN', 'KES', 'GHS', 'ZAR', 'INR', 'CNY', 'JPY', 'CAD', 'AUD',
+  'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'MATIC'
+];
+if (!allCurrencies.includes(currency)) {
+  return res.status(400).json({ success: false, message: 'Unsupported currency' });
+}
+
+const user = await User.findById(userId);
+const feeBreakdown = await feeConfig.calculateSimpleFees(parseFloat(amount), currency);
+const tierInfo = await feeConfig.getTierInfo(user.tier);
+const withinLimit = await feeConfig.isAmountWithinLimit(parseFloat(amount), currency, user.tier);
+
+res.json({
+  success: true,
+  data: { 
+    feeBreakdown, 
+    userTier: user.tier, 
+    tierInfo, 
+    withinLimit, 
+    upgradeAvailable: !withinLimit, 
+    currency 
+  }
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to calculate fees’ });
+}
+};
+
+exports.checkCanCreateEscrow = async (req, res) => {
+try {
+const userId = req.user.id;
+const { amount, currency = ‘USD’ } = req.query;
+
+```
+const user = await User.findById(userId).select('+kycStatus');
+if (!user) {
+  return res.status(404).json({ success: false, message: 'User not found' });
+}
+
+const checks = {
+  emailVerified: user.verified,
+  kycVerified: user.isKYCVerified && user.kycStatus?.status === 'approved',
+  kycStatus: user.kycStatus?.status || 'unverified',
+  hasBankAccount: user.hasBankAccount,
+  tier: user.tier
+};
+
+let canCreate = true;
+let blockingReason = null;
+let requiresAction = null;
+
+if (!checks.emailVerified) {
+  canCreate = false;
+  blockingReason = 'Email verification required';
+  requiresAction = 'verify_email';
+} else if (!checks.kycVerified) {
+  canCreate = false;
+  blockingReason = 'KYC verification required';
+  requiresAction = 'complete_kyc';
+} else if (!checks.hasBankAccount) {
+  canCreate = false;
+  blockingReason = 'Bank account required';
+  requiresAction = 'add_bank_account';
+}
+
+let tierCheck = null;
+if (amount && canCreate) {
+  const parsedAmount = parseFloat(amount);
+  if (!isNaN(parsedAmount)) {
+    tierCheck = user.canCreateTransaction(parsedAmount, currency);
+    if (!tierCheck.allowed) {
+      canCreate = false;
+      blockingReason = tierCheck.reason;
+      requiresAction = 'upgrade_tier';
+    }
+  }
+}
+
+res.json({
+  success: true,
+  data: {
+    canCreate,
+    blockingReason,
+    requiresAction,
+    checks,
+    tierCheck,
+    tierLimits: user.getTierLimits()
+  }
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to check eligibility’ });
+}
+};
+
+// ==================== ESCROW ACTIONS ====================
 exports.fundEscrow = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
+try {
+const { id } = req.params;
+const userId = req.user.id;
 
-    const escrow = await Escrow.findById(id);
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+if (escrow.buyer.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Only buyer can fund' });
+}
 
-    // Check if user is the buyer
-    if (escrow.buyer.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only buyer can fund escrow'
-      });
-    }
+if (escrow.status !== 'accepted') {
+  return res.status(400).json({ success: false, message: 'Cannot fund in current status' });
+}
 
-    // Check if escrow can be funded
-    if (escrow.status !== 'accepted') {
-      return res.status(400).json({
-        success: false,
-        message: 'Escrow cannot be funded in current status'
-      });
-    }
+escrow.status = 'funded';
+escrow.payment.paidAt = new Date();
+escrow.timeline.push({
+  status: 'funded',
+  timestamp: new Date(),
+  actor: userId,
+  actorRole: 'buyer',
+  note: 'Escrow funded by buyer'
+});
 
-    // Update status to funded
-    escrow.status = 'funded';
+await escrow.save();
+await escrow.populate('buyer seller', 'name email');
 
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'funded',
-      timestamp: new Date(),
-      actor: userId,
-      note: 'Escrow funded by buyer'
-    });
+res.json({ 
+  success: true, 
+  message: 'Escrow funded', 
+  data: { escrow: escrow.toObject() } 
+});
+```
 
-    await escrow.save();
-
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
-
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Escrow funded successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Fund escrow error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fund escrow'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to fund escrow’ });
+}
 };
 
-/**
- * Mark escrow as delivered (seller) - FIXED
- */
 exports.markDelivered = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
+try {
+const { id } = req.params;
+const userId = req.user.id;
 
-    const escrow = await Escrow.findById(id);
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+if (escrow.seller.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Only seller can mark delivered' });
+}
 
-    // Check if user is the seller
-    if (escrow.seller.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only seller can mark as delivered'
-      });
-    }
+if (escrow.status !== 'funded') {
+  return res.status(400).json({ success: false, message: 'Cannot mark delivered in current status' });
+}
 
-    // Check if escrow can be marked as delivered
-    if (escrow.status !== 'funded') {
-      return res.status(400).json({
-        success: false,
-        message: 'Escrow cannot be marked as delivered in current status'
-      });
-    }
+escrow.status = 'delivered';
+escrow.delivery.deliveredAt = new Date();
 
-    // Update status to delivered
-    escrow.status = 'delivered';
-    escrow.delivery.deliveredAt = new Date();
+if (escrow.delivery.autoReleaseEnabled) {
+  const autoReleaseDays = escrow.delivery.autoReleaseDays || 7;
+  escrow.delivery.autoReleaseAt = new Date(Date.now() + autoReleaseDays * 24 * 60 * 60 * 1000);
+}
 
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'delivered',
-      timestamp: new Date(),
-      actor: userId,
-      note: 'Item marked as delivered by seller'
-    });
+escrow.timeline.push({
+  status: 'delivered',
+  timestamp: new Date(),
+  actor: userId,
+  actorRole: 'seller',
+  note: 'Item delivered by seller'
+});
 
-    await escrow.save();
+await escrow.save();
+await escrow.populate('buyer seller', 'name email');
 
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
+res.json({ 
+  success: true, 
+  message: 'Marked as delivered', 
+  data: { escrow: escrow.toObject() } 
+});
+```
 
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Item marked as delivered successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Mark delivered error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to mark as delivered'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to mark delivered’ });
+}
 };
 
-/**
- * Confirm delivery (buyer) - FIXED
- */
 exports.confirmDelivery = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
+try {
+const { id } = req.params;
+const userId = req.user.id;
 
-    const escrow = await Escrow.findById(id);
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+if (escrow.buyer.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Only buyer can confirm' });
+}
 
-    // Check if user is the buyer
-    if (escrow.buyer.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only buyer can confirm delivery'
-      });
-    }
+if (escrow.status !== 'delivered') {
+  return res.status(400).json({ success: false, message: 'Cannot confirm in current status' });
+}
 
-    // Check if escrow can be confirmed
-    if (escrow.status !== 'delivered') {
-      return res.status(400).json({
-        success: false,
-        message: 'Escrow cannot be confirmed in current status'
-      });
-    }
+escrow.status = 'completed';
+escrow.delivery.confirmedAt = new Date();
+escrow.timeline.push({
+  status: 'completed',
+  timestamp: new Date(),
+  actor: userId,
+  actorRole: 'buyer',
+  note: 'Delivery confirmed by buyer'
+});
 
-    // Update status to completed
-    escrow.status = 'completed';
-    escrow.delivery.confirmedAt = new Date();
+await escrow.save();
+await escrow.populate('buyer seller', 'name email');
 
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'completed',
-      timestamp: new Date(),
-      actor: userId,
-      note: 'Delivery confirmed by buyer'
-    });
+res.json({ 
+  success: true, 
+  message: 'Delivery confirmed', 
+  data: { escrow: escrow.toObject() } 
+});
+```
 
-    await escrow.save();
-
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
-
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Delivery confirmed successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Confirm delivery error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to confirm delivery'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to confirm delivery’ });
+}
 };
 
-/**
- * Raise dispute for escrow - FIXED
- */
 exports.raiseDispute = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
-    const { reason, description } = req.body;
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const { reason, description } = req.body;
 
-    const escrow = await Escrow.findById(id);
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+const isBuyer = escrow.buyer.toString() === userId;
+const isSeller = escrow.seller.toString() === userId;
 
-    // Check if user is participant
-    const isBuyer = escrow.buyer.toString() === userId;
-    const isSeller = escrow.seller.toString() === userId;
-    
-    if (!isBuyer && !isSeller) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only participants can raise disputes'
-      });
-    }
+if (!isBuyer && !isSeller) {
+  return res.status(403).json({ success: false, message: 'Only participants can raise disputes' });
+}
 
-    // Check if escrow can be disputed
-    if (!['accepted', 'funded', 'delivered'].includes(escrow.status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Escrow cannot be disputed in current status'
-      });
-    }
+if (!['accepted', 'funded', 'delivered'].includes(escrow.status)) {
+  return res.status(400).json({ success: false, message: 'Cannot dispute in current status' });
+}
 
-    // Create dispute
-    escrow.dispute = {
-      isDisputed: true,
-      raisedBy: userId,
-      raisedAt: new Date(),
-      reason,
-      description,
-      status: 'pending'
-    };
+let evidence = [];
+if (req.files && req.files.length > 0) {
+  evidence = req.files.map(f => f.path);
+}
 
-    // Update status to disputed
-    escrow.status = 'disputed';
+const userRole = isBuyer ? 'buyer' : 'seller';
+await escrow.raiseDispute(userId, userRole, reason, description, evidence);
 
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'disputed',
-      timestamp: new Date(),
-      actor: userId,
-      note: `Dispute raised: ${reason}`
-    });
+await escrow.populate('buyer seller', 'name email');
 
-    await escrow.save();
+res.json({ 
+  success: true, 
+  message: 'Dispute raised', 
+  data: { escrow: escrow.toObject() } 
+});
+```
 
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
-
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Dispute raised successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Raise dispute error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to raise dispute'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to raise dispute’ });
+}
 };
 
-/**
- * Cancel escrow - FIXED
- */
 exports.cancelEscrow = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.id;
-    const { reason } = req.body;
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const { reason } = req.body;
 
-    const escrow = await Escrow.findById(id);
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
 
-    if (!escrow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Escrow not found'
-      });
-    }
+const isBuyer = escrow.buyer.toString() === userId;
+const isSeller = escrow.seller.toString() === userId;
 
-    // Check if user is participant
-    const isBuyer = escrow.buyer.toString() === userId;
-    const isSeller = escrow.seller.toString() === userId;
-    
-    if (!isBuyer && !isSeller) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only participants can cancel escrow'
-      });
-    }
+if (!isBuyer && !isSeller) {
+  return res.status(403).json({ success: false, message: 'Only participants can cancel' });
+}
 
-    // Check if escrow can be cancelled
-    if (!['pending', 'accepted'].includes(escrow.status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Escrow cannot be cancelled in current status'
-      });
-    }
+if (!['pending', 'accepted'].includes(escrow.status)) {
+  return res.status(400).json({ success: false, message: 'Cannot cancel in current status' });
+}
 
-    // Update status to cancelled
-    escrow.status = 'cancelled';
+escrow.status = 'cancelled';
+escrow.cancelledAt = new Date();
+escrow.cancelledBy = userId;
+escrow.cancellationReason = reason;
 
-    // Add to timeline
-    escrow.timeline.push({
-      status: 'cancelled',
-      timestamp: new Date(),
-      actor: userId,
-      note: `Escrow cancelled: ${reason || 'No reason provided'}`
-    });
+escrow.timeline.push({
+  status: 'cancelled',
+  timestamp: new Date(),
+  actor: userId,
+  actorRole: isBuyer ? 'buyer' : 'seller',
+  note: `Cancelled: ${reason || 'No reason provided'}`
+});
 
-    await escrow.save();
+await escrow.save();
+await escrow.populate('buyer seller', 'name email');
 
-    // Populate before sending response
-    await escrow.populate('buyer seller', 'firstName lastName email');
+res.json({ 
+  success: true, 
+  message: 'Escrow cancelled', 
+  data: { escrow: escrow.toObject() } 
+});
+```
 
-    // ✅ FIXED: Return escrow in data.escrow
-    res.json({
-      success: true,
-      message: 'Escrow cancelled successfully',
-      data: {
-        escrow: escrow.toObject() // ✅ WRAPPED
-      }
-    });
-
-  } catch (error) {
-    console.error('Cancel escrow error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel escrow'
-    });
-  }
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to cancel escrow’ });
+}
 };
+
+exports.uploadDeliveryProof = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+const {
+method, courierName, trackingNumber, vehicleType, plateNumber,
+driverName, gpsEnabled, methodDescription, estimatedDelivery,
+additionalNotes
+} = req.body;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
+
+if (escrow.seller.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Only seller can upload proof' });
+}
+
+if (!['funded', 'accepted'].includes(escrow.status)) {
+  return res.status(400).json({ success: false, message: 'Cannot upload proof in current status' });
+}
+
+let packagePhotos = [];
+if (req.files && req.files.length > 0) {
+  packagePhotos = req.files.map(f => f.path);
+}
+
+escrow.delivery.proof = {
+  method: method || 'other',
+  courierName,
+  trackingNumber,
+  vehicleType,
+  plateNumber,
+  driverName,
+  gpsEnabled: gpsEnabled === 'true',
+  methodDescription,
+  estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : undefined,
+  packagePhotos,
+  additionalNotes,
+  submittedAt: new Date(),
+  submittedBy: userId
+};
+
+escrow.timeline.push({
+  status: 'delivery_proof_uploaded',
+  timestamp: new Date(),
+  actor: userId,
+  actorRole: 'seller',
+  note: 'Delivery proof uploaded'
+});
+
+await escrow.save();
+await escrow.populate('buyer seller', 'name email');
+
+res.json({ 
+  success: true, 
+  message: 'Delivery proof uploaded', 
+  data: { escrow: escrow.toObject() } 
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to upload proof’ });
+}
+};
+
+module.exports = exports;
+
+```
+res.json({
+  success: true,
+  data: {
+    escrow: escrow.toObject(),
+    userRole: escrow.getUserRoles(userId),
+    requiresAction: escrow.requiresUserAction(userId)
+  }
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to fetch escrow’ });
+}
+};
+
+exports.getDashboardStats = async (req, res) => {
+try {
+const userId = req.user.id;
+const allEscrows = await Escrow.find({
+$or: [{ buyer: userId }, { seller: userId }, { ‘participants.user’: userId }]
+});
+
+```
+const stats = {
+  total: allEscrows.length,
+  buying: {
+    total: allEscrows.filter(e => e.buyer.toString() === userId).length,
+    pending: allEscrows.filter(e => e.buyer.toString() === userId && e.status === 'pending').length,
+    funded: allEscrows.filter(e => e.buyer.toString() === userId && e.status === 'funded').length
+  },
+  selling: {
+    total: allEscrows.filter(e => e.seller.toString() === userId).length,
+    pending: allEscrows.filter(e => e.seller.toString() === userId && e.status === 'pending').length
+  },
+  disputed: allEscrows.filter(e => e.status === 'disputed').length
+};
+
+res.json({ success: true, data: stats });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to fetch stats’ });
+}
+};
+
+exports.acceptEscrow = async (req, res) => {
+try {
+const { id } = req.params;
+const userId = req.user.id;
+
+```
+const escrow = await Escrow.findById(id);
+if (!escrow) {
+  return res.status(404).json({ success: false, message: 'Escrow not found' });
+}
+
+if (escrow.seller.toString() === userId && escrow.status === 'pending') {
+  escrow.status = 'accepted';
+  escrow.chatUnlocked = true;
+  escrow.timeline.push({
+    status: 'accepted',
+    timestamp: new Date(),
+    actor: userId,
+    actorRole: 'seller',
+    note: 'Accepted by seller'
+  });
+}
+
+await escrow.save();
+res.json({ success: true, message: 'Escrow accepted', data: { escrow } });
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to accept escrow’ });
+}
+};
+
+exports.calculateFeePreview = async (req, res) => {
+try {
+const { amount, currency = ‘USD’ } = req.query;
+const userId = req.user.id;
+
+```
+if (!amount || amount <= 0) {
+  return res.status(400).json({ success: false, message: 'Valid amount required' });
+}
+
+const user = await User.findById(userId);
+const feeBreakdown = await feeConfig.calculateSimpleFees(parseFloat(amount), currency);
+
+res.json({
+  success: true,
+  data: { feeBreakdown, userTier: user.tier, currency }
+});
+```
+
+} catch (error) {
+res.status(500).json({ success: false, message: ‘Failed to calculate fees’ });
+}
+};
+
+module.exports = exports;

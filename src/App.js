@@ -34,7 +34,7 @@ import APIPage from './pages/APIPage';
 import CookiesPage from './pages/CookiesPage';
 
 // ==================== USER PAGES ====================
-import Dashboard from './pages/Dashboard/Dashboard';
+import UnifiedDashboard from './pages/Dashboard/UnifiedDashboard';
 import ApiDashboardPage from './pages/ApiDashboardPage';
 import EscrowDetails from './pages/EscrowDetails';
 import ProfilePage from './pages/Profile/ProfilePage';
@@ -240,11 +240,11 @@ function App() {
           <Route 
             path="/dashboard" 
             element={
-              <ProtectedRoute>
-                <Dashboard />
+             <ProtectedRoute>
+               <UnifiedDashboard />
               </ProtectedRoute>
             } 
-          />
+           />
           <Route 
             path="/api-dashboard" 
             element={

@@ -34,7 +34,7 @@ import APIPage from './pages/APIPage';
 import CookiesPage from './pages/CookiesPage';
 
 // ==================== USER PAGES ====================
-import UnifiedDashboard from './pages/Dashboard/UnifiedDashboard';
+import UnifiedDashboard from './pages/UnifiedDashboard';
 import ApiDashboardPage from './pages/ApiDashboardPage';
 import EscrowDetails from './pages/EscrowDetails';
 import ProfilePage from './pages/Profile/ProfilePage';

@@ -1,4 +1,4 @@
-backend/controllers/subscription.controller.js - TIER UPGRADE LOGIC WITH AUTO API KEY GENERATION
+// backend/controllers/subscription.controller.js - TIER UPGRADE LOGIC WITH AUTO API KEY GENERATION
 const User = require('../models/User.model');
 const Subscription = require('../models/Subscription.model');
 const Payment = require('../models/Payment.model');

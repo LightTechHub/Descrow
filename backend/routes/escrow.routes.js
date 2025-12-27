@@ -7,7 +7,8 @@ const verificationMiddleware = require('../middleware/verification.middleware');
 const { createEscrowValidator } = require('../validators/escrow.validator');
 const { uploadMultiple } = require('../middleware/upload.middleware');
 
-// ✅ PUBLIC ROUTES (No Authentication) - MUST COME FIRST BEFORE router.use(authenticate)
+// ==================== PUBLIC ROUTES (No Authentication) ====================
+// MUST COME FIRST BEFORE router.use(authenticate)
 
 /**
  * @route   GET /api/escrow/public
@@ -18,14 +19,12 @@ router.get('/public', async (req, res) => {
   try {
     const Escrow = require('../models/Escrow.model');
     
-    // ✅ NEW: Check eligibility before creating escrow
-router.get('/check-eligibility', escrowController.checkCanCreateEscrow);
-    
-    // Get recent completed/paid_out escrows as examples
+    // Get recent completed/paid_out escrows with public visibility
     const publicDeals = await Escrow.find({
-      status: { $in: ['completed', 'paid_out'] }
+      status: { $in: ['completed', 'paid_out'] },
+      visibility: 'public'
     })
-    .select('title amount currency category createdAt')
+    .select('title amount currency category transactionType createdAt')
     .sort({ createdAt: -1 })
     .limit(10)
     .lean();
@@ -37,6 +36,7 @@ router.get('/check-eligibility', escrowController.checkCanCreateEscrow);
       amount: deal.amount ? parseFloat(deal.amount.toString()) : 0,
       currency: deal.currency || 'USD',
       category: deal.category || 'other',
+      transactionType: deal.transactionType,
       completedAt: deal.createdAt
     }));
 
@@ -58,8 +58,20 @@ router.get('/check-eligibility', escrowController.checkCanCreateEscrow);
   }
 });
 
-// 🔒 Apply authentication to ALL routes below this line
+// ==================== APPLY AUTHENTICATION ====================
+// 🔒 All routes below this line require authentication
 router.use(authenticate);
+
+// ==================== ELIGIBILITY CHECK ====================
+
+/**
+ * @route   GET /api/escrow/check-eligibility
+ * @desc    Check if user can create escrow (email verification, KYC, etc.)
+ * @access  Private
+ */
+router.get('/check-eligibility', escrowController.checkCanCreateEscrow);
+
+// ==================== ESCROW MANAGEMENT ====================
 
 /**
  * @route   POST /api/escrow/create
@@ -69,6 +81,7 @@ router.use(authenticate);
 router.post(
   '/create', 
   verificationMiddleware,
+  uploadMultiple('attachments', 10),
   createEscrowValidator, 
   escrowController.createEscrow
 );
@@ -115,6 +128,8 @@ router.get('/track/:gpsTrackingId', escrowController.getGPSTracking);
  */
 router.get('/:id', escrowController.getEscrowById);
 
+// ==================== ESCROW ACTIONS ====================
+
 /**
  * @route   POST /api/escrow/:id/accept
  * @desc    Accept an escrow offer (seller action)
@@ -143,7 +158,7 @@ router.post('/:id/deliver', escrowController.markDelivered);
  */
 router.post(
   '/:id/upload-delivery-proof',
-  uploadMultiple('photos', 10), // Allow up to 10 photos
+  uploadMultiple('photos', 10),
   (req, res) => {
     // Map uploaded file URLs to body
     req.body.packagePhotos = req.fileUrls || [];
@@ -177,5 +192,82 @@ router.post('/:id/dispute', escrowController.raiseDispute);
  * @access  Private
  */
 router.post('/:id/cancel', escrowController.cancelEscrow);
+
+// ==================== MILESTONE MANAGEMENT ====================
+
+/**
+ * @route   POST /api/escrow/:id/milestones
+ * @desc    Add milestone to escrow
+ * @access  Private
+ */
+router.post('/:id/milestones', escrowController.addMilestone);
+
+/**
+ * @route   POST /api/escrow/:id/milestones/:milestoneId/submit
+ * @desc    Submit milestone for approval
+ * @access  Private
+ */
+router.post(
+  '/:id/milestones/:milestoneId/submit',
+  uploadMultiple('attachments', 10),
+  escrowController.submitMilestone
+);
+
+/**
+ * @route   POST /api/escrow/:id/milestones/:milestoneId/approve
+ * @desc    Approve milestone completion
+ * @access  Private
+ */
+router.post('/:id/milestones/:milestoneId/approve', escrowController.approveMilestone);
+
+/**
+ * @route   POST /api/escrow/:id/milestones/:milestoneId/reject
+ * @desc    Reject milestone submission
+ * @access  Private
+ */
+router.post('/:id/milestones/:milestoneId/reject', escrowController.rejectMilestone);
+
+// ==================== PARTICIPANT MANAGEMENT ====================
+
+/**
+ * @route   POST /api/escrow/:id/participants
+ * @desc    Add participant to escrow
+ * @access  Private
+ */
+router.post('/:id/participants', escrowController.addParticipant);
+
+/**
+ * @route   POST /api/escrow/:id/accept-invitation
+ * @desc    Accept participant invitation
+ * @access  Private
+ */
+router.post('/:id/accept-invitation', escrowController.acceptInvitation);
+
+/**
+ * @route   POST /api/escrow/:id/decline-invitation
+ * @desc    Decline participant invitation
+ * @access  Private
+ */
+router.post('/:id/decline-invitation', escrowController.declineInvitation);
+
+// ==================== INSPECTION MANAGEMENT ====================
+
+/**
+ * @route   POST /api/escrow/:id/schedule-inspection
+ * @desc    Schedule inspection for escrow
+ * @access  Private
+ */
+router.post('/:id/schedule-inspection', escrowController.scheduleInspection);
+
+/**
+ * @route   POST /api/escrow/:id/complete-inspection
+ * @desc    Complete inspection with photos
+ * @access  Private
+ */
+router.post(
+  '/:id/complete-inspection',
+  uploadMultiple('photos', 10),
+  escrowController.completeInspection
+);
 
 module.exports = router;

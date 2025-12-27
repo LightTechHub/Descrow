@@ -9,7 +9,7 @@ import Footer from './components/Footer';
 import ThemeToggle from './components/ThemeToggle';
 
 // ==================== PUBLIC PAGES ====================
-import HomePage from './pages/HomePage';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import UnifiedSignup from './pages/Auth/UnifiedSignup';
 import VerifyEmail from './pages/VerifyEmail';
@@ -192,7 +192,7 @@ function App() {
 
         <Routes>
           {/* ==================== PUBLIC ROUTES ==================== */}
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<LandingPage />} />
           <Route 
             path="/login" 
             element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 

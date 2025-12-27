@@ -766,7 +766,7 @@ exports.acceptEscrow = async (req, res) => {
     if (participant) {
       participant.status = 'accepted';
       participant.hasApproved = true;
-      participant.approvedAt = new Date​​​​​​​​​​​​​​​​();
+      participant.approvedAt = new Date();
     }
 
     await escrow.save();

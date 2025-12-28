@@ -1,4 +1,4 @@
-// src/services/authService.js
+// src/services/authService.js - COMPLETE FIXED VERSION
 import api from '../config/api';
 import { toast } from 'react-hot-toast';
 
@@ -116,7 +116,7 @@ export const authService = {
   },
 
   /**
-   * ✅ NEW: Complete Google Profile
+   * ✅ Complete Google Profile
    */
   async completeGoogleProfile(profileData) {
     try {
@@ -148,11 +148,19 @@ export const authService = {
   },
 
   /**
-   * 📧 Verify email
+   * 📧 Verify email - ✅ FIXED
    */
   async verifyEmail(token) {
     try {
-      const res = await api.post('/auth/verify-email', { token });
+      console.log('📧 Verifying email with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
+      
+      if (!token) {
+        throw new Error('Verification token is required');
+      }
+
+      // ✅ FIX: Send token as query parameter, not in body
+      const res = await api.post(`/auth/verify-email?token=${token}`);
+      
       toast.success('✅ Email verified successfully! You can now log in.');
 
       const storedUser = this.getCurrentUser();
@@ -163,14 +171,10 @@ export const authService = {
         );
       }
 
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 2000);
-
       return res.data;
     } catch (err) {
-      console.error('Verify email error:', err);
-      const errorMsg = err.response?.data?.message || 'Invalid or expired link.';
+      console.error('❌ Verify email error:', err);
+      const errorMsg = err.response?.data?.message || 'Invalid or expired verification link.';
       toast.error(errorMsg);
       throw err.response?.data || { message: errorMsg };
     }
@@ -209,18 +213,30 @@ export const authService = {
   },
 
   /**
-   * 🔁 Reset password
+   * 🔁 Reset password - ✅ FIXED
    */
   async resetPassword(token, password) {
     try {
-      const res = await api.post('/auth/reset-password', { token, password });
+      console.log('🔐 Resetting password with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
+      
+      if (!token) {
+        throw new Error('Reset token is required');
+      }
+
+      if (!password || password.length < 8) {
+        throw new Error('Password must be at least 8 characters');
+      }
+
+      // ✅ FIX: Send token as query parameter, password in body
+      const res = await api.post(`/auth/reset-password?token=${token}`, { password });
+      
       toast.success('✅ Password reset successful! You can now log in.');
       setTimeout(() => {
         window.location.href = '/login';
       }, 2000);
       return res.data;
     } catch (err) {
-      console.error('Reset password error:', err);
+      console.error('❌ Reset password error:', err);
       const errorMsg = err.response?.data?.message || 'Failed to reset password.';
       toast.error(errorMsg);
       throw err.response?.data || { message: errorMsg };

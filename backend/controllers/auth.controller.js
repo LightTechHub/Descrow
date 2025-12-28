@@ -4,9 +4,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
-const { OAuth2Client } = require('google-auth-library'); // ✅ ADDED
+const { OAuth2Client } = require('google-auth-library');
 
-// ✅ ADDED: Initialize Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // -------------------- Helper: Generate JWT --------------------
@@ -25,13 +24,12 @@ const getFrontendUrl = () => {
 };
 
 /* ============================================================
-   🔵 GOOGLE AUTH - UPDATED
+   🔵 GOOGLE AUTH
 ============================================================ */
 exports.googleAuth = async (req, res) => {
   try {
     const { credential, googleData } = req.body;
 
-    // ✅ NEW: Verify Google token if credential is provided
     let email, name, picture, googleId;
 
     if (credential) {
@@ -46,7 +44,6 @@ exports.googleAuth = async (req, res) => {
       picture = payload.picture;
       googleId = payload.sub;
     } else if (googleData) {
-      // ✅ Fallback: Accept googleData directly (for testing/legacy)
       ({ email, name, picture, googleId } = googleData);
     } else {
       return res.status(400).json({
@@ -62,11 +59,9 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    // Check if user exists
     let user = await User.findOne({ email: email.toLowerCase() });
 
     if (user) {
-      // ✅ EXISTING USER - Login directly
       if (!user.googleId) {
         user.googleId = googleId;
         user.profilePicture = picture;
@@ -74,7 +69,6 @@ exports.googleAuth = async (req, res) => {
         await user.save();
       }
 
-      // 🚫 Block suspended users
       if (!user.isActive) {
         return res.status(403).json({
           success: false,
@@ -101,7 +95,6 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    // ✅ NEW USER - Return data for profile completion
     return res.json({
       success: true,
       requiresProfileCompletion: true,
@@ -110,7 +103,7 @@ exports.googleAuth = async (req, res) => {
         name,
         picture,
         googleId,
-        emailVerified: true // Google emails are pre-verified
+        emailVerified: true
       },
       message: 'Please complete your profile'
     });
@@ -126,7 +119,7 @@ exports.googleAuth = async (req, res) => {
 };
 
 /* ============================================================
-   ✅ NEW: Complete Google Profile
+   ✅ Complete Google Profile
 ============================================================ */
 exports.completeGoogleProfile = async (req, res) => {
   try {
@@ -137,15 +130,13 @@ exports.completeGoogleProfile = async (req, res) => {
       picture,
       phone,
       country,
-      accountType, // 'individual' or 'business'
-      // Business fields (optional)
+      accountType,
       companyName,
       companyType,
       industry,
       agreedToTerms
     } = req.body;
 
-    // Validate required fields
     if (!email || !name || !phone || !country || !agreedToTerms) {
       return res.status(400).json({
         success: false,
@@ -153,7 +144,6 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    // Check if email already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({
@@ -162,7 +152,6 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    // Create user with a random secure password (not used for Google login)
     const user = await User.create({
       name,
       email: email.toLowerCase(),
@@ -171,15 +160,14 @@ exports.completeGoogleProfile = async (req, res) => {
       googleId,
       profilePicture: picture,
       authProvider: 'google',
-      verified: true, // ✅ Google emails are pre-verified
+      verified: true,
       accountType: accountType || 'individual',
       role: 'dual',
       tier: 'free',
       agreedToTerms: true,
       agreedToTermsAt: new Date(),
-      password: Math.random().toString(36) + Math.random().toString(36), // Random password
+      password: Math.random().toString(36) + Math.random().toString(36),
       
-      // Business fields
       ...(accountType === 'business' && {
         businessInfo: {
           companyName,
@@ -189,12 +177,10 @@ exports.completeGoogleProfile = async (req, res) => {
       })
     });
 
-    // ✅ Send welcome email (background - don't block response)
     emailService.sendWelcomeEmail(user.email, user.name).catch(err => {
       console.error('Failed to send welcome email:', err);
     });
 
-    // Generate token
     const token = generateToken(user._id, user.email);
 
     console.log('✅ Google user profile completed:', user._id);
@@ -262,7 +248,6 @@ exports.register = async (req, res) => {
 
     const verificationToken = generateToken(user._id);
 
-    // Send verification email (don't block response)
     emailService.sendVerificationEmail(user.email, user.name, verificationToken)
       .catch(err => console.error('Failed to send verification email:', err));
 
@@ -332,7 +317,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Update last login
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() }, { runValidators: false });
 
     const token = generateToken(user._id, user.email);
@@ -365,46 +349,21 @@ exports.login = async (req, res) => {
 };
 
 /* ============================================================
-   ✅ VERIFY EMAIL REDIRECT (GET endpoint - redirects to frontend)
-============================================================ */
-exports.verifyEmailRedirect = async (req, res) => {
-  try {
-    const { token } = req.params;
-    
-    // Verify and decode token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    const user = await User.findOne({ _id: decoded.id });
-    
-    const frontendUrl = getFrontendUrl();
-    
-    if (!user) {
-      return res.redirect(`${frontendUrl}/login?verified=error&message=User+not+found`);
-    }
-    
-    if (user.verified) {
-      return res.redirect(`${frontendUrl}/login?verified=already`);
-    }
-    
-    user.verified = true;
-    user.verifiedAt = new Date();
-    await user.save();
-    
-    // Redirect to login with success message
-    res.redirect(`${frontendUrl}/login?verified=success`);
-  } catch (error) {
-    console.error('❌ Verify email redirect error:', error);
-    const frontendUrl = getFrontendUrl();
-    res.redirect(`${frontendUrl}/login?verified=error&message=Invalid+token`);
-  }
-};
-
-/* ============================================================
-   ✅ VERIFY EMAIL (API endpoint)
+   ✅ VERIFY EMAIL (API endpoint - FIXED)
 ============================================================ */
 exports.verifyEmail = async (req, res) => {
   try {
-    const { token } = req.params;
+    // ✅ FIX: Try to get token from both query params AND route params
+    const token = req.query.token || req.params.token;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification token is required'
+      });
+    }
+    
+    console.log('📧 Verifying email with token:', token.substring(0, 20) + '...');
     
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -419,9 +378,10 @@ exports.verifyEmail = async (req, res) => {
     }
     
     if (user.verified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already verified'
+      return res.status(200).json({
+        success: true,
+        message: 'Email already verified',
+        alreadyVerified: true
       });
     }
     
@@ -429,15 +389,33 @@ exports.verifyEmail = async (req, res) => {
     user.verifiedAt = new Date();
     await user.save();
     
+    console.log('✅ Email verified successfully for user:', user.email);
+    
     res.status(200).json({
       success: true,
       message: 'Email verified successfully'
     });
   } catch (error) {
     console.error('❌ Verify email error:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification token'
+      });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification token has expired',
+        expired: true
+      });
+    }
+    
     res.status(400).json({
       success: false,
-      message: 'Invalid or expired verification token'
+      message: 'Email verification failed'
     });
   }
 };
@@ -448,6 +426,13 @@ exports.verifyEmail = async (req, res) => {
 exports.resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
     
     const user = await User.findOne({ email: email.toLowerCase() });
     
@@ -468,6 +453,8 @@ exports.resendVerification = async (req, res) => {
     const verificationToken = generateToken(user._id);
     
     await emailService.sendVerificationEmail(user.email, user.name, verificationToken);
+    
+    console.log('✅ Verification email resent to:', user.email);
     
     res.status(200).json({
       success: true,
@@ -492,7 +479,6 @@ exports.forgotPassword = async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
-      // Don't reveal if user exists
       return res.status(200).json({
         success: true,
         message: 'If that email exists, a password reset link has been sent'
@@ -521,10 +507,24 @@ exports.forgotPassword = async (req, res) => {
 ============================================================ */
 exports.resetPassword = async (req, res) => {
   try {
-    const { token } = req.params;
+    // ✅ Support both query and route params
+    const token = req.query.token || req.params.token;
     const { password } = req.body;
     
-    // Verify token
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset token is required'
+      });
+    }
+    
+    if (!password || password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters'
+      });
+    }
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     const user = await User.findById(decoded.id);
@@ -557,9 +557,6 @@ exports.resetPassword = async (req, res) => {
 ============================================================ */
 exports.logout = async (req, res) => {
   try {
-    // In a stateless JWT system, logout is handled on the frontend
-    // by removing the token from localStorage
-    
     res.status(200).json({
       success: true,
       message: 'Logged out successfully'
@@ -578,7 +575,7 @@ exports.logout = async (req, res) => {
 ============================================================ */
 exports.refreshToken = async (req, res) => {
   try {
-    const userId = req.user.id; // From authenticate middleware
+    const userId = req.user.id;
     
     const user = await User.findById(userId);
     
@@ -596,7 +593,6 @@ exports.refreshToken = async (req, res) => {
       });
     }
     
-    // Generate new token
     const token = generateToken(user._id, user.email);
     
     res.status(200).json({

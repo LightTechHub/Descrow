@@ -1,18 +1,10 @@
-// File: src/pages/Profile/ProfilePage.jsx
+// src/pages/Profile/ProfilePage.jsx
+// COMPLETE REFINED VERSION
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  User, 
-  Shield, 
-  Settings, 
-  FileCheck, 
-  CreditCard,
-  ArrowLeft,
-  Loader,
-  AlertTriangle,
-  Mail,
-  CheckCircle,
-  Camera
+  User, Shield, Settings, FileCheck, CreditCard, ArrowLeft, Loader,
+  AlertTriangle, Mail, CheckCircle, Camera, Crown, TrendingUp, Code
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
 import KYCTab from './KYCTab';
@@ -78,7 +70,6 @@ const ProfilePage = () => {
         if (isVerified && pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
-          console.log('✅ KYC verified - stopped polling');
         }
       } else {
         setKycStatus({ 
@@ -104,7 +95,6 @@ const ProfilePage = () => {
     
     if (activeTab === 'kyc' && !isVerified) {
       pollIntervalRef.current = setInterval(() => {
-        console.log('🔄 Polling KYC status...');
         fetchData(true);
       }, 10000);
       
@@ -240,6 +230,19 @@ const ProfilePage = () => {
   const isKYCApproved = kycStatus?.isKYCVerified === true;
   const canAccessEscrowFeatures = isEmailVerified && isKYCApproved;
 
+  const getTierInfo = (tier) => {
+    const tiers = {
+      free: { name: 'Free', color: 'gray', icon: Shield },
+      starter: { name: 'Starter', color: 'blue', icon: Shield },
+      growth: { name: 'Growth', color: 'green', icon: TrendingUp },
+      enterprise: { name: 'Enterprise', color: 'purple', icon: Crown },
+      api: { name: 'API', color: 'indigo', icon: Code }
+    };
+    return tiers[tier?.toLowerCase()] || tiers.free;
+  };
+
+  const tierInfo = getTierInfo(user.tier);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
@@ -253,7 +256,6 @@ const ProfilePage = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            {/* Avatar with upload functionality */}
             <div className="relative group">
               <input
                 ref={fileInputRef}
@@ -275,7 +277,6 @@ const ProfilePage = () => {
                 </div>
               )}
               
-              {/* Upload overlay */}
               <button
                 onClick={handleAvatarClick}
                 disabled={uploadingAvatar}
@@ -289,15 +290,40 @@ const ProfilePage = () => {
               </button>
             </div>
 
-            <div>
+            <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {user.name || 'User'}
               </h1>
               <p className="text-gray-600 dark:text-gray-400">{user.email}</p>
               <div className="flex flex-wrap gap-2 mt-2">
-                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 text-xs font-medium rounded-full">
-                  {(user.tier || 'FREE').toUpperCase()}
-                </span>
+                <button
+                  onClick={() => navigate('/upgrade')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 transition hover:shadow-md ${
+                    tierInfo.color === 'gray' ? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 hover:bg-gray-200' :
+                    tierInfo.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 hover:bg-blue-200' :
+                    tierInfo.color === 'green' ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 hover:bg-green-200' :
+                    tierInfo.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300 hover:bg-purple-200' :
+                    'bg-indigo-100 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-200'
+                  }`}
+                  title="Click to upgrade tier"
+                >
+                  <tierInfo.icon className="w-3 h-3" />
+                  {tierInfo.name.toUpperCase()} TIER
+                  {user.tier !== 'enterprise' && user.tier !== 'api' && (
+                    <span className="ml-1">↗</span>
+                  )}
+                </button>
+
+                {user.accountType && (
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    user.accountType === 'business'
+                      ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300'
+                      : 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'
+                  }`}>
+                    {user.accountType === 'business' ? '🏢 BUSINESS' : '👤 INDIVIDUAL'}
+                  </span>
+                )}
+
                 {isEmailVerified && (
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-xs font-medium rounded-full flex items-center gap-1">
                     <CheckCircle className="w-3 h-3" />
@@ -314,13 +340,16 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* Verification warnings */}
           {!isEmailVerified && <EmailVerificationWarning />}
           {isEmailVerified && !isKYCApproved && (
             <KYCVerificationWarning 
               kycStatus={kycStatus} 
               onVerifyClick={() => handleTabChange('kyc')}
             />
+          )}
+
+          {['free', 'starter', 'growth'].includes(user.tier?.toLowerCase()) && canAccessEscrowFeatures && (
+            <TierUpgradeCTA currentTier={user.tier} navigate={navigate} />
           )}
         </div>
       </div>
@@ -348,6 +377,79 @@ const ProfilePage = () => {
             />
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const TierUpgradeCTA = ({ currentTier, navigate }) => {
+  const getUpgradeMessage = () => {
+    switch (currentTier?.toLowerCase()) {
+      case 'free':
+        return {
+          message: 'Upgrade to Starter for more transactions and lower fees',
+          nextTier: 'Starter',
+          color: 'blue'
+        };
+      case 'starter':
+        return {
+          message: 'Upgrade to Growth for milestone payments and unlimited transactions',
+          nextTier: 'Growth',
+          color: 'green'
+        };
+      case 'growth':
+        return {
+          message: 'Upgrade to Enterprise for API access and custom branding',
+          nextTier: 'Enterprise',
+          color: 'purple'
+        };
+      default:
+        return null;
+    }
+  };
+
+  const upgradeInfo = getUpgradeMessage();
+  if (!upgradeInfo) return null;
+
+  return (
+    <div className={`mt-4 bg-gradient-to-r ${
+      upgradeInfo.color === 'blue' ? 'from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800' :
+      upgradeInfo.color === 'green' ? 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800' :
+      'from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800'
+    } border rounded-xl p-4`}>
+      <div className="flex items-center gap-3">
+        <Crown className={`w-6 h-6 ${
+          upgradeInfo.color === 'blue' ? 'text-blue-600' :
+          upgradeInfo.color === 'green' ? 'text-green-600' :
+          'text-purple-600'
+        } flex-shrink-0`} />
+        <div className="flex-1">
+          <p className={`text-sm font-semibold ${
+            upgradeInfo.color === 'blue' ? 'text-blue-900 dark:text-blue-200' :
+            upgradeInfo.color === 'green' ? 'text-green-900 dark:text-green-200' :
+            'text-purple-900 dark:text-purple-200'
+          }`}>
+            Unlock More Features
+          </p>
+          <p className={`text-sm mt-1 ${
+            upgradeInfo.color === 'blue' ? 'text-blue-800 dark:text-blue-300' :
+            upgradeInfo.color === 'green' ? 'text-green-800 dark:text-green-300' :
+            'text-purple-800 dark:text-purple-300'
+          }`}>
+            {upgradeInfo.message}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/upgrade')}
+          className={`px-6 py-2.5 ${
+            upgradeInfo.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
+            upgradeInfo.color === 'green' ? 'bg-green-600 hover:bg-green-700' :
+            'bg-purple-600 hover:bg-purple-700'
+          } text-white text-sm font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-2`}
+        >
+          <Crown className="w-4 h-4" />
+          Upgrade to {upgradeInfo.nextTier}
+        </button>
       </div>
     </div>
   );

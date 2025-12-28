@@ -1,4 +1,4 @@
-// src/pages/Auth/CompleteProfilePage.jsx
+// src/pages/Auth/CompleteProfilePage.jsx - FIXED
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Shield, User, Mail, Phone, Globe, Building2, CheckCircle, Loader } from 'lucide-react';
@@ -36,9 +36,25 @@ const CompleteProfilePage = () => {
     'United Kingdom', 'Canada', 'Australia', 'India', 'China'
   ];
 
+  // ✅ FIX: Changed to lowercase to match backend enum
   const industries = [
-    'E-commerce', 'Technology', 'Real Estate', 'Fashion',
-    'Automotive', 'Services', 'Manufacturing', 'Other'
+    { label: 'E-commerce', value: 'ecommerce' },
+    { label: 'Technology', value: 'technology' },
+    { label: 'Real Estate', value: 'real_estate' },
+    { label: 'Fashion', value: 'fashion' },
+    { label: 'Automotive', value: 'automotive' },
+    { label: 'Services', value: 'services' },
+    { label: 'Manufacturing', value: 'manufacturing' },
+    { label: 'Retail', value: 'retail' },
+    { label: 'Finance', value: 'finance' },
+    { label: 'Healthcare', value: 'healthcare' },
+    { label: 'Education', value: 'education' },
+    { label: 'Logistics', value: 'logistics' },
+    { label: 'Government', value: 'government' },
+    { label: 'Professional Services', value: 'professional_services' },
+    { label: 'SaaS', value: 'saas' },
+    { label: 'Freelance', value: 'freelance' },
+    { label: 'Other', value: 'other' }
   ];
 
   const handleChange = (e) => {
@@ -60,6 +76,11 @@ const CompleteProfilePage = () => {
     try {
       setLoading(true);
 
+      console.log('📤 Submitting profile data:', {
+        ...formData,
+        googleId: googleData.googleId
+      });
+
       const response = await authService.completeGoogleProfile({
         ...formData,
         googleId: googleData.googleId,
@@ -71,8 +92,8 @@ const CompleteProfilePage = () => {
         navigate('/dashboard');
       }
     } catch (error) {
-      console.error('Complete profile error:', error);
-      toast.error(error.response?.data?.message || 'Failed to complete profile');
+      console.error('❌ Complete profile error:', error);
+      toast.error(error.message || 'Failed to complete profile');
     } finally {
       setLoading(false);
     }
@@ -253,10 +274,12 @@ const CompleteProfilePage = () => {
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                   >
                     <option value="">Select type</option>
-                    <option value="llc">LLC</option>
-                    <option value="corp">Corporation</option>
                     <option value="sole_proprietor">Sole Proprietor</option>
                     <option value="partnership">Partnership</option>
+                    <option value="llc">LLC</option>
+                    <option value="corporation">Corporation</option>
+                    <option value="ngo">NGO</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
 
@@ -271,8 +294,11 @@ const CompleteProfilePage = () => {
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                   >
                     <option value="">Select industry</option>
+                    {/* ✅ FIX: Now using value (lowercase) for backend, label for display */}
                     {industries.map(ind => (
-                      <option key={ind} value={ind}>{ind}</option>
+                      <option key={ind.value} value={ind.value}>
+                        {ind.label}
+                      </option>
                     ))}
                   </select>
                 </div>

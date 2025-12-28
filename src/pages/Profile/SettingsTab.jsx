@@ -1,5 +1,7 @@
 // File: src/pages/Profile/SettingsTab.jsx
+// COMPLETE UPDATED VERSION WITH TIER UPGRADE BANNER
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Bell, 
   Globe, 
@@ -10,13 +12,17 @@ import {
   Loader,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Crown,
+  TrendingUp,
+  Zap
 } from 'lucide-react';
 import notificationService from '../../services/notificationService';
 import profileService from '../../services/profileService';
 import toast from 'react-hot-toast';
 
 const SettingsTab = ({ user, onUpdate }) => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(
     document.documentElement.classList.contains('dark')
@@ -158,8 +164,97 @@ const SettingsTab = ({ user, onUpdate }) => {
     }
   };
 
+  // ✅ NEW: Get tier upgrade info
+  const getTierUpgradeInfo = () => {
+    const currentTier = user?.tier?.toLowerCase() || 'free';
+    
+    const upgradeInfo = {
+      free: {
+        show: true,
+        nextTier: 'Starter',
+        message: 'Upgrade to Starter for 10 transactions/month & lower fees',
+        color: 'blue',
+        icon: Zap
+      },
+      starter: {
+        show: true,
+        nextTier: 'Growth',
+        message: 'Unlock milestone payments, 50 transactions/month & multi-party escrow',
+        color: 'green',
+        icon: TrendingUp
+      },
+      growth: {
+        show: true,
+        nextTier: 'Enterprise',
+        message: 'Get unlimited transactions, API access & priority support',
+        color: 'purple',
+        icon: Crown
+      },
+      enterprise: {
+        show: false
+      },
+      api: {
+        show: false
+      }
+    };
+
+    return upgradeInfo[currentTier] || upgradeInfo.free;
+  };
+
+  const upgradeInfo = getTierUpgradeInfo();
+
   return (
     <div className="space-y-6">
+      {/* ✅ NEW: Tier Upgrade Banner */}
+      {upgradeInfo.show && (
+        <div className={`bg-gradient-to-r ${
+          upgradeInfo.color === 'blue' ? 'from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20' :
+          upgradeInfo.color === 'green' ? 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20' :
+          'from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20'
+        } border-2 ${
+          upgradeInfo.color === 'blue' ? 'border-blue-200 dark:border-blue-700' :
+          upgradeInfo.color === 'green' ? 'border-green-200 dark:border-green-700' :
+          'border-purple-200 dark:border-purple-700'
+        } rounded-xl p-6`}>
+          <div className="flex items-center gap-4">
+            <div className={`p-4 rounded-xl ${
+              upgradeInfo.color === 'blue' ? 'bg-blue-600' :
+              upgradeInfo.color === 'green' ? 'bg-green-600' :
+              'bg-purple-600'
+            }`}>
+              <upgradeInfo.icon className="w-8 h-8 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className={`text-lg font-bold mb-1 ${
+                upgradeInfo.color === 'blue' ? 'text-blue-900 dark:text-blue-100' :
+                upgradeInfo.color === 'green' ? 'text-green-900 dark:text-green-100' :
+                'text-purple-900 dark:text-purple-100'
+              }`}>
+                Upgrade to {upgradeInfo.nextTier}
+              </h3>
+              <p className={`text-sm ${
+                upgradeInfo.color === 'blue' ? 'text-blue-800 dark:text-blue-200' :
+                upgradeInfo.color === 'green' ? 'text-green-800 dark:text-green-200' :
+                'text-purple-800 dark:text-purple-200'
+              }`}>
+                {upgradeInfo.message}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/upgrade')}
+              className={`px-6 py-3 ${
+                upgradeInfo.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
+                upgradeInfo.color === 'green' ? 'bg-green-600 hover:bg-green-700' :
+                'bg-purple-600 hover:bg-purple-700'
+              } text-white rounded-xl font-semibold transition flex items-center gap-2 shadow-lg whitespace-nowrap`}
+            >
+              <Crown className="w-5 h-5" />
+              Upgrade Now
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Appearance */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">

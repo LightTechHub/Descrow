@@ -1,529 +1,273 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const express = require('express');
+const router = express.Router();
 
-const userSchema = new mongoose.Schema({
-  // ==================== BASIC INFO ====================
-  name: {
-    type: String,
-    required: [true, 'Name is required'],
-    trim: true
-  },
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    lowercase: true,
-    trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
-  },
-  password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: [8, 'Password must be at least 8 characters'],
-    select: false
-  },
-  googleId: {
-    type: String,
-    sparse: true,
-    unique: true
-  },
+const escrowController = require('../controllers/escrow.controller');
+const { authenticate } = require('../middleware/auth.middleware');
+const verificationMiddleware = require('../middleware/verification.middleware');
+const { createEscrowValidator } = require('../validators/escrow.validator');
+const { uploadMultiple } = require('../middleware/upload.middleware');
 
-  // ==================== ACCOUNT SETTINGS ====================
-  role: {
-    type: String,
-    enum: ['dual'],
-    default: 'dual'
-  },
-  accountType: {
-    type: String,
-    enum: ['individual', 'business'],
-    default: 'individual'
-  },
-  tier: {
-    type: String,
-    enum: ['free', 'starter', 'growth', 'enterprise', 'api'],
-    default: 'free'
-  },
-  status: {
-    type: String,
-    enum: ['active', 'suspended', 'deleted'],
-    default: 'active'
-  },
+// ==================== PUBLIC ROUTES (No Authentication) ====================
+// MUST COME FIRST BEFORE router.use(authenticate)
 
-  // ==================== VERIFICATION ====================
-  verified: {
-    type: Boolean,
-    default: false
-  },
-  verifiedAt: Date,
-  isKYCVerified: {
-    type: Boolean,
-    default: false
-  },
-  kycStatus: {
-    status: {
-      type: String,
-      enum: ['unverified', 'pending', 'in_progress', 'approved', 'rejected', 'expired'],
-      default: 'unverified'
-    },
-    submittedAt: Date,
-    verifiedAt: Date,
-    reviewedAt: Date,
-    reviewedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    rejectionReason: String,
-    diditSessionId: String,
-    diditVerificationUrl: String,
-    diditSessionExpiresAt: Date,
-    verificationResult: Object,
-    personalInfo: Object,
-    businessInfo: Object
-  },
-
-  // ==================== BUSINESS INFORMATION ====================
-  businessInfo: {
-    companyName: String,
-    companyType: {
-      type: String,
-      enum: ['sole_proprietor', 'partnership', 'llc', 'corporation', 'ngo', 'other']
-    },
-    taxId: String,
-    registrationNumber: String,
-    industry: {
-      type: String,
-      enum: [
-        'ecommerce', 
-        'real_estate', 
-        'freelance', 
-        'saas', 
-        'professional_services',
-        'government', 
-        'logistics', 
-        'finance', 
-        'healthcare', 
-        'education', 
-        'manufacturing', 
-        'retail',
-        'technology',    // ✅ ADDED
-        'fashion',       // ✅ ADDED
-        'automotive',    // ✅ ADDED
-        'services',      // ✅ ADDED
-        'other'
-      ]
-    },
-    businessAddress: {
-      street: String,
-      city: String,
-      state: String,
-      country: String,
-      zipCode: String
-    },
-    businessEmail: String,
-    businessPhone: String,
-    website: String,
-    documents: [{
-      type: {
-        type: String,
-        enum: ['registration_certificate', 'tax_id', 'utility_bill', 'bank_statement', 'other']
-      },
-      url: String,
-      uploadedAt: { type: Date, default: Date.now }
-    }],
-    businessVerified: {
-      type: Boolean,
-      default: false
-    },
-    businessVerifiedAt: Date,
-    businessStats: {
-      totalTransactions: { type: Number, default: 0 },
-      totalVolume: { type: Number, default: 0 }
-    }
-  },
-
-  // ==================== CAPABILITIES ====================
-  capabilities: {
-    canBeBuyer: { type: Boolean, default: true },
-    canBeSeller: { type: Boolean, default: true },
-    canBeArbitrator: { type: Boolean, default: false },
-    canBeAgent: { type: Boolean, default: false },
-    canBeInspector: { type: Boolean, default: false },
-    canBeShipper: { type: Boolean, default: false }
-  },
-  specializations: [{
-    type: String,
-    enum: [
-      'real_estate', 'vehicles', 'digital_goods', 'freelance', 
-      'business_sales', 'intellectual_property', 'domains', 'crypto'
-    ]
-  }],
-
-  // ==================== SUBSCRIPTION & API ====================
-  apiAccess: {
-    enabled: { type: Boolean, default: false },
-    apiKey: { type: String, unique: true, sparse: true },
-    apiSecret: { type: String, select: false },
-    createdAt: Date,
-    lastUsedAt: Date,
-    requestCount: { type: Number, default: 0 }
-  },
-  subscription: {
-    status: {
-      type: String,
-      enum: ['active', 'cancelled', 'expired'],
-      default: 'active'
-    },
-    startDate: Date,
-    endDate: Date,
-    lastPaymentDate: Date,
-    autoRenew: { type: Boolean, default: true },
-    paymentMethod: String
-  },
-  monthlyUsage: {
-    transactionCount: { type: Number, default: 0 },
-    lastResetDate: { type: Date, default: Date.now }
-  },
-
-  // ==================== STATISTICS ====================
-  stats: {
-    totalTransactions: { type: Number, default: 0 },
-    totalSpent: { type: Number, default: 0 },
-    totalEarned: { type: Number, default: 0 },
-    completedEscrows: { type: Number, default: 0 },
-    cancelledEscrows: { type: Number, default: 0 },
-    asBuyer: {
-      totalTransactions: { type: Number, default: 0 },
-      totalSpent: { type: Number, default: 0 },
-      completedDeals: { type: Number, default: 0 }
-    },
-    asSeller: {
-      totalTransactions: { type: Number, default: 0 },
-      totalEarned: { type: Number, default: 0 },
-      completedDeals: { type: Number, default: 0 }
-    },
-    asArbitrator: {
-      casesHandled: { type: Number, default: 0 },
-      successRate: { type: Number, default: 0 }
-    },
-    bankAccountsCount: { type: Number, default: 0 },
-    verifiedBankAccountsCount: { type: Number, default: 0 },
-    totalPayoutsReceived: { type: Number, default: 0 },
-    totalPayoutAmount: { type: Number, default: 0 },
-    lastPayoutAt: Date,
-    totalLogins: { type: Number, default: 0 },
-    accountAgeDays: { type: Number, default: 0 }
-  },
-
-  // ==================== CONTACT & PROFILE ====================
-  phone: { type: String, trim: true },
-  bio: { type: String, maxlength: 500 },
-  address: {
-    street: String,
-    city: String,
-    state: String,
-    country: String,
-    zipCode: String
-  },
-  socialLinks: {
-    twitter: String,
-    linkedin: String,
-    website: String
-  },
-  profilePicture: String,
-  avatar: String,
-
-  // ==================== SECURITY ====================
-  twoFactorEnabled: { type: Boolean, default: false },
-  twoFactorSecret: { type: String, select: false },
-  lastLogin: Date,
-  isActive: { type: Boolean, default: true },
-  deletedAt: Date,
-  deletionReason: String,
-
-  // ==================== BANKING ====================
-  hasBankAccount: { type: Boolean, default: false },
-  primaryBankAccount: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'BankAccount',
-    sparse: true
-  },
-
-  // ==================== ESCROW ACCESS ====================
-  escrowAccess: {
-    canCreateEscrow: { type: Boolean, default: true },
-    canReceiveEscrow: { type: Boolean, default: true },
-    maxActiveEscrows: { type: Number, default: 5 },
-    restrictions: [{
-      type: String,
-      enum: ['amount_limit', 'currency_restriction', 'geographic_restriction']
-    }],
-    suspendedUntil: Date,
-    suspensionReason: String
-  },
-
-  // ==================== NOTIFICATIONS ====================
-  notificationSettings: {
-    email: {
-      escrowUpdates: { type: Boolean, default: true },
-      messages: { type: Boolean, default: true },
-      disputes: { type: Boolean, default: true },
-      payments: { type: Boolean, default: true },
-      marketing: { type: Boolean, default: false },
-      kycUpdates: { type: Boolean, default: true },
-      payoutNotifications: { type: Boolean, default: true }
-    },
-    push: {
-      escrowUpdates: { type: Boolean, default: true },
-      messages: { type: Boolean, default: true },
-      disputes: { type: Boolean, default: true },
-      payments: { type: Boolean, default: true },
-      kycUpdates: { type: Boolean, default: true }
-    }
-  },
-
-  // ==================== PREFERENCES ====================
-  preferences: {
-    language: { type: String, default: 'en' },
-    timezone: { type: String, default: 'UTC' },
-    defaultCurrency: { type: String, default: 'USD' },
-    theme: {
-      type: String,
-      enum: ['light', 'dark', 'auto'],
-      default: 'auto'
-    }
-  },
-
-  // ==================== RATINGS ====================
-  ratings: {
-    overall: { type: Number, default: 0, min: 0, max: 5 },
-    totalReviews: { type: Number, default: 0 },
-    asSeller: { type: Number, default: 0 },
-    asAgent: { type: Number, default: 0 },
-    asArbitrator: { type: Number, default: 0 }
-  },
-
-  // ==================== AUDIT LOG ====================
-  auditLog: [{
-    action: String,
-    description: String,
-    ipAddress: String,
-    userAgent: String,
-    timestamp: { type: Date, default: Date.now },
-    metadata: mongoose.Schema.Types.Mixed
-  }]
-}, {
-  timestamps: true
-});
-
-// ==================== PRE-SAVE MIDDLEWARE ====================
-userSchema.pre('save', function (next) {
-  this.isKYCVerified = this.kycStatus?.status === 'approved';
-
-  const now = new Date();
-  const lastReset = this.monthlyUsage?.lastResetDate;
-
-  if (lastReset && now.getMonth() !== lastReset.getMonth()) {
-    this.monthlyUsage.transactionCount = 0;
-    this.monthlyUsage.lastResetDate = now;
-  }
-
-  if (this.createdAt) {
-    const ageInDays = Math.floor((now - this.createdAt) / (1000 * 60 * 60 * 24));
-    this.stats.accountAgeDays = ageInDays;
-  }
-
-  next();
-});
-
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-
+/**
+ * @route   GET /api/escrow/public
+ * @desc    Get public/featured deals for landing page (shows completed transactions)
+ * @access  Public
+ */
+router.get('/public', async (req, res) => {
   try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (err) {
-    next(err);
+    const Escrow = require('../models/Escrow.model');
+    
+    // Get recent completed/paid_out escrows with public visibility
+    const publicDeals = await Escrow.find({
+      status: { $in: ['completed', 'paid_out'] },
+      visibility: 'public'
+    })
+    .select('title amount currency category transactionType createdAt')
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+    // Format for public display (no sensitive data)
+    const formattedDeals = publicDeals.map(deal => ({
+      id: deal._id,
+      title: deal.title,
+      amount: deal.amount ? parseFloat(deal.amount.toString()) : 0,
+      currency: deal.currency || 'USD',
+      category: deal.category || 'other',
+      transactionType: deal.transactionType,
+      completedAt: deal.createdAt
+    }));
+
+    res.json({
+      success: true,
+      deals: formattedDeals,
+      total: formattedDeals.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching public deals:', error);
+    // Return empty array instead of error for better UX
+    res.json({
+      success: true,
+      deals: [],
+      total: 0,
+      message: 'No public deals available yet'
+    });
   }
 });
 
-// ==================== INSTANCE METHODS ====================
-userSchema.methods.comparePassword = function (candidate) {
-  return bcrypt.compare(candidate, this.password);
-};
+// ==================== APPLY AUTHENTICATION ====================
+// 🔒 All routes below this line require authentication
+router.use(authenticate);
 
-userSchema.methods.getTierLimits = function() {
-  const tierLimits = {
-    free: {
-      name: 'Free',
-      maxTransactionsPerMonth: 3,
-      maxTransactionAmount: { 
-        USD: 500, EUR: 450, GBP: 400, NGN: 750000, 
-        KES: 65000, GHS: 6000, ZAR: 9000, INR: 42000 
-      },
-      escrowFee: { USD: 0.05, NGN: 0.05 },
-      disputeResolution: false,
-      prioritySupport: false,
-      apiAccess: false,
-      multiPartyEscrow: false,
-      milestonePayments: false
-    },
-    starter: {
-      name: 'Starter',
-      maxTransactionsPerMonth: 10,
-      maxTransactionAmount: { 
-        USD: 2000, EUR: 1800, GBP: 1600, NGN: 3000000, 
-        KES: 260000, GHS: 24000, ZAR: 36000, INR: 168000 
-      },
-      escrowFee: { USD: 0.035, NGN: 0.035 },
-      disputeResolution: false,
-      prioritySupport: false,
-      apiAccess: false,
-      multiPartyEscrow: false,
-      milestonePayments: false
-    },
-    growth: {
-      name: 'Growth',
-      maxTransactionsPerMonth: 50,
-      maxTransactionAmount: { 
-        USD: 10000, EUR: 9000, GBP: 8000, NGN: 15000000, 
-        KES: 1300000, GHS: 120000, ZAR: 180000, INR: 840000 
-      },
-      escrowFee: { USD: 0.025, NGN: 0.025 },
-      disputeResolution: true,
-      prioritySupport: false,
-      apiAccess: false,
-      multiPartyEscrow: true,
-      milestonePayments: true,
-      monthlyCost: { USD: 29, NGN: 45000 }
-    },
-    enterprise: {
-      name: 'Enterprise',
-      maxTransactionsPerMonth: -1,
-      maxTransactionAmount: { 
-        USD: 100000, EUR: 90000, GBP: 80000, NGN: 150000000, 
-        KES: 13000000, GHS: 1200000, ZAR: 1800000, INR: 8400000 
-      },
-      escrowFee: { USD: 0.015, NGN: 0.015 },
-      disputeResolution: true,
-      prioritySupport: true,
-      apiAccess: true,
-      multiPartyEscrow: true,
-      milestonePayments: true,
-      customBranding: true,
-      monthlyCost: { USD: 99, NGN: 150000 }
-    },
-    api: {
-      name: 'API',
-      maxTransactionsPerMonth: -1,
-      maxTransactionAmount: { USD: -1, NGN: -1 },
-      escrowFee: { USD: 0.01, NGN: 0.01 },
-      disputeResolution: true,
-      prioritySupport: true,
-      apiAccess: true,
-      multiPartyEscrow: true,
-      milestonePayments: true,
-      customBranding: true,
-      monthlyCost: { USD: 299, NGN: 450000 },
-      setupFee: { USD: 500, NGN: 750000 }
+// ==================== ELIGIBILITY CHECK ====================
+
+/**
+ * @route   GET /api/escrow/check-eligibility
+ * @desc    Check if user can create escrow (email verification, KYC, etc.)
+ * @access  Private
+ */
+router.get('/check-eligibility', escrowController.checkCanCreateEscrow);
+
+// ==================== ESCROW MANAGEMENT ====================
+
+/**
+ * @route   POST /api/escrow/create
+ * @desc    Create a new escrow transaction
+ * @access  Private (requires email verification)
+ */
+router.post(
+  '/create', 
+  verificationMiddleware,
+  uploadMultiple('attachments', 10),
+  createEscrowValidator, 
+  escrowController.createEscrow
+);
+
+/**
+ * @route   GET /api/escrow/my-escrows
+ * @desc    Get all escrows for the authenticated user
+ * @access  Private
+ */
+router.get('/my-escrows', escrowController.getMyEscrows);
+
+/**
+ * @route   GET /api/escrow/dashboard-stats
+ * @desc    Get dashboard statistics for the user
+ * @access  Private
+ */
+router.get('/dashboard-stats', escrowController.getDashboardStats);
+
+/**
+ * @route   GET /api/escrow/calculate-fees
+ * @desc    Preview escrow service fees before creating
+ * @access  Private
+ */
+router.get('/calculate-fees', escrowController.calculateFeePreview);
+
+/**
+ * @route   GET /api/escrow/details/:id
+ * @desc    Get escrow details by MongoDB _id (for payment page)
+ * @access  Private
+ */
+router.get('/details/:id', escrowController.getEscrowById);
+
+/**
+ * @route   GET /api/escrow/track/:gpsTrackingId
+ * @desc    Get GPS tracking information for delivery
+ * @access  Private
+ */
+router.get('/track/:gpsTrackingId', escrowController.getGPSTracking);
+
+/**
+ * @route   GET /api/escrow/:id
+ * @desc    Get details of a single escrow by ID (escrowId or _id)
+ * @access  Private
+ */
+router.get('/:id', escrowController.getEscrowById);
+
+// ==================== ESCROW ACTIONS ====================
+
+/**
+ * @route   POST /api/escrow/:id/accept
+ * @desc    Accept an escrow offer (seller action)
+ * @access  Private (Seller only)
+ */
+router.post('/:id/accept', escrowController.acceptEscrow);
+
+/**
+ * @route   POST /api/escrow/:id/fund
+ * @desc    Fund escrow (buyer action)
+ * @access  Private (Buyer only)
+ */
+router.post('/:id/fund', escrowController.fundEscrow);
+
+/**
+ * @route   POST /api/escrow/:id/deliver
+ * @desc    Mark escrow item as delivered (seller action)
+ * @access  Private (Seller only)
+ */
+router.post('/:id/deliver', escrowController.markDelivered);
+
+/**
+ * @route   POST /api/escrow/:id/upload-delivery-proof
+ * @desc    Upload delivery proof with photos and tracking details
+ * @access  Private (Seller only)
+ */
+router.post(
+  '/:id/upload-delivery-proof',
+  uploadMultiple('photos', 10),
+  (req, res) => {
+    // Map uploaded file URLs to body
+    req.body.packagePhotos = req.fileUrls || [];
+    if (req.files?.driverPhoto) {
+      req.body.driverPhoto = req.files.driverPhoto[0].url;
     }
-  };
-
-  return tierLimits[this.tier] || tierLimits.free;
-};
-
-userSchema.methods.canCreateTransaction = function(amount, currency = 'USD') {
-  const tierLimits = this.getTierLimits();
-  
-  if (tierLimits.maxTransactionsPerMonth !== -1) {
-    if (this.monthlyUsage.transactionCount >= tierLimits.maxTransactionsPerMonth) {
-      return {
-        allowed: false,
-        reason: `Monthly transaction limit reached (${tierLimits.maxTransactionsPerMonth} transactions)`,
-        limit: tierLimits.maxTransactionsPerMonth,
-        current: this.monthlyUsage.transactionCount
-      };
+    if (req.files?.vehiclePhoto) {
+      req.body.vehiclePhoto = req.files.vehiclePhoto[0].url;
     }
+    escrowController.uploadDeliveryProof(req, res);
   }
-  
-  const maxAmount = tierLimits.maxTransactionAmount[currency];
-  if (maxAmount && maxAmount !== -1 && amount > maxAmount) {
-    return {
-      allowed: false,
-      reason: `Transaction amount exceeds ${currency} ${maxAmount.toLocaleString()} limit for ${tierLimits.name} tier`,
-      limit: maxAmount,
-      current: amount
-    };
-  }
-  
-  return { allowed: true };
-};
+);
 
-userSchema.methods.canAccessEscrow = function () {
-  if (!this.verified) {
-    return { 
-      allowed: false, 
-      reason: 'Email verification required', 
-      action: 'verify_email' 
-    };
-  }
-  
-  if (!this.isKYCVerified || this.kycStatus?.status !== 'approved') {
-    return { 
-      allowed: false, 
-      reason: 'KYC verification required', 
-      action: 'complete_kyc',
-      currentKYCStatus: this.kycStatus?.status || 'unverified'
-    };
-  }
-  
-  if (this.status !== 'active') {
-    return { 
-      allowed: false, 
-      reason: 'Account not active',
-      accountStatus: this.status
-    };
-  }
-  
-  if (!this.escrowAccess?.canCreateEscrow) {
-    return { 
-      allowed: false, 
-      reason: 'Escrow access restricted',
-      restriction: this.escrowAccess?.suspensionReason
-    };
-  }
-  
-  return { allowed: true };
-};
+/**
+ * @route   POST /api/escrow/:id/confirm
+ * @desc    Confirm delivery (buyer action)
+ * @access  Private (Buyer only)
+ */
+router.post('/:id/confirm', escrowController.confirmDelivery);
 
-userSchema.methods.canParticipateAs = function(role) {
-  const roleMap = {
-    'buyer': this.capabilities.canBeBuyer,
-    'seller': this.capabilities.canBeSeller,
-    'arbitrator': this.capabilities.canBeArbitrator,
-    'agent': this.capabilities.canBeAgent,
-    'inspector': this.capabilities.canBeInspector,
-    'shipper': this.capabilities.canBeShipper
-  };
-  
-  return roleMap[role] !== false;
-};
+/**
+ * @route   POST /api/escrow/:id/dispute
+ * @desc    Raise a dispute for the escrow (either party)
+ * @access  Private
+ */
+router.post('/:id/dispute', escrowController.raiseDispute);
 
-userSchema.methods.addAuditLog = function (action, description, ip, agent, metadata = {}) {
-  this.auditLog.push({
-    action,
-    description,
-    ipAddress: ip,
-    userAgent: agent,
-    metadata
-  });
+/**
+ * @route   POST /api/escrow/:id/cancel
+ * @desc    Cancel escrow (allowed before funding)
+ * @access  Private
+ */
+router.post('/:id/cancel', escrowController.cancelEscrow);
 
-  if (this.auditLog.length > 100) {
-    this.auditLog = this.auditLog.slice(-100);
-  }
+// ==================== MILESTONE MANAGEMENT ====================
 
-  return this.save();
-};
+/**
+ * @route   POST /api/escrow/:id/milestones
+ * @desc    Add milestone to escrow
+ * @access  Private
+ */
+router.post('/:id/milestones', escrowController.addMilestone);
 
-module.exports = mongoose.model('User', userSchema);
+/**
+ * @route   POST /api/escrow/:id/milestones/:milestoneId/submit
+ * @desc    Submit milestone for approval
+ * @access  Private
+ */
+router.post(
+  '/:id/milestones/:milestoneId/submit',
+  uploadMultiple('attachments', 10),
+  escrowController.submitMilestone
+);
+
+/**
+ * @route   POST /api/escrow/:id/milestones/:milestoneId/approve
+ * @desc    Approve milestone completion
+ * @access  Private
+ */
+router.post('/:id/milestones/:milestoneId/approve', escrowController.approveMilestone);
+
+/**
+ * @route   POST /api/escrow/:id/milestones/:milestoneId/reject
+ * @desc    Reject milestone submission
+ * @access  Private
+ */
+router.post('/:id/milestones/:milestoneId/reject', escrowController.rejectMilestone);
+
+// ==================== PARTICIPANT MANAGEMENT ====================
+
+/**
+ * @route   POST /api/escrow/:id/participants
+ * @desc    Add participant to escrow
+ * @access  Private
+ */
+router.post('/:id/participants', escrowController.addParticipant);
+
+/**
+ * @route   POST /api/escrow/:id/accept-invitation
+ * @desc    Accept participant invitation
+ * @access  Private
+ */
+router.post('/:id/accept-invitation', escrowController.acceptInvitation);
+
+/**
+ * @route   POST /api/escrow/:id/decline-invitation
+ * @desc    Decline participant invitation
+ * @access  Private
+ */
+router.post('/:id/decline-invitation', escrowController.declineInvitation);
+
+// ==================== INSPECTION MANAGEMENT ====================
+
+/**
+ * @route   POST /api/escrow/:id/schedule-inspection
+ * @desc    Schedule inspection for escrow
+ * @access  Private
+ */
+router.post('/:id/schedule-inspection', escrowController.scheduleInspection);
+
+/**
+ * @route   POST /api/escrow/:id/complete-inspection
+ * @desc    Complete inspection with photos
+ * @access  Private
+ */
+router.post(
+  '/:id/complete-inspection',
+  uploadMultiple('photos', 10),
+  escrowController.completeInspection
+);
+
+module.exports = router;

@@ -94,9 +94,23 @@ const userSchema = new mongoose.Schema({
     industry: {
       type: String,
       enum: [
-        'ecommerce', 'real_estate', 'freelance', 'saas', 'professional_services',
-        'government', 'logistics', 'finance', 'healthcare', 'education', 
-        'manufacturing', 'retail', 'other'
+        'ecommerce', 
+        'real_estate', 
+        'freelance', 
+        'saas', 
+        'professional_services',
+        'government', 
+        'logistics', 
+        'finance', 
+        'healthcare', 
+        'education', 
+        'manufacturing', 
+        'retail',
+        'technology',    // ✅ ADDED
+        'fashion',       // ✅ ADDED
+        'automotive',    // ✅ ADDED
+        'services',      // ✅ ADDED
+        'other'
       ]
     },
     businessAddress: {

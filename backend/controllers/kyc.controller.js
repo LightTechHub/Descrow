@@ -1,4 +1,4 @@
-// backend/controllers/kyc.controller.js - UPDATED FOR YOUR USER MODEL
+// backend/controllers/kyc.controller.js - FIXED VERSION
 const User = require('../models/User.model');
 const diditService = require('../services/didit.service');
 
@@ -33,7 +33,6 @@ exports.initiateKYC = async (req, res) => {
 
     // Check if already in progress
     if (user.kycStatus?.status === 'pending' || user.kycStatus?.status === 'in_progress') {
-      // Check if session is expired
       const sessionExpiry = user.kycStatus.diditSessionExpiresAt;
       if (sessionExpiry && new Date() < sessionExpiry) {
         return res.json({
@@ -49,11 +48,18 @@ exports.initiateKYC = async (req, res) => {
       }
     }
 
-    // Create DiDIT verification session
+    // ✅ FIX: Get account type from request body OR user model
+    const accountType = req.body.accountType || user.accountType || 'individual';
+    
+    console.log(`📋 Initiating ${accountType} verification for user:`, user._id);
+
+    // Create DiDIT verification session with account type
     const verification = await diditService.createVerificationSession(user._id, {
       email: user.email,
       phone: user.phone,
-      tier: user.tier
+      tier: user.tier,
+      accountType: accountType, // ✅ PASS ACCOUNT TYPE
+      businessInfo: user.businessInfo // ✅ PASS BUSINESS INFO
     });
 
     if (!verification.success) {
@@ -70,23 +76,28 @@ exports.initiateKYC = async (req, res) => {
       submittedAt: new Date(),
       diditSessionId: verification.data.sessionId,
       diditVerificationUrl: verification.data.verificationUrl,
-      diditSessionExpiresAt: verification.data.expiresAt
+      diditSessionExpiresAt: verification.data.expiresAt,
+      // ✅ Store account type in KYC status
+      accountType: accountType
     };
 
     await user.save();
 
+    console.log(`✅ ${accountType} verification session created:`, verification.data.sessionId);
+
     res.json({
       success: true,
-      message: 'Verification session created successfully',
+      message: `${accountType === 'business' ? 'Business' : 'Identity'} verification session created successfully`,
       data: {
         verificationUrl: verification.data.verificationUrl,
         sessionId: verification.data.sessionId,
-        expiresAt: verification.data.expiresAt
+        expiresAt: verification.data.expiresAt,
+        accountType: accountType
       }
     });
 
   } catch (error) {
-    console.error('KYC initiation error:', error);
+    console.error('❌ KYC initiation error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to initiate KYC verification',
@@ -99,7 +110,7 @@ exports.initiateKYC = async (req, res) => {
 exports.getKYCStatus = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .select('isKYCVerified kycStatus verified tier');
+      .select('isKYCVerified kycStatus verified tier accountType businessInfo');
 
     if (!user) {
       return res.status(404).json({
@@ -129,12 +140,16 @@ exports.getKYCStatus = async (req, res) => {
         expiresAt: user.kycStatus?.diditSessionExpiresAt,
         externalStatus: externalStatus?.data || null,
         emailVerified: user.verified,
-        tier: user.tier
+        tier: user.tier,
+        // ✅ Include account type in response
+        accountType: user.accountType,
+        isBusinessAccount: user.accountType === 'business',
+        businessInfo: user.accountType === 'business' ? user.businessInfo : null
       }
     });
 
   } catch (error) {
-    console.error('Get KYC status error:', error);
+    console.error('❌ Get KYC status error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get KYC status'
@@ -147,7 +162,6 @@ exports.handleDiditWebhook = async (req, res) => {
   try {
     console.log('📥 DiDIT Webhook received:', req.body);
 
-    // Verify webhook signature if configured
     const signature = req.headers['x-didit-signature'];
     if (signature && process.env.DIDIT_WEBHOOK_SECRET) {
       const rawBody = JSON.stringify(req.body);
@@ -162,7 +176,6 @@ exports.handleDiditWebhook = async (req, res) => {
       }
     }
 
-    // Process webhook event
     const event = await diditService.processWebhookEvent(req.body);
     const userId = event.userId;
 
@@ -183,7 +196,8 @@ exports.handleDiditWebhook = async (req, res) => {
       });
     }
 
-    console.log(`📝 Updating KYC status for user ${userId}: ${event.type}`);
+    const accountType = user.accountType || 'individual';
+    console.log(`📝 Updating ${accountType} KYC status for user ${userId}: ${event.type}`);
 
     // Update user KYC status based on event type
     if (event.type === 'completed' && event.verified) {
@@ -193,14 +207,12 @@ exports.handleDiditWebhook = async (req, res) => {
         status: 'approved',
         verifiedAt: new Date(),
         reviewedAt: new Date(),
-        verificationResult: event.verificationData
+        verificationResult: event.verificationData,
+        accountType: accountType
       };
       user.isKYCVerified = true;
 
-      console.log('✅ KYC Approved for user:', userId);
-
-      // TODO: Send approval email
-      // await emailService.sendKYCApprovalEmail(user);
+      console.log(`✅ ${accountType} KYC Approved for user:`, userId);
 
     } else if (event.type === 'failed') {
       // ❌ REJECTED
@@ -209,14 +221,12 @@ exports.handleDiditWebhook = async (req, res) => {
         status: 'rejected',
         reviewedAt: new Date(),
         rejectionReason: event.failureReason || 'Verification failed',
-        verificationResult: event.verificationData
+        verificationResult: event.verificationData,
+        accountType: accountType
       };
       user.isKYCVerified = false;
 
-      console.log('❌ KYC Rejected for user:', userId);
-
-      // TODO: Send rejection email
-      // await emailService.sendKYCRejectionEmail(user);
+      console.log(`❌ ${accountType} KYC Rejected for user:`, userId);
 
     } else if (event.type === 'expired') {
       // ⏰ EXPIRED
@@ -224,19 +234,21 @@ exports.handleDiditWebhook = async (req, res) => {
         ...user.kycStatus,
         status: 'expired',
         reviewedAt: new Date(),
-        rejectionReason: 'Verification session expired'
+        rejectionReason: 'Verification session expired',
+        accountType: accountType
       };
 
-      console.log('⏰ KYC Session Expired for user:', userId);
+      console.log(`⏰ ${accountType} KYC Session Expired for user:`, userId);
 
     } else if (event.type === 'in_progress') {
       // 🔄 IN PROGRESS
       user.kycStatus = {
         ...user.kycStatus,
-        status: 'in_progress'
+        status: 'in_progress',
+        accountType: accountType
       };
 
-      console.log('🔄 KYC In Progress for user:', userId);
+      console.log(`🔄 ${accountType} KYC In Progress for user:`, userId);
     }
 
     await user.save();
@@ -268,7 +280,6 @@ exports.retryKYC = async (req, res) => {
       });
     }
 
-    // Only allow retry if rejected or expired
     if (user.kycStatus?.status !== 'rejected' && user.kycStatus?.status !== 'expired') {
       return res.status(400).json({
         success: false,
@@ -277,7 +288,6 @@ exports.retryKYC = async (req, res) => {
       });
     }
 
-    // Reset KYC status
     user.kycStatus = {
       status: 'unverified'
     };
@@ -291,7 +301,7 @@ exports.retryKYC = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Retry KYC error:', error);
+    console.error('❌ Retry KYC error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retry KYC'
@@ -313,30 +323,36 @@ exports.adminApproveKYC = async (req, res) => {
       });
     }
 
+    const accountType = user.accountType || 'individual';
+
     user.kycStatus = {
       ...user.kycStatus,
       status: 'approved',
       verifiedAt: new Date(),
       reviewedAt: new Date(),
       reviewedBy: req.user._id,
-      rejectionReason: notes || 'Manually approved by admin'
+      rejectionReason: notes || `Manually approved by admin (${accountType})`,
+      accountType: accountType
     };
     user.isKYCVerified = true;
 
     await user.save();
 
+    console.log(`✅ Admin approved ${accountType} KYC for user:`, userId);
+
     res.json({
       success: true,
-      message: 'KYC manually approved',
+      message: `${accountType} KYC manually approved`,
       data: {
         userId,
         status: 'approved',
+        accountType,
         verifiedAt: user.kycStatus.verifiedAt
       }
     });
 
   } catch (error) {
-    console.error('Admin approve KYC error:', error);
+    console.error('❌ Admin approve KYC error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to approve KYC'
@@ -365,32 +381,40 @@ exports.adminRejectKYC = async (req, res) => {
       });
     }
 
+    const accountType = user.accountType || 'individual';
+
     user.kycStatus = {
       ...user.kycStatus,
       status: 'rejected',
       reviewedAt: new Date(),
       reviewedBy: req.user._id,
-      rejectionReason: reason
+      rejectionReason: reason,
+      accountType: accountType
     };
     user.isKYCVerified = false;
 
     await user.save();
 
+    console.log(`❌ Admin rejected ${accountType} KYC for user:`, userId);
+
     res.json({
       success: true,
-      message: 'KYC manually rejected',
+      message: `${accountType} KYC manually rejected`,
       data: {
         userId,
         status: 'rejected',
+        accountType,
         reason
       }
     });
 
   } catch (error) {
-    console.error('Admin reject KYC error:', error);
+    console.error('❌ Admin reject KYC error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to reject KYC'
     });
   }
 };
+
+module.exports = exports;

@@ -16,9 +16,9 @@ const [resendEmail, setResendEmail] = useState(’’);
 const [resending, setResending] = useState(false);
 
 useEffect(() => {
-// ✅ FIX: Validate token exists and is not “undefined” string
+// Validate token exists and is not “undefined” string
 if (token && token !== ‘undefined’ && token.trim() !== ‘’) {
-console.log(‘✅ Valid token found, verifying:’, token.substring(0, 20) + ‘…’);
+console.log(‘Valid token found, verifying:’, token.substring(0, 20) + ‘…’);
 verifyEmail(token);
 return;
 }
@@ -30,8 +30,8 @@ if (status) {
   return;
 }
 
-// ✅ FIX: Better error handling for missing/invalid token
-console.log('❌ No valid token found. Token value:', token);
+// Better error handling for missing/invalid token
+console.log('No valid token found. Token value:', token);
 setVerificationStatus('error');
 setMessage('No verification token provided. Please check your email for the verification link or request a new one below.');
 ```
@@ -59,9 +59,9 @@ setMessage(errorMessages[reason] || ‘Verification failed. Please try again.’
 };
 
 const verifyEmail = async (verificationToken) => {
-// ✅ FIX: Additional validation before sending request
+// Additional validation before sending request
 if (!verificationToken || verificationToken === ‘undefined’ || verificationToken.trim() === ‘’) {
-console.error(‘❌ Invalid token, cannot verify:’, verificationToken);
+console.error(‘Invalid token, cannot verify:’, verificationToken);
 setVerificationStatus(‘error’);
 setMessage(‘Invalid verification token. Please request a new verification email.’);
 return;
@@ -72,10 +72,10 @@ try {
   setVerificationStatus('verifying');
   setMessage('Verifying your email address...');
 
-  console.log('🔄 Sending verification request with token...');
+  console.log('Sending verification request with token...');
   const response = await authService.verifyEmail(verificationToken);
   
-  console.log('✅ Verification successful:', response);
+  console.log('Verification successful:', response);
   setVerificationStatus('success');
   setMessage(response.message || 'Email verified successfully!');
   
@@ -85,7 +85,7 @@ try {
   }, 3000);
   
 } catch (error) {
-  console.error('❌ Verification failed:', error);
+  console.error('Verification failed:', error);
   setVerificationStatus('error');
   setMessage(
     error.message || 
@@ -165,14 +165,14 @@ return (
             <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-            Email Verified! ✅
+            Email Verified!
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6 text-lg">
             {message}
           </p>
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
             <p className="text-sm text-blue-900 dark:text-blue-200">
-              🎉 Your account is now active!
+              Your account is now active!
             </p>
             <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
               Redirecting to login in 3 seconds...
@@ -236,7 +236,7 @@ return (
                     Need a New Verification Link?
                   </h3>
                   <p className="text-xs text-blue-700 dark:text-blue-300">
-                    Enter your email address below and we'll send you a fresh verification link.
+                    Enter your email address below and we will send you a fresh verification link.
                   </p>
                 </div>
               </div>
@@ -307,7 +307,7 @@ return (
         Need Help?
       </h4>
       <p className="text-sm">
-        If you're having trouble verifying your email, please contact our support team at{' '}
+        If you are having trouble verifying your email, please contact our support team at{' '}
         <a 
           href="mailto:support@dealcross.net" 
           className="text-blue-300 hover:text-white underline font-medium"

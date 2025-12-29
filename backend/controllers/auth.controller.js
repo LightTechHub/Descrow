@@ -1,11 +1,10 @@
 // backend/controllers/auth.controller.js
-const User = require(’../models/User.model’);
-const jwt = require(‘jsonwebtoken’);
-const bcrypt = require(‘bcryptjs’);
-const { validationResult } = require(‘express-validator’);
-const emailService = require(’../services/email.service’);
-const { OAuth2Client } = require(‘google-auth-library’);
-
+const User = require('../models/User.model');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { validationResult } = require('express-validator');
+const emailService = require('../services/email.service');
+const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // –––––––––– Helper: Generate JWT ––––––––––

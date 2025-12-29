@@ -1,4 +1,4 @@
-// File: src/services/profileService.js - FIXED & COMPLETE
+// File: src/services/profileService.js - UPDATED & COMPLETE
 import api from '../config/api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
@@ -95,10 +95,16 @@ const profileService = {
     }
   },
 
-  // KYC Methods
+  // ✅ FIXED: Start KYC with account type
   startKYCVerification: async () => {
     try {
-      const response = await api.post('/users/kyc/start');
+      const user = JSON.parse(localStorage.getItem('user'));
+      
+      const response = await api.post('/kyc/initiate', {
+        accountType: user?.accountType || 'individual', // ✅ SEND ACCOUNT TYPE
+        businessInfo: user?.businessInfo || null
+      });
+      
       return response.data;
     } catch (error) {
       console.error('Start KYC error:', error);
@@ -106,9 +112,10 @@ const profileService = {
     }
   },
 
+  // ✅ FIXED: Check KYC status with updated endpoint
   checkKYCStatus: async () => {
     try {
-      const response = await api.get('/users/kyc/status');
+      const response = await api.get('/kyc/status');
       return response.data;
     } catch (error) {
       console.error('Check KYC status error:', error);
@@ -116,9 +123,10 @@ const profileService = {
     }
   },
 
+  // ✅ FIXED: Reset KYC with updated endpoint
   resetKYCVerification: async () => {
     try {
-      const response = await api.post('/users/kyc/reset');
+      const response = await api.post('/kyc/retry');
       return response.data;
     } catch (error) {
       console.error('Reset KYC error:', error);

@@ -42,23 +42,30 @@ const KYCTab = ({ user, onUpdate }) => {
   };
 
   const startVerification = async () => {
-    try {
-      setLoading(true);
-      const response = await profileService.startKYCVerification();
+  try {
+    setLoading(true);
+    const response = await profileService.startKYCVerification();
+    
+    if (response.success) {
+      const verificationUrl = response.data.verificationUrl;
       
-      if (response.success) {
-        toast.success(
-          isBusinessAccount 
-            ? 'Starting business verification...' 
-            : 'Starting identity verification...'
-        );
-        window.location.href = response.data.verificationUrl;
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to start verification');
-      setLoading(false);
+      toast.success(
+        isBusinessAccount 
+          ? '✅ Redirecting to business verification...' 
+          : '✅ Redirecting to identity verification...'
+      );
+      
+      // ✅ REDIRECT TO VERIFICATION URL
+      setTimeout(() => {
+        window.location.href = verificationUrl;
+      }, 1000);
     }
-  };
+  } catch (error) {
+    console.error('Start verification error:', error);
+    toast.error(error.response?.data?.message || 'Failed to start verification');
+    setLoading(false);
+  }
+};
 
   const resetVerification = async () => {
     if (!window.confirm('Reset KYC verification and start over?')) return;

@@ -267,6 +267,34 @@ exports.register = async (req, res) => {
   }
 };
 
+
+// Around line 175 in the register function
+const user = await User.create({
+  name,
+  email: email.toLowerCase(),
+  password,
+  phone: req.body.phone,        // ✅ ADD THIS
+  country: req.body.country,    // ✅ ADD THIS
+  accountType: req.body.accountType || 'individual',  // ✅ ADD THIS
+  role: 'dual',
+  tier: 'free',
+  verified: false,
+  authProvider: 'local',
+  agreedToTerms: req.body.agreedToTerms || false,  // ✅ ADD THIS
+  
+  // ✅ ADD BUSINESS INFO IF BUSINESS ACCOUNT
+  ...(req.body.accountType === 'business' && req.body.businessInfo && {
+    businessInfo: {
+      companyName: req.body.businessInfo.companyName,
+      companyType: req.body.businessInfo.companyType,
+      industry: req.body.businessInfo.industry,
+      registrationNumber: req.body.businessInfo.registrationNumber,
+      taxId: req.body.businessInfo.taxId
+    }
+  })
+});
+
+
 /* ============================================================
    LOGIN
 ============================================================ */

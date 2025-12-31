@@ -1,18 +1,7 @@
-// File: src/pages/Profile/SecurityTab.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Shield, 
-  Key, 
-  Smartphone, 
-  Laptop, 
-  Loader,
-  CheckCircle,
-  XCircle,
-  Copy,
-  Download,
-  AlertCircle,
-  Eye,
-  EyeOff
+  Shield, Key, Smartphone, Laptop, Loader, CheckCircle, XCircle,
+  Copy, Download, AlertCircle, Eye, EyeOff, Info
 } from 'lucide-react';
 import securityService from '../../services/securityService';
 import profileService from '../../services/profileService';
@@ -25,9 +14,17 @@ const SecurityTab = ({ user, onUpdate }) => {
   const [show2FASetup, setShow2FASetup] = useState(false);
   const [twoFAData, setTwoFAData] = useState(null);
   const [verificationCode, setVerificationCode] = useState('');
+  
+  // Password states
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showSetPassword, setShowSetPassword] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState(null);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [setPasswordData, setSetPasswordData] = useState({
     newPassword: '',
     confirmPassword: ''
   });
@@ -44,8 +41,20 @@ const SecurityTab = ({ user, onUpdate }) => {
       hasFetchedSecurity.current = true;
       fetch2FAStatus();
       fetchSessions();
+      checkPasswordStatus();
     }
   }, []);
+
+  const checkPasswordStatus = async () => {
+    try {
+      const response = await profileService.checkPasswordStatus();
+      if (response.success) {
+        setPasswordStatus(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to check password status:', error);
+    }
+  };
 
   const fetch2FAStatus = async () => {
     try {
@@ -70,10 +79,16 @@ const SecurityTab = ({ user, onUpdate }) => {
   };
 
   const handleSetup2FA = async () => {
+    // Check if OAuth user needs to set password first
+    if (passwordStatus?.needsPasswordSetup) {
+      toast.error('Please set a password first before enabling 2FA');
+      setShowSetPassword(true);
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await securityService.setup2FA();
-
       if (response.success) {
         setTwoFAData(response.data);
         setShow2FASetup(true);
@@ -95,7 +110,6 @@ const SecurityTab = ({ user, onUpdate }) => {
     try {
       setLoading(true);
       const response = await securityService.verify2FA(verificationCode);
-
       if (response.success) {
         toast.success('2FA enabled successfully!');
         setShow2FASetup(false);
@@ -113,6 +127,12 @@ const SecurityTab = ({ user, onUpdate }) => {
   };
 
   const handleDisable2FA = async () => {
+    if (passwordStatus?.needsPasswordSetup) {
+      toast.error('Please set a password first');
+      setShowSetPassword(true);
+      return;
+    }
+
     const code = prompt('Enter your 6-digit 2FA code:');
     if (!code) return;
 
@@ -122,7 +142,6 @@ const SecurityTab = ({ user, onUpdate }) => {
     try {
       setLoading(true);
       const response = await securityService.disable2FA(code, password);
-
       if (response.success) {
         toast.success('2FA disabled successfully');
         hasFetchedSecurity.current = false;
@@ -131,6 +150,77 @@ const SecurityTab = ({ user, onUpdate }) => {
     } catch (error) {
       console.error('Disable 2FA error:', error);
       toast.error(error.response?.data?.message || 'Failed to disable 2FA');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+
+    if (setPasswordData.newPassword !== setPasswordData.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (setPasswordData.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await profileService.setPassword(
+        setPasswordData.newPassword,
+        setPasswordData.confirmPassword
+      );
+
+      if (response.success) {
+        toast.success('Password set successfully! You can now use it for security operations.');
+        setShowSetPassword(false);
+        setSetPasswordData({ newPassword: '', confirmPassword: '' });
+        checkPasswordStatus();
+      }
+    } catch (error) {
+      console.error('Set password error:', error);
+      toast.error(error.response?.data?.message || 'Failed to set password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await profileService.changePassword(
+        passwordData.currentPassword,
+        passwordData.newPassword
+      );
+
+      if (response.success) {
+        toast.success('Password changed successfully!');
+        setShowChangePassword(false);
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      }
+    } catch (error) {
+      console.error('Change password error:', error);
+      toast.error(error.response?.data?.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }
@@ -172,43 +262,6 @@ const SecurityTab = ({ user, onUpdate }) => {
     }
   };
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('New passwords do not match');
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await profileService.changePassword(
-        passwordData.currentPassword,
-        passwordData.newPassword
-      );
-
-      if (response.success) {
-        toast.success('Password changed successfully!');
-        setShowChangePassword(false);
-        setPasswordData({
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: ''
-        });
-      }
-    } catch (error) {
-      console.error('Change password error:', error);
-      toast.error(error.response?.data?.message || 'Failed to change password');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard!');
@@ -227,6 +280,29 @@ const SecurityTab = ({ user, onUpdate }) => {
 
   return (
     <div className="space-y-6">
+      {/* OAuth User Notice - Set Password */}
+      {passwordStatus?.needsPasswordSetup && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-1">
+                Set a Password
+              </h4>
+              <p className="text-sm text-yellow-800 dark:text-yellow-300 mb-3">
+                You signed up with Google. Set a password to enable security features like 2FA and perform sensitive operations.
+              </p>
+              <button
+                onClick={() => setShowSetPassword(true)}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition text-sm"
+              >
+                Set Password Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2FA Section */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
@@ -262,6 +338,14 @@ const SecurityTab = ({ user, onUpdate }) => {
             <p className="text-gray-700 dark:text-gray-300 mb-4">
               Protect your account with an authenticator app like Google Authenticator or Authy.
             </p>
+            {passwordStatus?.needsPasswordSetup && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                  <Info className="w-4 h-4" />
+                  Set a password first to enable 2FA
+                </p>
+              </div>
+            )}
             <button
               onClick={handleSetup2FA}
               disabled={loading}
@@ -299,7 +383,6 @@ const SecurityTab = ({ user, onUpdate }) => {
               Setup Two-Factor Authentication
             </h4>
 
-            {/* Step 1: Scan QR Code */}
             <div className="mb-6">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 Step 1: Scan this QR code with your authenticator app
@@ -309,7 +392,6 @@ const SecurityTab = ({ user, onUpdate }) => {
               </div>
             </div>
 
-            {/* Step 2: Manual Entry */}
             <div className="mb-6">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Or enter this code manually:
@@ -327,10 +409,9 @@ const SecurityTab = ({ user, onUpdate }) => {
               </div>
             </div>
 
-            {/* Step 3: Backup Codes */}
             <div className="mb-6">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Step 2: Save your backup codes (in case you lose your device)
+                Step 2: Save your backup codes
               </p>
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-3">
                 <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-300 mb-2">
@@ -354,10 +435,9 @@ const SecurityTab = ({ user, onUpdate }) => {
               </button>
             </div>
 
-            {/* Step 4: Verify */}
             <div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Step 3: Enter the 6-digit code from your app to verify
+                Step 3: Enter the 6-digit code to verify
               </p>
               <div className="flex gap-3">
                 <input
@@ -391,7 +471,7 @@ const SecurityTab = ({ user, onUpdate }) => {
         )}
       </div>
 
-      {/* Change Password */}
+      {/* Password Section */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
@@ -402,45 +482,131 @@ const SecurityTab = ({ user, onUpdate }) => {
               Password
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Update your password regularly for better security
+              {passwordStatus?.needsPasswordSetup 
+                ? 'Set a password for security operations'
+                : 'Update your password regularly for better security'
+              }
             </p>
           </div>
         </div>
 
-        {!showChangePassword ? (
-          <button
-            onClick={() => setShowChangePassword(true)}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
-          >
-            Change Password
-          </button>
-        ) : (
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            {/* Current Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Current Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPasswords.current ? 'text' : 'password'}
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  required
-                  className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                >
-                  {showPasswords.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
+        {/* SET PASSWORD (for OAuth users) */}
+        {passwordStatus?.needsPasswordSetup && (
+          <>
+            {!showSetPassword ? (
+              <button
+                onClick={() => setShowSetPassword(true)}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
+              >
+                Set Password
+              </button>
+            ) : (
+              <form onSubmit={handleSetPassword} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPasswords.new ? 'text' : 'password'}
+                      value={setPasswordData.newPassword}
+                      onChange={(e) => setSetPasswordData({ ...setPasswordData, newPassword: e.target.value })}
+                      required
+                      minLength={8}
+                      placeholder="Minimum 8 characters"
+                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    >
+                      {showPasswords.new ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
 
-            {/* New Password */}
-            <div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPasswords.confirm ? 'text' : 'password'}
+                      value={setPasswordData.confirmPassword}
+                      onChange={(e) => setSetPasswordData({ ...setPasswordData, confirmPassword: e.target.value })}
+                      required
+                      placeholder="Re-enter password"
+                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    >
+                      {showPasswords.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSetPassword(false);
+                      setSetPasswordData({ newPassword: '', confirmPassword: '' });
+                    }}
+                    className="px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
+                  >
+                    {loading ? 'Setting...' : 'Set Password'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+
+        {/* CHANGE PASSWORD (for users who already have a password) */}
+        {!passwordStatus?.needsPasswordSetup && (
+          <>
+            {!showChangePassword ? (
+              <button
+                onClick={() => setShowChangePassword(true)}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
+              >
+                Change Password
+              </button>
+            ) : (
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Current Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPasswords.current ? 'text' : 'password'}
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                      required
+                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    >
+                      {showPasswords.current ? <EyeOff className="w-5 h-5" /> : <Eye​​​​​​​​​​​​​​​​className=“w-5 h-5” />}
+                     </button>
+                    </div>
+                   </div>
+                  <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 New Password
               </label>
@@ -450,7 +616,7 @@ const SecurityTab = ({ user, onUpdate }) => {
                   value={passwordData.newPassword}
                   onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                   required
-                  minLength={6}
+                  minLength={8}
                   className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
                 />
                 <button
@@ -463,7 +629,6 @@ const SecurityTab = ({ user, onUpdate }) => {
               </div>
             </div>
 
-            {/* Confirm Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Confirm New Password
@@ -511,77 +676,77 @@ const SecurityTab = ({ user, onUpdate }) => {
             </div>
           </form>
         )}
+      </>
+    )}
+  </div>
+
+  {/* Active Sessions */}
+  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+          <Laptop className="w-6 h-6 text-green-600 dark:text-green-400" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Active Sessions
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Manage devices where you're currently logged in
+          </p>
+        </div>
       </div>
 
-      {/* Active Sessions */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-              <Laptop className="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Active Sessions
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Manage devices where you're currently logged in
-              </p>
-            </div>
-          </div>
+      {sessions.length > 1 && (
+        <button
+          onClick={handleRevokeAllSessions}
+          className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition"
+        >
+          Revoke All
+        </button>
+      )}
+    </div>
 
-          {sessions.length > 1 && (
+    <div className="space-y-3">
+      {sessions.length === 0 ? (
+        <p className="text-gray-600 dark:text-gray-400 text-center py-8">
+          No active sessions found
+        </p>
+      ) : (
+        sessions.map((session) => (
+          <div
+            key={session._id}
+            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                {session.deviceInfo?.device === 'mobile' ? (
+                  <Smartphone className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                ) : (
+                  <Laptop className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  {session.deviceInfo?.browser || 'Unknown Browser'} on {session.deviceInfo?.os || 'Unknown OS'}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {session.location?.city}, {session.location?.country} • Last active: {new Date(session.lastActivity).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
             <button
-              onClick={handleRevokeAllSessions}
+              onClick={() => handleRevokeSession(session._id)}
               className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition"
             >
-              Revoke All
+              Revoke
             </button>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          {sessions.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-              No active sessions found
-            </p>
-          ) : (
-            sessions.map((session) => (
-              <div
-                key={session._id}
-                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    {session.deviceInfo?.device === 'mobile' ? (
-                      <Smartphone className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    ) : (
-                      <Laptop className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {session.deviceInfo?.browser || 'Unknown Browser'} on {session.deviceInfo?.os || 'Unknown OS'}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {session.location?.city}, {session.location?.country} • Last active: {new Date(session.lastActivity).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => handleRevokeSession(session._id)}
-                  className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition"
-                >
-                  Revoke
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+          </div>
+        ))
+      )}
     </div>
-  );
+  </div>
+</div>
+);
 };
-
-export default SecurityTab;

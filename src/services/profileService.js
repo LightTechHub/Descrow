@@ -1,4 +1,3 @@
-// File: src/services/profileService.js - UPDATED & COMPLETE
 import api from '../config/api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
@@ -95,13 +94,13 @@ const profileService = {
     }
   },
 
-  // ✅ FIXED: Start KYC with account type
+  // Start KYC with account type
   startKYCVerification: async () => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       
       const response = await api.post('/kyc/initiate', {
-        accountType: user?.accountType || 'individual', // ✅ SEND ACCOUNT TYPE
+        accountType: user?.accountType || 'individual',
         businessInfo: user?.businessInfo || null
       });
       
@@ -112,7 +111,7 @@ const profileService = {
     }
   },
 
-  // ✅ FIXED: Check KYC status with updated endpoint
+  // Check KYC status with updated endpoint
   checkKYCStatus: async () => {
     try {
       const response = await api.get('/kyc/status');
@@ -123,7 +122,7 @@ const profileService = {
     }
   },
 
-  // ✅ FIXED: Reset KYC with updated endpoint
+  // Reset KYC with updated endpoint
   resetKYCVerification: async () => {
     try {
       const response = await api.post('/kyc/retry');
@@ -171,11 +170,8 @@ const profileService = {
     try {
       const response = await api.post('/profile/initiate-upgrade', upgradeData);
       return response.data;
-    } catch (error) {
-      console.error('Initiate tier upgrade error:', error);
-      throw error;
     }
-  },
+    },
 
   completeTierUpgrade: async (paymentData) => {
     try {
@@ -259,6 +255,35 @@ const profileService = {
       return response.data;
     } catch (error) {
       console.error('Change password error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * ✅ NEW: Set password for OAuth users
+   */
+  setPassword: async (newPassword, confirmPassword) => {
+    try {
+      const response = await api.post('/auth/set-password', {
+        newPassword,
+        confirmPassword
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Set password error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * ✅ NEW: Check if user needs to set a password
+   */
+  checkPasswordStatus: async () => {
+    try {
+      const response = await api.get('/auth/password-status');
+      return response.data;
+    } catch (error) {
+      console.error('Check password status error:', error);
       throw error;
     }
   },

@@ -94,22 +94,22 @@ const userSchema = new mongoose.Schema({
     industry: {
       type: String,
       enum: [
-        'ecommerce', 
-        'real_estate', 
-        'freelance', 
-        'saas', 
+        'ecommerce',
+        'real_estate',
+        'freelance',
+        'saas',
         'professional_services',
-        'government', 
-        'logistics', 
-        'finance', 
-        'healthcare', 
-        'education', 
-        'manufacturing', 
+        'government',
+        'logistics',
+        'finance',
+        'healthcare',
+        'education',
+        'manufacturing',
         'retail',
-        'technology',    // ✅ ADDED
-        'fashion',       // ✅ ADDED
-        'automotive',    // ✅ ADDED
-        'services',      // ✅ ADDED
+        'technology',
+        'fashion',
+        'automotive',
+        'services',
         'other'
       ]
     },
@@ -154,7 +154,7 @@ const userSchema = new mongoose.Schema({
   specializations: [{
     type: String,
     enum: [
-      'real_estate', 'vehicles', 'digital_goods', 'freelance', 
+      'real_estate', 'vehicles', 'digital_goods', 'freelance',
       'business_sales', 'intellectual_property', 'domains', 'crypto'
     ]
   }],
@@ -311,7 +311,19 @@ const userSchema = new mongoose.Schema({
     userAgent: String,
     timestamp: { type: Date, default: Date.now },
     metadata: mongoose.Schema.Types.Mixed
-  }]
+  }],
+
+  // ==================== TERMS ====================
+  agreedToTerms: {
+    type: Boolean,
+    default: false
+  },
+  agreedToTermsAt: Date,
+  authProvider: {
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local'
+  }
 }, {
   timestamps: true
 });
@@ -358,9 +370,9 @@ userSchema.methods.getTierLimits = function() {
     free: {
       name: 'Free',
       maxTransactionsPerMonth: 3,
-      maxTransactionAmount: { 
-        USD: 500, EUR: 450, GBP: 400, NGN: 750000, 
-        KES: 65000, GHS: 6000, ZAR: 9000, INR: 42000 
+      maxTransactionAmount: {
+        USD: 500, EUR: 450, GBP: 400, NGN: 750000,
+        KES: 65000, GHS: 6000, ZAR: 9000, INR: 42000
       },
       escrowFee: { USD: 0.05, NGN: 0.05 },
       disputeResolution: false,
@@ -372,9 +384,9 @@ userSchema.methods.getTierLimits = function() {
     starter: {
       name: 'Starter',
       maxTransactionsPerMonth: 10,
-      maxTransactionAmount: { 
-        USD: 2000, EUR: 1800, GBP: 1600, NGN: 3000000, 
-        KES: 260000, GHS: 24000, ZAR: 36000, INR: 168000 
+      maxTransactionAmount: {
+        USD: 2000, EUR: 1800, GBP: 1600, NGN: 3000000,
+        KES: 260000, GHS: 24000, ZAR: 36000, INR: 168000
       },
       escrowFee: { USD: 0.035, NGN: 0.035 },
       disputeResolution: false,
@@ -386,9 +398,9 @@ userSchema.methods.getTierLimits = function() {
     growth: {
       name: 'Growth',
       maxTransactionsPerMonth: 50,
-      maxTransactionAmount: { 
-        USD: 10000, EUR: 9000, GBP: 8000, NGN: 15000000, 
-        KES: 1300000, GHS: 120000, ZAR: 180000, INR: 840000 
+      maxTransactionAmount: {
+        USD: 10000, EUR: 9000, GBP: 8000, NGN: 15000000,
+        KES: 1300000, GHS: 120000, ZAR: 180000, INR: 840000
       },
       escrowFee: { USD: 0.025, NGN: 0.025 },
       disputeResolution: true,
@@ -401,9 +413,9 @@ userSchema.methods.getTierLimits = function() {
     enterprise: {
       name: 'Enterprise',
       maxTransactionsPerMonth: -1,
-      maxTransactionAmount: { 
-        USD: 100000, EUR: 90000, GBP: 80000, NGN: 150000000, 
-        KES: 13000000, GHS: 1200000, ZAR: 1800000, INR: 8400000 
+      maxTransactionAmount: {
+        USD: 100000, EUR: 90000, GBP: 80000, NGN: 150000000,
+        KES: 13000000, GHS: 1200000, ZAR: 1800000, INR: 8400000
       },
       escrowFee: { USD: 0.015, NGN: 0.015 },
       disputeResolution: true,
@@ -435,7 +447,7 @@ userSchema.methods.getTierLimits = function() {
 
 userSchema.methods.canCreateTransaction = function(amount, currency = 'USD') {
   const tierLimits = this.getTierLimits();
-  
+
   if (tierLimits.maxTransactionsPerMonth !== -1) {
     if (this.monthlyUsage.transactionCount >= tierLimits.maxTransactionsPerMonth) {
       return {
@@ -446,7 +458,7 @@ userSchema.methods.canCreateTransaction = function(amount, currency = 'USD') {
       };
     }
   }
-  
+
   const maxAmount = tierLimits.maxTransactionAmount[currency];
   if (maxAmount && maxAmount !== -1 && amount > maxAmount) {
     return {
@@ -456,44 +468,44 @@ userSchema.methods.canCreateTransaction = function(amount, currency = 'USD') {
       current: amount
     };
   }
-  
+
   return { allowed: true };
 };
 
 userSchema.methods.canAccessEscrow = function () {
   if (!this.verified) {
-    return { 
-      allowed: false, 
-      reason: 'Email verification required', 
-      action: 'verify_email' 
+    return {
+      allowed: false,
+      reason: 'Email verification required',
+      action: 'verify_email'
     };
   }
-  
+
   if (!this.isKYCVerified || this.kycStatus?.status !== 'approved') {
-    return { 
-      allowed: false, 
-      reason: 'KYC verification required', 
+    return {
+      allowed: false,
+      reason: 'KYC verification required',
       action: 'complete_kyc',
       currentKYCStatus: this.kycStatus?.status || 'unverified'
     };
   }
-  
+
   if (this.status !== 'active') {
-    return { 
-      allowed: false, 
+    return {
+      allowed: false,
       reason: 'Account not active',
       accountStatus: this.status
     };
   }
-  
+
   if (!this.escrowAccess?.canCreateEscrow) {
-    return { 
-      allowed: false, 
+    return {
+      allowed: false,
       reason: 'Escrow access restricted',
       restriction: this.escrowAccess?.suspensionReason
     };
   }
-  
+
   return { allowed: true };
 };
 
@@ -506,7 +518,7 @@ userSchema.methods.canParticipateAs = function(role) {
     'inspector': this.capabilities.canBeInspector,
     'shipper': this.capabilities.canBeShipper
   };
-  
+
   return roleMap[role] !== false;
 };
 

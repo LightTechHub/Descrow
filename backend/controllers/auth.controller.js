@@ -1,4 +1,3 @@
-// backend/controllers/auth.controller.js
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -610,6 +609,119 @@ exports.resetPassword = async (req, res) => {
     res.status(400).json({
       success: false,
       message: 'Invalid or expired reset token'
+    });
+  }
+};
+
+/* ============================================================
+   SET PASSWORD (FOR OAUTH USERS)
+============================================================ */
+exports.setPassword = async (req, res) => {
+  try {
+    const { newPassword, confirmPassword } = req.body;
+
+    // Validation
+    if (!newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both password fields are required'
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Passwords do not match'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters'
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user signed up via OAuth (Google)
+    if (user.authProvider !== 'google') {
+      return res.status(400).json({
+        success: false,
+        message: 'This feature is only for users who signed up via Google'
+      });
+    }
+
+    // Check if they already have a real password set
+    // The placeholder password from Google sign-up is 72 characters (2 random strings)
+    if (user.password && user.password.length < 50) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password already set. Use "Change Password" instead.'
+      });
+    }
+
+    // Set the new password
+    user.password = newPassword;
+    user.authProvider = 'both'; // They can now use both Google and password
+    await user.save();
+
+    console.log('✅ Password set for OAuth user:', user.email);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password set successfully! You can now use it for security operations.'
+    });
+
+  } catch (error) {
+    console.error('❌ Set password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to set password',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/* ============================================================
+   CHECK PASSWORD STATUS (FOR OAUTH USERS)
+============================================================ */
+exports.checkPasswordStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const hasPassword = user.authProvider === 'local' || 
+                       user.authProvider === 'both' ||
+                       (user.password && user.password.length < 50);
+
+    res.json({
+      success: true,
+      data: {
+        hasPassword,
+        authProvider: user.authProvider,
+        needsPasswordSetup: user.authProvider === 'google' && !hasPassword
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Check password status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check password status'
     });
   }
 };

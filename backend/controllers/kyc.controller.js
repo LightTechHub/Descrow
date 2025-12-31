@@ -48,8 +48,8 @@ exports.initiateKYC = async (req, res) => {
       }
     }
 
-    // ✅ FIX: Get account type from request body OR user model
-    const accountType = req.body.accountType || user.accountType || 'individual';
+    // ✅ FIX: Get account type from user model
+    const accountType = user.accountType || 'individual';
     
     console.log(`📋 Initiating ${accountType} verification for user:`, user._id);
 
@@ -58,8 +58,8 @@ exports.initiateKYC = async (req, res) => {
       email: user.email,
       phone: user.phone,
       tier: user.tier,
-      accountType: accountType, // ✅ PASS ACCOUNT TYPE
-      businessInfo: user.businessInfo // ✅ PASS BUSINESS INFO
+      accountType: accountType,
+      businessInfo: accountType === 'business' ? user.businessInfo : null
     });
 
     if (!verification.success) {
@@ -77,7 +77,6 @@ exports.initiateKYC = async (req, res) => {
       diditSessionId: verification.data.sessionId,
       diditVerificationUrl: verification.data.verificationUrl,
       diditSessionExpiresAt: verification.data.expiresAt,
-      // ✅ Store account type in KYC status
       accountType: accountType
     };
 
@@ -141,7 +140,6 @@ exports.getKYCStatus = async (req, res) => {
         externalStatus: externalStatus?.data || null,
         emailVerified: user.verified,
         tier: user.tier,
-        // ✅ Include account type in response
         accountType: user.accountType,
         isBusinessAccount: user.accountType === 'business',
         businessInfo: user.accountType === 'business' ? user.businessInfo : null
@@ -201,7 +199,6 @@ exports.handleDiditWebhook = async (req, res) => {
 
     // Update user KYC status based on event type
     if (event.type === 'completed' && event.verified) {
-      // ✅ APPROVED
       user.kycStatus = {
         ...user.kycStatus,
         status: 'approved',
@@ -215,7 +212,6 @@ exports.handleDiditWebhook = async (req, res) => {
       console.log(`✅ ${accountType} KYC Approved for user:`, userId);
 
     } else if (event.type === 'failed') {
-      // ❌ REJECTED
       user.kycStatus = {
         ...user.kycStatus,
         status: 'rejected',
@@ -229,7 +225,6 @@ exports.handleDiditWebhook = async (req, res) => {
       console.log(`❌ ${accountType} KYC Rejected for user:`, userId);
 
     } else if (event.type === 'expired') {
-      // ⏰ EXPIRED
       user.kycStatus = {
         ...user.kycStatus,
         status: 'expired',
@@ -241,7 +236,6 @@ exports.handleDiditWebhook = async (req, res) => {
       console.log(`⏰ ${accountType} KYC Session Expired for user:`, userId);
 
     } else if (event.type === 'in_progress') {
-      // 🔄 IN PROGRESS
       user.kycStatus = {
         ...user.kycStatus,
         status: 'in_progress',

@@ -170,8 +170,11 @@ const profileService = {
     try {
       const response = await api.post('/profile/initiate-upgrade', upgradeData);
       return response.data;
+    } catch (error) {
+      console.error('Initiate tier upgrade error:', error);
+      throw error;
     }
-    },
+  },
 
   completeTierUpgrade: async (paymentData) => {
     try {

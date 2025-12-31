@@ -10,7 +10,7 @@ import ThemeToggle from './components/ThemeToggle';
 
 // ==================== PUBLIC PAGES ====================
 import LandingPage from './pages/LandingPage';
-import Login from './pages/Login';
+import Login from './pages/Auth/Login';  // ✅ FIXED: Updated import path
 import UnifiedSignup from './pages/Auth/UnifiedSignup';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';

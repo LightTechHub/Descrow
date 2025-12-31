@@ -11,6 +11,7 @@ import {
   Plus
 } from 'lucide-react';
 
+import BusinessOverviewTab from 'components/Dashboard/BusinessOverviewTab';
 import OverviewTab from 'components/Dashboard/OverviewTab';
 import BuyingTab from 'components/Dashboard/BuyingTab';
 import SellingTab from 'components/Dashboard/SellingTab';
@@ -251,7 +252,13 @@ const UnifiedDashboard = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'overview' && <OverviewTab user={user} />}
+        {activeTab === 'overview' && (
+  user.accountType === 'business' ? (
+    <BusinessOverviewTab user={user} />
+  ) : (
+    <OverviewTab user={user} />
+  )
+)}
         {activeTab === 'buying' && <BuyingTab user={user} />}
         {activeTab === 'selling' && <SellingTab user={user} />}
         {activeTab === 'all' && (

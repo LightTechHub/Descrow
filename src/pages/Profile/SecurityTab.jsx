@@ -1,6 +1,3 @@
-Here’s the fixed SecurityTab.jsx file with all syntax errors corrected:
-
-```javascript
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield, Key, Smartphone, Laptop, Loader, CheckCircle, XCircle,

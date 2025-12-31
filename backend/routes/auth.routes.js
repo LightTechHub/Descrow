@@ -1,10 +1,10 @@
-// backend/routes/auth.routes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
 const { body } = require('express-validator');
 const emailService = require('../services/email.service');
 const jwt = require('jsonwebtoken');
+const { protect } = require('../middleware/auth.middleware');
 
 /**
  * ============================================================
@@ -68,6 +68,16 @@ router.post('/resend-verification', authController.resendVerification);
  */
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
+
+/**
+ * ✅ NEW: Set password for OAuth users
+ */
+router.post('/set-password', protect, authController.setPassword);
+
+/**
+ * ✅ NEW: Check if user needs to set password
+ */
+router.get('/password-status', protect, authController.checkPasswordStatus);
 
 /**
  * ============================================================

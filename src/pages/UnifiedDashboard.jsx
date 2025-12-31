@@ -11,16 +11,15 @@ import {
   Plus
 } from 'lucide-react';
 
-import BusinessOverviewTab from 'components/Dashboard/BusinessOverviewTab';
-import OverviewTab from 'components/Dashboard/OverviewTab';
-import BuyingTab from 'components/Dashboard/BuyingTab';
-import SellingTab from 'components/Dashboard/SellingTab';
-import CreateEscrowModal from 'components/CreateEscrowModal';
+import BusinessOverviewTab from '../components/Dashboard/BusinessOverviewTab';
+import OverviewTab from '../components/Dashboard/OverviewTab';
+import BuyingTab from '../components/Dashboard/BuyingTab';
+import SellingTab from '../components/Dashboard/SellingTab';
+import CreateEscrowModal from '../components/CreateEscrowModal';
 
-import { authService } from 'services/authService';
-import profileService from 'services/profileService'; // ✅ ADD THIS
-import notificationService from 'services/notificationService';
-import toast from 'react-hot-toast'; // ✅ ADD THIS
+import { authService } from '../services/authService';
+import profileService from '../services/profileService';
+import notificationService from '../services/notificationService';
 
 const UnifiedDashboard = () => {
   const navigate = useNavigate();
@@ -29,13 +28,11 @@ const UnifiedDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loadingUser, setLoadingUser] = useState(true); // ✅ ADD THIS
+  const [loadingUser, setLoadingUser] = useState(true);
   
-  // ✅ NEW: Fetch fresh user data on mount
   useEffect(() => {
     fetchUserData();
     
-    // Check URL params
     const tab = searchParams.get('tab');
     if (tab && ['overview', 'buying', 'selling', 'all'].includes(tab)) {
       setActiveTab(tab);
@@ -51,19 +48,16 @@ const UnifiedDashboard = () => {
     fetchUnreadCount();
   }, []);
 
-  // ✅ NEW: Fetch fresh user data from API
   const fetchUserData = async () => {
     try {
       setLoadingUser(true);
       
-      // Check if logged in
       const currentUser = authService.getCurrentUser();
       if (!currentUser) {
         navigate('/login');
         return;
       }
 
-      // Fetch FRESH data from API
       console.log('🔄 Fetching fresh user data from API...');
       const response = await profileService.getProfile();
       
@@ -73,22 +67,19 @@ const UnifiedDashboard = () => {
           email: freshUser.email,
           verified: freshUser.verified,
           isKYCVerified: freshUser.isKYCVerified,
-          kycStatus: freshUser.kycStatus?.status
+          kycStatus: freshUser.kycStatus?.status,
+          accountType: freshUser.accountType
         });
         
         setUser(freshUser);
-        
-        // ✅ Update localStorage with fresh data
         localStorage.setItem('user', JSON.stringify(freshUser));
       } else {
-        // Fallback to cached user if API fails
         console.warn('⚠️ API failed, using cached user');
         setUser(currentUser);
       }
     } catch (error) {
       console.error('❌ Failed to fetch user data:', error);
       
-      // Fallback to cached user
       const currentUser = authService.getCurrentUser();
       if (currentUser) {
         setUser(currentUser);
@@ -120,7 +111,6 @@ const UnifiedDashboard = () => {
     authService.logout();
   };
 
-  // ✅ NEW: Refresh user data before opening modal
   const handleOpenCreateModal = async () => {
     console.log('🎯 Opening create modal - refreshing user data first...');
     
@@ -144,11 +134,9 @@ const UnifiedDashboard = () => {
 
   const handleCreateSuccess = () => {
     setShowCreateModal(false);
-    // Refresh current tab
     window.location.reload();
   };
 
-  // ✅ Show loading while fetching user
   if (loadingUser || !user) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
@@ -176,7 +164,10 @@ const UnifiedDashboard = () => {
             {/* Left: Title & User Info */}
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                Dashboard
+                {user.accountType === 'business' && user.businessInfo?.companyName 
+                  ? user.businessInfo.companyName 
+                  : 'Dashboard'
+                }
               </h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Welcome back, {user.name}
@@ -185,7 +176,7 @@ const UnifiedDashboard = () => {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-3">
-              {/* Create Button - ✅ UPDATED */}
+              {/* Create Button */}
               <button
                 onClick={handleOpenCreateModal}
                 className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
@@ -253,12 +244,12 @@ const UnifiedDashboard = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'overview' && (
-  user.accountType === 'business' ? (
-    <BusinessOverviewTab user={user} />
-  ) : (
-    <OverviewTab user={user} />
-  )
-)}
+          user.accountType === 'business' ? (
+            <BusinessOverviewTab user={user} />
+          ) : (
+            <OverviewTab user={user} />
+          )
+        )}
         {activeTab === 'buying' && <BuyingTab user={user} />}
         {activeTab === 'selling' && <SellingTab user={user} />}
         {activeTab === 'all' && (
@@ -278,7 +269,7 @@ const UnifiedDashboard = () => {
         )}
       </main>
 
-      {/* Floating Create Button (Mobile) - ✅ UPDATED */}
+      {/* Floating Create Button (Mobile) */}
       <button
         onClick={handleOpenCreateModal}
         className="sm:hidden fixed bottom-6 right-6 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition z-50"

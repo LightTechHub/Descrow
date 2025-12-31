@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Download, FileText, FileSpreadsheet, Receipt, Loader } from 'lucide-react';
+import { X, Download, FileText, FileSpreadsheet, Receipt, Loader, Building, Code } from 'lucide-react';
 import exportService from 'services/exportService';
 import toast from 'react-hot-toast';
+
 const ExportModal = ({ transactions, user, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [exportOptions, setExportOptions] = useState({
@@ -19,6 +20,8 @@ const ExportModal = ({ transactions, user, onClose }) => {
     },
     taxYear: new Date().getFullYear()
   });
+
+  const isBusinessAccount = user?.accountType === 'business';
 
   const handleExport = async () => {
     try {
@@ -82,6 +85,16 @@ const ExportModal = ({ transactions, user, onClose }) => {
           toast.success('Tax report generated successfully!');
           break;
 
+        case 'api_report':
+          exportService.generateAPIReport(filteredTransactions, user, `${filename}-api-report.pdf`);
+          toast.success('API report generated successfully!');
+          break;
+
+        case 'invoice_batch':
+          exportService.generateBulkInvoices(filteredTransactions, user);
+          toast.success('Bulk invoices generated successfully!');
+          break;
+
         default:
           toast.error('Invalid export format');
       }
@@ -96,6 +109,22 @@ const ExportModal = ({ transactions, user, onClose }) => {
     }
   };
 
+  // Base export formats
+  const baseFormats = [
+    { value: 'csv', icon: FileSpreadsheet, label: 'CSV', desc: 'Compatible with Excel' },
+    { value: 'pdf', icon: FileText, label: 'PDF', desc: 'Print-ready format' },
+    { value: 'excel', icon: FileSpreadsheet, label: 'Excel', desc: 'Native XLSX format' },
+    { value: 'tax', icon: Receipt, label: 'Tax Report', desc: 'Annual tax summary' }
+  ];
+
+  // Business-specific export formats
+  const businessFormats = isBusinessAccount ? [
+    { value: 'api_report', icon: Code, label: 'API Report', desc: 'Integration analytics' },
+    { value: 'invoice_batch', icon: Building, label: 'Bulk Invoices', desc: 'Multiple invoices' }
+  ] : [];
+
+  const allFormats = [...baseFormats, ...businessFormats];
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -106,7 +135,10 @@ const ExportModal = ({ transactions, user, onClose }) => {
               Export Transactions
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Download your transaction history in various formats
+              {isBusinessAccount 
+                ? `Download your business transaction history - ${user.businessInfo?.companyName || 'Business Account'}`
+                : 'Download your transaction history in various formats'
+              }
             </p>
           </div>
           <button
@@ -119,18 +151,30 @@ const ExportModal = ({ transactions, user, onClose }) => {
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          {/* Business Account Notice */}
+          {isBusinessAccount && (
+            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Building className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                    Business Export Options Available
+                  </p>
+                  <p className="text-purple-700 dark:text-purple-300">
+                    Additional export formats are available for business accounts including API reports and bulk invoice generation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Format Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
               Export Format
             </label>
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { value: 'csv', icon: FileSpreadsheet, label: 'CSV', desc: 'Compatible with Excel' },
-                { value: 'pdf', icon: FileText, label: 'PDF', desc: 'Print-ready format' },
-                { value: 'excel', icon: FileSpreadsheet, label: 'Excel', desc: 'Native XLSX format' },
-                { value: 'tax', icon: Receipt, label: 'Tax Report', desc: 'Annual tax summary' }
-              ].map((format) => {
+              {allFormats.map((format) => {
                 const Icon = format.icon;
                 const isSelected = exportOptions.format === format.value;
 
@@ -245,6 +289,9 @@ const ExportModal = ({ transactions, user, onClose }) => {
               <p>• Transactions: {transactions.length}</p>
               {exportOptions.format === 'tax' && (
                 <p>• Tax Year: {exportOptions.taxYear}</p>
+              )}
+              {isBusinessAccount && ['api_report', 'invoice_batch'].includes(exportOptions.format) && (
+                <p>• Business Account: {user.businessInfo?.companyName}</p>
               )}
             </div>
           </div>

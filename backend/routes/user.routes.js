@@ -25,6 +25,7 @@ router.use(authenticate);
 router.get('/profile', userController.getProfile);
 router.put('/profile', userController.updateProfile);
 router.put('/change-password', userController.changePassword);
+router.delete('/account', authenticate, userController.deleteAccount);
 
 // ✅ NEW: 2FA Status Route
 router.get('/profile/2fa-status', async (req, res) => {

@@ -21,91 +21,107 @@ const getFrontendUrl = () => {
   return url.replace(/\/$/, '');
 };
 
+// backend/controllers/auth.controller.js
+
 /* ============================================================
-   GOOGLE AUTH
+   GOOGLE AUTH - INITIAL LOGIN/SIGNUP
 ============================================================ */
 exports.googleAuth = async (req, res) => {
   try {
-    const { credential, googleData } = req.body;
+    const { googleId, email, name, picture } = req.body;
 
-    let email, name, picture, googleId;
+    console.log('🔵 Google auth request:', { googleId, email, name });
 
-    if (credential) {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID
-      });
-
-      const payload = ticket.getPayload();
-      email = payload.email;
-      name = payload.name;
-      picture = payload.picture;
-      googleId = payload.sub;
-    } else if (googleData) {
-      ({ email, name, picture, googleId } = googleData);
-    } else {
+    if (!googleId || !email) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid Google authentication data'
+        message: 'Google ID and email are required'
       });
     }
 
-    if (!email || !googleId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid Google authentication data'
-      });
-    }
+    // ✅ Check if user exists by googleId OR email
+    let user = await User.findOne({
+      $or: [
+        { googleId },
+        { email: email.toLowerCase() }
+      ]
+    });
 
-    let user = await User.findOne({ email: email.toLowerCase() });
-
+    // ✅ CASE 1: Existing user found
     if (user) {
-      if (!user.googleId) {
+      // If found by email but no googleId, link the accounts
+      if (!user.googleId && user.email === email.toLowerCase()) {
+        console.log('🔗 Linking existing email account to Google:', email);
         user.googleId = googleId;
-        user.profilePicture = picture;
         user.authProvider = 'google';
+        user.verified = true; // Google emails are pre-verified
+        user.verifiedAt = new Date();
+        user.profilePicture = picture;
         await user.save();
       }
 
-      if (!user.isActive) {
-        return res.status(403).json({
-          success: false,
-          message: 'Account is suspended. Contact support.'
-        });
-      }
+      // Update last login
+      user.lastLogin = new Date();
+      await user.save();
 
-      const token = generateToken(user._id, user.email);
+      // Generate token
+      const token = jwt.sign(
+        { id: user._id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      console.log('✅ Existing Google user logged in:', email);
 
       return res.json({
         success: true,
         message: 'Login successful',
         token,
         user: {
-          id: user._id,
+          _id: user._id,
           name: user.name,
           email: user.email,
+          accountType: user.accountType,
           verified: user.verified,
           isKYCVerified: user.isKYCVerified,
           profilePicture: user.profilePicture,
-          tier: user.tier,
-          role: user.role,
-          accountType: user.accountType,
-          businessInfo: user.businessInfo
+          businessInfo: user.accountType === 'business' ? user.businessInfo : undefined
         }
       });
     }
 
+    // ✅ CASE 2: New user - Create temporary user and require profile completion
+    console.log('👤 New Google user, creating temporary account:', email);
+
+    // Create temporary user with googleId
+    const tempUser = await User.create({
+      googleId,
+      email: email.toLowerCase(),
+      name,
+      profilePicture: picture,
+      authProvider: 'google',
+      verified: true, // Google emails are pre-verified
+      verifiedAt: new Date(),
+      role: 'dual',
+      tier: 'free',
+      status: 'active',
+      // ✅ Mark as incomplete profile
+      agreedToTerms: false,
+      accountType: 'individual' // Default, will be updated in complete-profile
+    });
+
+    console.log('✅ Temporary Google user created:', tempUser._id);
+
     return res.json({
       success: true,
       requiresProfileCompletion: true,
+      message: 'Please complete your profile',
       googleData: {
+        googleId,
         email,
         name,
-        picture,
-        googleId,
-        emailVerified: true
-      },
-      message: 'Please complete your profile'
+        picture
+      }
     });
 
   } catch (error) {
@@ -113,6 +129,175 @@ exports.googleAuth = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Google authentication failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/* ============================================================
+   GOOGLE AUTH - COMPLETE PROFILE
+   ✅ FIXED: Better user lookup and error handling
+============================================================ */
+exports.completeGoogleProfile = async (req, res) => {
+  try {
+    const {
+      googleId,
+      name,
+      email,
+      phone,
+      country,
+      accountType,
+      companyName,
+      companyType,
+      industry,
+      registrationNumber,
+      agreedToTerms,
+      picture
+    } = req.body;
+
+    console.log('📝 Completing Google profile:', {
+      email,
+      googleId: googleId ? `${googleId.substring(0, 10)}...` : 'MISSING',
+      accountType
+    });
+
+    // ✅ Validation
+    if (!googleId || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google ID and email are required'
+      });
+    }
+
+    if (!agreedToTerms) {
+      return res.status(400).json({
+        success: false,
+        message: 'You must agree to the terms and conditions'
+      });
+    }
+
+    if (!accountType || !['individual', 'business'].includes(accountType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid account type is required (individual or business)'
+      });
+    }
+
+    if (accountType === 'business' && !companyName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company name is required for business accounts'
+      });
+    }
+
+    // ✅ FIXED: Find user by googleId OR email
+    let user = await User.findOne({
+      $or: [
+        { googleId },
+        { email: email.toLowerCase() }
+      ]
+    });
+
+    if (!user) {
+      console.error('❌ User not found:', { googleId, email });
+      
+      // ✅ Try to create user if not found (recovery mechanism)
+      console.log('🔄 Creating user as recovery...');
+      user = await User.create({
+        googleId,
+        email: email.toLowerCase(),
+        name,
+        profilePicture: picture,
+        authProvider: 'google',
+        verified: true,
+        verifiedAt: new Date(),
+        role: 'dual',
+        tier: 'free',
+        status: 'active',
+        accountType: 'individual'
+      });
+      
+      console.log('✅ Recovery user created:', user._id);
+    }
+
+    // ✅ Update user profile
+    user.name = name;
+    user.phone = phone;
+    user.accountType = accountType;
+    user.agreedToTerms = true;
+    user.agreedToTermsAt = new Date();
+    user.profilePicture = picture || user.profilePicture;
+    user.googleId = googleId; // Ensure googleId is set
+
+    // Add country to address
+    if (country) {
+      user.address = user.address || {};
+      user.address.country = country;
+    }
+
+    // ✅ Handle business account
+    if (accountType === 'business') {
+      user.businessInfo = {
+        companyName,
+        companyType: companyType || 'other',
+        industry: industry || 'other',
+        registrationNumber: registrationNumber || '',
+        businessEmail: email,
+        businessPhone: phone
+      };
+      
+      console.log('✅ Business info populated:', {
+        companyName,
+        companyType,
+        industry
+      });
+    }
+
+    await user.save();
+
+    // ✅ Generate JWT token
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log('✅ Profile completed successfully:', {
+      userId: user._id,
+      email: user.email,
+      accountType: user.accountType
+    });
+
+    res.json({
+      success: true,
+      message: 'Profile completed successfully',
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        accountType: user.accountType,
+        verified: user.verified,
+        isKYCVerified: user.isKYCVerified,
+        tier: user.tier,
+        profilePicture: user.profilePicture,
+        businessInfo: accountType === 'business' ? user.businessInfo : undefined
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Complete Google profile error:', error);
+    
+    // ✅ Better error response
+    let errorMessage = 'Failed to complete profile';
+    
+    if (error.code === 11000) {
+      errorMessage = 'This email is already registered with a different account';
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

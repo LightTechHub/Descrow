@@ -2087,4 +2087,117 @@ exports.clearActivityLog = async (req, res) => {
   }
 };
 
+// backend/controllers/user.controller.js - FIXED DELETE ACCOUNT
+
+/**
+ * ✅ FIXED: Delete user account permanently
+ * This allows email reuse after deletion
+ */
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { password, reason } = req.body;
+
+    console.log('🗑️  Delete account request for user:', userId);
+
+    // Get user with password
+    const user = await User.findById(userId).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // ✅ For local auth: verify password
+    if (user.authProvider === 'local') {
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password required to delete account'
+        });
+      }
+
+      const isPasswordValid = await user.comparePassword(password);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid password'
+        });
+      }
+    }
+
+    // ✅ Check for active escrows/transactions
+    const activeEscrows = await Escrow.countDocuments({
+      $or: [
+        { buyer: userId },
+        { seller: userId }
+      ],
+      status: { 
+        $in: ['pending', 'funded', 'in_progress', 'in_dispute'] 
+      }
+    });
+
+    if (activeEscrows > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete account. You have ${activeEscrows} active transaction(s). Please complete or cancel them first.`,
+        activeEscrows
+      });
+    }
+
+    // ✅ OPTION 1: HARD DELETE (Recommended - allows email reuse)
+    // Delete related data first
+    await APIKey.deleteMany({ userId });
+    await BankAccount.deleteMany({ userId });
+    await Notification.deleteMany({ userId });
+    // Add other cleanup as needed
+
+    // Delete user permanently
+    await User.findByIdAndDelete(userId);
+
+    console.log('✅ User account permanently deleted:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Account permanently deleted. You can create a new account with this email anytime.'
+    });
+
+    /* ✅ OPTION 2: SOFT DELETE (Keep data but allow email reuse)
+    // Anonymize email to allow reuse
+    const deletedEmail = `deleted_${Date.now()}_${user.email}`;
+    
+    user.email = deletedEmail;
+    user.status = 'deleted';
+    user.deletedAt = new Date();
+    user.deletionReason = reason || 'User requested deletion';
+    user.isActive = false;
+    
+    // Clear sensitive data
+    user.password = undefined;
+    user.phone = undefined;
+    user.twoFactorSecret = undefined;
+    user.apiAccess = undefined;
+    
+    await user.save();
+    
+    console.log('✅ User account soft deleted:', deletedEmail);
+    
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+    */
+
+  } catch (error) {
+    console.error('❌ Delete account error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete account',
+      error: error.message
+    });
+  }
+};
+
 module.exports = exports;

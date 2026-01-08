@@ -249,6 +249,7 @@ exports.completeGoogleProfile = async (req, res) => {
 
 /* ============================================================
    REGISTER (UNIVERSAL - SUPPORTS INDIVIDUAL & BUSINESS)
+   ✅ FIXED: Allows email reuse after account deletion
 ============================================================ */
 exports.register = async (req, res) => {
   try {
@@ -271,13 +272,39 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if email already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    // ✅ FIXED: Check for ACTIVE users only (ignore deleted/unverified)
+    const existingUser = await User.findOne({ 
+      email: email.toLowerCase()
+    });
+
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already registered'
-      });
+      // ✅ Case 1: User is deleted - allow re-registration
+      if (existingUser.status === 'deleted' || existingUser.deletedAt) {
+        console.log('🗑️ Found deleted account, removing for re-registration:', email);
+        await User.findByIdAndDelete(existingUser._id);
+        
+        // Also clean up related data
+        try {
+          await APIKey.deleteMany({ userId: existingUser._id });
+          await BankAccount.deleteMany({ userId: existingUser._id });
+          await Notification.deleteMany({ userId: existingUser._id });
+        } catch (cleanupError) {
+          console.error('⚠️ Cleanup error (non-blocking):', cleanupError.message);
+        }
+      }
+      // ✅ Case 2: User is unverified - allow re-registration (clean slate)
+      else if (!existingUser.verified) {
+        console.log('📧 Found unverified account, removing for fresh registration:', email);
+        await User.findByIdAndDelete(existingUser._id);
+      }
+      // ✅ Case 3: User is active and verified - block registration
+      else if (existingUser.verified && existingUser.status !== 'deleted') {
+        return res.status(400).json({
+          success: false,
+          message: 'This email is already registered. Please login instead.',
+          action: 'login_required'
+        });
+      }
     }
 
     // Build user data object
@@ -290,6 +317,7 @@ exports.register = async (req, res) => {
       role: 'dual',
       tier: 'free',
       verified: false,
+      status: 'active', // ✅ Ensure status is active
       authProvider: 'local',
       agreedToTerms: agreedToTerms || false,
       agreedToTermsAt: agreedToTerms ? new Date() : undefined
@@ -311,6 +339,8 @@ exports.register = async (req, res) => {
         registrationNumber: businessInfo.registrationNumber,
         taxId: businessInfo.taxId
       };
+      
+      console.log('🏢 Registering business account:', businessInfo.companyName);
     }
 
     // Create user
@@ -340,7 +370,7 @@ exports.register = async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: 'Email already registered'
+        message: 'Email already registered. If you deleted your account, please wait a moment and try again.'
       });
     }
 

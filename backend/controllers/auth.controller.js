@@ -118,98 +118,122 @@ exports.googleAuth = async (req, res) => {
   }
 };
 
-/* ============================================================
-   Complete Google Profile
-============================================================ */
+// backend/controllers/auth.controller.js - COMPLETE GOOGLE PROFILE FIX
+
+// ✅ FIXED: Complete Google Profile - Ensure accountType is saved
 exports.completeGoogleProfile = async (req, res) => {
   try {
     const {
-      email,
-      name,
       googleId,
-      picture,
+      name,
+      email,
       phone,
       country,
-      accountType,
+      accountType, // ✅ MUST be 'individual' or 'business'
       companyName,
       companyType,
       industry,
       registrationNumber,
-      taxId,
-      agreedToTerms
+      agreedToTerms,
+      picture
     } = req.body;
 
-    if (!email || !name || !phone || !country || !agreedToTerms) {
+    console.log('📝 Completing Google profile with accountType:', accountType);
+
+    // Validation
+    if (!googleId || !email) {
       return res.status(400).json({
         success: false,
-        message: 'Please fill all required fields'
+        message: 'Google ID and email are required'
       });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
+    if (!agreedToTerms) {
       return res.status(400).json({
         success: false,
-        message: 'Email already registered'
+        message: 'You must agree to the terms and conditions'
       });
     }
 
-    const userData = {
-      name,
-      email: email.toLowerCase(),
-      phone,
-      googleId,
-      profilePicture: picture,
-      authProvider: 'google',
-      verified: true,
-      verifiedAt: new Date(),
-      accountType: accountType || 'individual',
-      role: 'dual',
-      tier: 'free',
-      agreedToTerms: true,
-      agreedToTermsAt: new Date(),
-      password: Math.random().toString(36) + Math.random().toString(36),
-      address: {
-        country
+    // ✅ Validate accountType
+    if (!accountType || !['individual', 'business'].includes(accountType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid account type is required (individual or business)'
+      });
+    }
+
+    // ✅ Business validation
+    if (accountType === 'business') {
+      if (!companyName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Company name is required for business accounts'
+        });
       }
-    };
+    }
 
-    // Add business info if business account
-    if (accountType === 'business' && companyName) {
-      userData.businessInfo = {
+    // Find user by googleId
+    const user = await User.findOne({ googleId });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found. Please sign up again.'
+      });
+    }
+
+    // ✅ Update user with complete profile data
+    user.name = name;
+    user.phone = phone;
+    user.address = { country };
+    user.accountType = accountType; // ✅ CRITICAL: Save account type
+    user.agreedToTerms = true;
+    user.agreedToTermsAt = new Date();
+    user.profilePicture = picture;
+
+    // ✅ If business account, populate businessInfo
+    if (accountType === 'business') {
+      user.businessInfo = {
+        companyName,
+        companyType: companyType || 'other',
+        industry: industry || 'other',
+        registrationNumber: registrationNumber || '',
+        businessEmail: email,
+        businessPhone: phone
+      };
+      
+      console.log('✅ Business info populated:', {
         companyName,
         companyType,
-        industry,
-        registrationNumber,
-        taxId
-      };
+        industry
+      });
     }
 
-    const user = await User.create(userData);
+    await user.save();
 
-    emailService.sendWelcomeEmail(user.email, user.name).catch(err => {
-      console.error('Failed to send welcome email:', err);
-    });
+    // ✅ Generate JWT token
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
-    const token = generateToken(user._id, user.email);
+    console.log('✅ Profile completed for', accountType, 'account:', user.email);
 
-    console.log('✅ Google user profile completed:', user._id, '| Account Type:', user.accountType);
-
-    res.status(201).json({
+    res.json({
       success: true,
-      message: 'Account created successfully',
+      message: 'Profile completed successfully',
       token,
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
+        accountType: user.accountType, // ✅ Include in response
         verified: user.verified,
-        isKYCVerified: user.isKYCVerified || false,
-        profilePicture: user.profilePicture,
+        isKYCVerified: user.isKYCVerified,
         tier: user.tier,
-        role: user.role,
-        accountType: user.accountType,
-        businessInfo: user.businessInfo
+        businessInfo: accountType === 'business' ? user.businessInfo : undefined
       }
     });
 
@@ -218,7 +242,7 @@ exports.completeGoogleProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to complete profile',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: error.message
     });
   }
 };

@@ -137,4 +137,68 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+// backend/routes/auth.routes.js - ADD THIS TEMPORARY DEBUG ENDPOINT
+
+/**
+ * 🔍 DEBUG: Check if Google user exists
+ * POST /api/auth/google/debug
+ */
+router.post('/google/debug', async (req, res) => {
+  try {
+    const { googleId, email } = req.body;
+    
+    console.log('🔍 Debugging Google user:', { googleId, email });
+    
+    // Search by googleId
+    const userByGoogleId = await User.findOne({ googleId });
+    
+    // Search by email
+    const userByEmail = await User.findOne({ email: email?.toLowerCase() });
+    
+    // Search by either
+    const userByEither = await User.findOne({
+      $or: [
+        { googleId },
+        { email: email?.toLowerCase() }
+      ]
+    });
+    
+    res.json({
+      success: true,
+      debug: {
+        searchCriteria: { googleId, email },
+        foundByGoogleId: userByGoogleId ? {
+          _id: userByGoogleId._id,
+          email: userByGoogleId.email,
+          googleId: userByGoogleId.googleId,
+          accountType: userByGoogleId.accountType,
+          agreedToTerms: userByGoogleId.agreedToTerms
+        } : null,
+        foundByEmail: userByEmail ? {
+          _id: userByEmail._id,
+          email: userByEmail.email,
+          googleId: userByEmail.googleId,
+          accountType: userByEmail.accountType,
+          agreedToTerms: userByEmail.agreedToTerms
+        } : null,
+        foundByEither: userByEither ? {
+          _id: userByEither._id,
+          email: userByEither.email,
+          googleId: userByEither.googleId,
+          accountType: userByEither.accountType,
+          agreedToTerms: userByEither.agreedToTerms
+        } : null,
+        totalGoogleUsers: await User.countDocuments({ authProvider: 'google' })
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

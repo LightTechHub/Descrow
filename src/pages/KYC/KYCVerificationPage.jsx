@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Shield, CheckCircle, AlertTriangle, Loader, 
-  User, ArrowRight, RefreshCw 
+  User, ArrowRight, RefreshCw, Building 
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -13,10 +13,21 @@ const KYCVerificationPage = () => {
   const [loading, setLoading] = useState(true);
   const [initiating, setInitiating] = useState(false);
   const [kycData, setKycData] = useState(null);
+  const [user, setUser] = useState(null);
 
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
   useEffect(() => {
+    // ✅ Get user from localStorage
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error('Failed to parse user:', error);
+      }
+    }
+    
     fetchKYCStatus();
   }, []);
 
@@ -50,6 +61,8 @@ const KYCVerificationPage = () => {
       setInitiating(true);
       const token = localStorage.getItem('token');
       
+      console.log('🔄 Starting verification for account type:', user?.accountType);
+      
       const response = await axios.post(
         `${API_URL}/kyc/initiate`,
         {},
@@ -57,9 +70,16 @@ const KYCVerificationPage = () => {
       );
 
       if (response.data.success) {
-        const { verificationUrl } = response.data.data;
+        const { verificationUrl, accountType } = response.data.data;
         
-        toast.success('Redirecting to verification...');
+        console.log('✅ Backend returned:', { verificationUrl, accountType });
+        
+        // ✅ FIX: Show different messages based on account type
+        if (accountType === 'business') {
+          toast.success('Redirecting to business verification...');
+        } else {
+          toast.success('Redirecting to identity verification...');
+        }
         
         // Redirect to DiDIT verification page
         window.location.href = verificationUrl;
@@ -109,22 +129,33 @@ const KYCVerificationPage = () => {
     );
   }
 
+  // ✅ Determine if business account
+  const isBusinessAccount = user?.accountType === 'business' || kycData?.accountType === 'business';
+  const businessName = user?.businessInfo?.companyName;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 py-12 px-4">
       <div className="max-w-3xl mx-auto">
         
-        {/* Header */}
+        {/* Header - ✅ DYNAMIC BASED ON ACCOUNT TYPE */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="p-4 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-lg">
-              <Shield className="w-10 h-10 text-white" />
+              {isBusinessAccount ? (
+                <Building className="w-10 h-10 text-white" />
+              ) : (
+                <Shield className="w-10 h-10 text-white" />
+              )}
             </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Identity Verification
+            {isBusinessAccount ? 'Business Verification' : 'Identity Verification'}
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Verify your identity to access all platform features
+            {isBusinessAccount 
+              ? `Verify ${businessName || 'your business'} to access business features`
+              : 'Verify your identity to access all platform features'
+            }
           </p>
         </div>
 
@@ -135,10 +166,10 @@ const KYCVerificationPage = () => {
               <Loader className="w-6 h-6 text-yellow-600 animate-spin flex-shrink-0 mt-1" />
               <div>
                 <h3 className="font-bold text-yellow-900 dark:text-yellow-100 mb-2">
-                  Verification Pending
+                  {isBusinessAccount ? 'Business' : 'Identity'} Verification Pending
                 </h3>
                 <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
-                  Your verification is being processed. This usually takes a few minutes.
+                  Your {isBusinessAccount ? 'business' : 'identity'} verification is being processed.
                 </p>
                 {kycData.verificationUrl && (
                   <a
@@ -165,7 +196,8 @@ const KYCVerificationPage = () => {
                   Verification In Progress
                 </h3>
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  We're reviewing your documents. This usually takes 1-3 business days.
+                  We're reviewing your {isBusinessAccount ? 'business' : 'identity'} documents. 
+                  This usually takes {isBusinessAccount ? '2-3 business days' : '1-3 business days'}.
                 </p>
               </div>
             </div>
@@ -238,7 +270,7 @@ const KYCVerificationPage = () => {
           </div>
         )}
 
-        {/* Main Card */}
+        {/* Main Card - ✅ DYNAMIC CONTENT */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
           
           {/* What You'll Need */}
@@ -248,27 +280,55 @@ const KYCVerificationPage = () => {
             </h3>
             
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Government-Issued ID</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Passport, driver's license, or national ID card</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Selfie for Liveness Check</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Take a photo of yourself for identity verification</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Proof of Address</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Recent utility bill or bank statement (last 3 months)</p>
-                </div>
-              </div>
+              {isBusinessAccount ? (
+                <>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Business Registration Documents</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Certificate of incorporation or business license</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Director/Owner ID</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Government-issued ID of business representative</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Proof of Business Address</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Recent utility bill or bank statement (last 3 months)</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Government-Issued ID</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Passport, driver's license, or national ID card</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Selfie for Liveness Check</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Take a photo of yourself for identity verification</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Proof of Address</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Recent utility bill or bank statement (last 3 months)</p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -283,21 +343,29 @@ const KYCVerificationPage = () => {
                   1
                 </div>
                 <p className="font-medium text-gray-900 dark:text-white mb-1">Upload Documents</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Securely submit your documents</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {isBusinessAccount ? 'Submit business documents' : 'Securely submit your documents'}
+                </p>
               </div>
               <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-3 font-bold">
                   2
                 </div>
-                <p className="font-medium text-gray-900 dark:text-white mb-1">AI Verification</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Automated checks within minutes</p>
+                <p className="font-medium text-gray-900 dark:text-white mb-1">
+                  {isBusinessAccount ? 'Manual Review' : 'AI Verification'}
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {isBusinessAccount ? 'Expert review (2-3 days)' : 'Automated checks within minutes'}
+                </p>
               </div>
               <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-3 font-bold">
                   3
                 </div>
                 <p className="font-medium text-gray-900 dark:text-white mb-1">Get Verified</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Access all platform features</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {isBusinessAccount ? 'Access business features & API' : 'Access all platform features'}
+                </p>
               </div>
             </div>
           </div>
@@ -311,7 +379,8 @@ const KYCVerificationPage = () => {
                   Your Data is Secure
                 </p>
                 <p className="text-xs text-green-800 dark:text-green-200">
-                  All documents are encrypted and stored securely. We never share your personal information.
+                  All {isBusinessAccount ? 'business' : 'personal'} documents are encrypted and stored securely. 
+                  We never share your information without consent.
                 </p>
               </div>
             </div>
@@ -328,11 +397,12 @@ const KYCVerificationPage = () => {
                 {initiating ? (
                   <>
                     <Loader className="w-5 h-5 animate-spin" />
-                    Starting Verification...
+                    Starting {isBusinessAccount ? 'Business' : 'Identity'} Verification...
                   </>
                 ) : (
                   <>
-                    Start Verification
+                    {isBusinessAccount ? <Building className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
+                    Start {isBusinessAccount ? 'Business' : 'Identity'} Verification
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
@@ -349,7 +419,10 @@ const KYCVerificationPage = () => {
 
           {/* Estimated Time */}
           <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-4">
-            ⏱️ Verification usually takes 5-10 minutes
+            ⏱️ {isBusinessAccount 
+              ? 'Business verification usually takes 2-3 business days' 
+              : 'Identity verification usually takes 5-10 minutes'
+            }
           </p>
         </div>
 

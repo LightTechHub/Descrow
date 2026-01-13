@@ -1,10 +1,13 @@
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
 const { OAuth2Client } = require('google-auth-library');
+const APIKey = require('../models/APIKey.model');
+const BankAccount = require('../models/BankAccount.model');
+const Notification = require('../models/Notification.model');
+
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // ---------- Helper: Generate JWT ----------
@@ -24,7 +27,6 @@ const getFrontendUrl = () => {
 
 /* ============================================================
    GOOGLE AUTH - INITIAL LOGIN/SIGNUP
-   ✅ FIXED: Added password generation for Google users
 ============================================================ */
 exports.googleAuth = async (req, res) => {
   try {
@@ -90,8 +92,27 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    // ✅ CASE 2: New user - Require profile completion (DON'T create user yet)
-    console.log('👤 New Google user, requires profile completion:', email);
+    // ✅ CASE 2: New user - Create temporary user and require profile completion
+    console.log('👤 New Google user, creating temporary account:', email);
+
+    // Create temporary user with googleId
+    const tempUser = await User.create({
+      googleId,
+      email: email.toLowerCase(),
+      name,
+      profilePicture: picture,
+      authProvider: 'google',
+      verified: true, // Google emails are pre-verified
+      verifiedAt: new Date(),
+      role: 'dual',
+      tier: 'free',
+      status: 'active',
+      // ✅ Mark as incomplete profile
+      agreedToTerms: false,
+      accountType: 'individual' // Default, will be updated in complete-profile
+    });
+
+    console.log('✅ Temporary Google user created:', tempUser._id);
 
     return res.json({
       success: true,
@@ -116,8 +137,8 @@ exports.googleAuth = async (req, res) => {
 };
 
 /* ============================================================
-   GOOGLE AUTH - COMPLETE PROFILE
-   ✅ FIXED: Single function, password generation, better error handling
+   GOOGLE AUTH - COMPLETE PROFILE (FIXED VERSION)
+   ✅ FIXED: Looks up user by both googleId AND email
 ============================================================ */
 exports.completeGoogleProfile = async (req, res) => {
   try {
@@ -136,13 +157,9 @@ exports.completeGoogleProfile = async (req, res) => {
       picture
     } = req.body;
 
-    console.log('📝 Completing Google profile:', {
-      email,
-      googleId: googleId ? `${googleId.substring(0, 10)}...` : 'MISSING',
-      accountType
-    });
+    console.log('📝 Completing Google profile with accountType:', accountType);
 
-    // ✅ Validation
+    // Validation
     if (!googleId || !email) {
       return res.status(400).json({
         success: false,
@@ -157,6 +174,7 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
+    // ✅ Validate accountType
     if (!accountType || !['individual', 'business'].includes(accountType)) {
       return res.status(400).json({
         success: false,
@@ -164,14 +182,17 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    if (accountType === 'business' && !companyName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Company name is required for business accounts'
-      });
+    // ✅ Business validation
+    if (accountType === 'business') {
+      if (!companyName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Company name is required for business accounts'
+        });
+      }
     }
 
-    // ✅ Find user by googleId OR email
+    // ✅ FIXED: Find user by googleId OR email (not just googleId)
     let user = await User.findOne({
       $or: [
         { googleId },
@@ -180,47 +201,24 @@ exports.completeGoogleProfile = async (req, res) => {
     });
 
     if (!user) {
-      console.log('🆕 Creating new Google user');
-      
-      // ✅ FIX: Generate random password for Google users
-      const randomPassword = crypto.randomBytes(32).toString('hex');
-      
-      user = await User.create({
-        googleId,
-        email: email.toLowerCase(),
-        name,
-        password: randomPassword, // ✅ FIXED: Added password
-        profilePicture: picture,
-        authProvider: 'google',
-        verified: true,
-        verifiedAt: new Date(),
-        role: 'dual',
-        tier: 'free',
-        status: 'active',
-        accountType: 'individual'
+      console.error('❌ User not found for Google OAuth:', { googleId, email });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found. Please sign up again.'
       });
-      
-      console.log('✅ New Google user created:', user._id);
     }
 
-    // ✅ Update user profile
+    // ✅ Update user with complete profile data
     user.name = name;
     user.phone = phone;
-    user.accountType = accountType;
+    user.address = { country };
+    user.accountType = accountType; // ✅ CRITICAL: Save account type
     user.agreedToTerms = true;
     user.agreedToTermsAt = new Date();
-    user.profilePicture = picture || user.profilePicture;
-    user.googleId = googleId;
-    user.verified = true;
-    user.verifiedAt = user.verifiedAt || new Date();
+    user.profilePicture = picture;
+    user.googleId = googleId; // Ensure googleId is set
 
-    // Add country to address
-    if (country) {
-      user.address = user.address || {};
-      user.address.country = country;
-    }
-
-    // ✅ Handle business account
+    // ✅ If business account, populate businessInfo
     if (accountType === 'business') {
       user.businessInfo = {
         companyName,
@@ -247,11 +245,7 @@ exports.completeGoogleProfile = async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    console.log('✅ Profile completed successfully:', {
-      userId: user._id,
-      email: user.email,
-      accountType: user.accountType
-    });
+    console.log('✅ Profile completed for', accountType, 'account:', user.email);
 
     res.json({
       success: true,
@@ -261,11 +255,10 @@ exports.completeGoogleProfile = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
-        accountType: user.accountType,
+        accountType: user.accountType, // ✅ Include in response
         verified: user.verified,
         isKYCVerified: user.isKYCVerified,
         tier: user.tier,
-        profilePicture: user.profilePicture,
         businessInfo: accountType === 'business' ? user.businessInfo : undefined
       }
     });
@@ -274,7 +267,6 @@ exports.completeGoogleProfile = async (req, res) => {
     console.error('❌ Complete Google profile error:', error);
     
     let errorMessage = 'Failed to complete profile';
-    
     if (error.code === 11000) {
       errorMessage = 'This email is already registered with a different account';
     }
@@ -289,7 +281,6 @@ exports.completeGoogleProfile = async (req, res) => {
 
 /* ============================================================
    REGISTER (UNIVERSAL - SUPPORTS INDIVIDUAL & BUSINESS)
-   ✅ FIXED: Allows email reuse after account deletion
 ============================================================ */
 exports.register = async (req, res) => {
   try {
@@ -312,7 +303,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // ✅ Check for existing users (allow deleted/unverified to re-register)
+    // ✅ Check for ACTIVE users only (ignore deleted/unverified)
     const existingUser = await User.findOne({ 
       email: email.toLowerCase()
     });
@@ -322,6 +313,15 @@ exports.register = async (req, res) => {
       if (existingUser.status === 'deleted' || existingUser.deletedAt) {
         console.log('🗑️ Found deleted account, removing for re-registration:', email);
         await User.findByIdAndDelete(existingUser._id);
+        
+        // Also clean up related data
+        try {
+          await APIKey.deleteMany({ userId: existingUser._id });
+          await BankAccount.deleteMany({ userId: existingUser._id });
+          await Notification.deleteMany({ userId: existingUser._id });
+        } catch (cleanupError) {
+          console.error('⚠️ Cleanup error (non-blocking):', cleanupError.message);
+        }
       }
       // ✅ Case 2: User is unverified - allow re-registration (clean slate)
       else if (!existingUser.verified) {
@@ -397,7 +397,6 @@ exports.register = async (req, res) => {
   } catch (error) {
     console.error('❌ Register error:', error);
 
-    // Handle duplicate key errors
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -414,8 +413,8 @@ exports.register = async (req, res) => {
 };
 
 /* ============================================================
-   LOGIN
-   ✅ FIXED: Check email verification BEFORE password check
+   LOGIN (FIXED VERIFICATION CHECK)
+   ✅ FIXED: Checks both verified flag AND verifiedAt timestamp
 ============================================================ */
 exports.login = async (req, res) => {
   try {
@@ -430,10 +429,7 @@ exports.login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    const user = await User.findOne({ 
-      email: email.toLowerCase(),
-      status: { $ne: 'deleted' } // ✅ Ignore deleted users
-    }).select('+password');
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
 
     if (!user) {
       return res.status(401).json({
@@ -442,18 +438,19 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ✅ FIX: Check email verification BEFORE password check
-    if (!user.verified) {
+    // ✅ FIXED: Check both verified flag AND verification timestamp
+    const isActuallyVerified = user.verified && user.verifiedAt;
+
+    if (!isActuallyVerified) {
       return res.status(403).json({
         success: false,
         message: 'Please verify your email first',
-        code: 'EMAIL_NOT_VERIFIED', // ✅ ADDED: Frontend can check this
         requiresVerification: true,
         email: user.email
       });
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || user.status === 'suspended') {
       return res.status(403).json({
         success: false,
         message: 'Account is suspended'
@@ -468,6 +465,7 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Update last login
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() }, { runValidators: false });
 
     const token = generateToken(user._id, user.email);
@@ -503,7 +501,8 @@ exports.login = async (req, res) => {
 };
 
 /* ============================================================
-   VERIFY EMAIL
+   VERIFY EMAIL (FIXED - SETS BOTH verified AND verifiedAt)
+   ✅ FIXED: Sets verifiedAt timestamp to prevent verification loop
 ============================================================ */
 exports.verifyEmail = async (req, res) => {
   try {
@@ -529,7 +528,7 @@ exports.verifyEmail = async (req, res) => {
       });
     }
 
-    if (user.verified) {
+    if (user.verified && user.verifiedAt) {
       return res.status(200).json({
         success: true,
         message: 'Email already verified',
@@ -537,8 +536,11 @@ exports.verifyEmail = async (req, res) => {
       });
     }
 
+    // ✅ FIXED: Set BOTH verified flag AND verifiedAt timestamp
     user.verified = true;
     user.verifiedAt = new Date();
+    user.status = 'active'; // Ensure status is active
+    
     await user.save();
 
     console.log('✅ Email verified successfully for user:', user.email);
@@ -596,7 +598,7 @@ exports.resendVerification = async (req, res) => {
       });
     }
 
-    if (user.verified) {
+    if (user.verified && user.verifiedAt) {
       return res.status(400).json({
         success: false,
         message: 'Email already verified'
@@ -751,7 +753,6 @@ exports.setPassword = async (req, res) => {
     }
 
     // Check if they already have a real password set
-    // The placeholder password from Google sign-up is 72 characters (2 random strings)
     if (user.password && user.password.length < 50) {
       return res.status(400).json({
         success: false,
@@ -871,6 +872,109 @@ exports.refreshToken = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Token refresh failed'
+    });
+  }
+};
+
+// ==================== ADDITIONAL FIXES ====================
+
+/* ============================================================
+   CHECK AUTH STATUS (for frontend)
+============================================================ */
+exports.checkAuthStatus = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        authenticated: false,
+        message: 'Not authenticated'
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        authenticated: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      authenticated: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        tier: user.tier,
+        verified: user.verified,
+        isKYCVerified: user.isKYCVerified,
+        accountType: user.accountType,
+        businessInfo: user.businessInfo,
+        hasBankAccount: user.hasBankAccount,
+        profilePicture: user.profilePicture
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Check auth status error:', error);
+    res.status(500).json({
+      success: false,
+      authenticated: false,
+      message: 'Authentication check failed'
+    });
+  }
+};
+
+/* ============================================================
+   UPDATE PROFILE
+============================================================ */
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, phone, country, bio, avatar } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update fields if provided
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (country) user.address = { ...user.address, country };
+    if (bio) user.bio = bio;
+    if (avatar) user.avatar = avatar;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        bio: user.bio,
+        avatar: user.avatar,
+        profilePicture: user.profilePicture
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update profile'
     });
   }
 };

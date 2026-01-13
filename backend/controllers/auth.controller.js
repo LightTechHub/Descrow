@@ -6,7 +6,7 @@ const emailService = require('../services/email.service');
 const { OAuth2Client } = require('google-auth-library');
 const APIKey = require('../models/APIKey.model');
 const BankAccount = require('../models/BankAccount.model');
-const Notification = require('../models/Notification.model');
+const Notification = require('../models/Notification'); // ✅ FIXED PATH
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 

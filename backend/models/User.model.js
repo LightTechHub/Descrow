@@ -694,7 +694,6 @@ userSchema.methods.getRequiredDocuments = function() {
   };
 };
 
-
 // ==================== BUSINESS ACCOUNT METHODS ====================
 userSchema.methods.getDisplayName = function() {
   if (this.accountType === 'business' && this.businessInfo?.companyName) {

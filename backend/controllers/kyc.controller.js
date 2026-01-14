@@ -612,31 +612,55 @@ exports.retryKYC = async (req, res) => {
       });
     }
 
-    if (user.kycStatus?.status !== 'rejected' && user.kycStatus?.status !== 'expired') {
+    // ✅ FIXED: Allow retry from MORE statuses
+    // Now includes: rejected, expired, pending, in_progress, under_review
+    const allowedRetryStatuses = ['rejected', 'expired', 'pending', 'in_progress', 'under_review'];
+    
+    if (!allowedRetryStatuses.includes(user.kycStatus?.status)) {
       return res.status(400).json({
         success: false,
         message: 'KYC retry not allowed in current status',
-        currentStatus: user.kycStatus?.status
+        currentStatus: user.kycStatus?.status || 'unverified',
+        allowedStatuses: allowedRetryStatuses
       });
     }
 
+    // ✅ FIXED: Preserve important data when resetting
     user.kycStatus = {
-      status: 'unverified'
+      status: 'unverified',
+      // Keep these fields for tracking
+      verificationMethod: user.kycStatus?.verificationMethod || 'didit',
+      accountType: user.accountType || 'individual',
+      // Clear session-specific data
+      diditSessionId: null,
+      diditVerificationUrl: null,
+      diditSessionExpiresAt: null,
+      documents: [],
+      reviewDeadline: null
     };
     user.isKYCVerified = false;
 
     await user.save();
 
+    console.log(`🔄 KYC reset for user ${user._id} (${user.accountType}) - Previous status: ${user.kycStatus?.status}`);
+
     res.json({
       success: true,
-      message: 'KYC reset. You can now start a new verification.'
+      message: 'KYC reset successfully. You can now start a new verification.',
+      data: {
+        userId: user._id,
+        accountType: user.accountType,
+        previousStatus: user.kycStatus?.status,
+        resetAt: new Date()
+      }
     });
 
   } catch (error) {
     console.error('❌ Retry KYC error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to retry KYC'
+      message: 'Failed to retry KYC',
+      error: error.message
     });
   }
 };

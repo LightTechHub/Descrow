@@ -694,4 +694,27 @@ userSchema.methods.getRequiredDocuments = function() {
   };
 };
 
+
+// ==================== BUSINESS ACCOUNT METHODS ====================
+userSchema.methods.getDisplayName = function() {
+  if (this.accountType === 'business' && this.businessInfo?.companyName) {
+    return this.businessInfo.companyName;
+  }
+  return this.name;
+};
+
+userSchema.methods.getAccountTypeDisplay = function() {
+  return this.accountType === 'business' ? 'Business Account' : 'Individual Account';
+};
+
+userSchema.methods.getAccountIcon = function() {
+  return this.accountType === 'business' ? '🏢' : '👤';
+};
+
+userSchema.methods.getAccountColor = function() {
+  return this.accountType === 'business' ? 'purple' : 'blue';
+};
+
+module.exports = mongoose.model('User', userSchema); // This line should already exist
+
 module.exports = mongoose.model('User', userSchema);

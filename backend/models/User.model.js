@@ -1,3 +1,4 @@
+// backend/models/User.model.js - COMPLETE UPDATED VERSION WITH KYC INTEGRATION
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -26,6 +27,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true,
     unique: true
+  },
+  country: {
+    type: String,
+    trim: true
   },
 
   // ==================== ACCOUNT SETTINGS ====================
@@ -63,7 +68,7 @@ const userSchema = new mongoose.Schema({
   kycStatus: {
     status: {
       type: String,
-      enum: ['unverified', 'pending', 'in_progress', 'approved', 'rejected', 'expired'],
+      enum: ['unverified', 'pending', 'in_progress', 'under_review', 'approved', 'rejected', 'expired', 'pending_documents'],
       default: 'unverified'
     },
     submittedAt: Date,
@@ -71,12 +76,29 @@ const userSchema = new mongoose.Schema({
     reviewedAt: Date,
     reviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      ref: 'Admin'
     },
     rejectionReason: String,
     diditSessionId: String,
     diditVerificationUrl: String,
     diditSessionExpiresAt: Date,
+    verificationMethod: { 
+      type: String, 
+      enum: ['didit', 'manual'],
+      default: 'didit' 
+    },
+    accountType: String,
+    documents: [{
+      type: { type: String },
+      url: String,
+      filepath: String,
+      filename: String,
+      originalName: String,
+      mimetype: String,
+      size: Number,
+      uploadedAt: { type: Date, default: Date.now }
+    }],
+    reviewDeadline: Date,
     verificationResult: Object,
     personalInfo: Object,
     businessInfo: Object
@@ -222,8 +244,18 @@ const userSchema = new mongoose.Schema({
     street: String,
     city: String,
     state: String,
-    country: String,
-    zipCode: String
+    country: {
+      type: String,
+      trim: true,
+      enum: [
+        'United States', 'Nigeria', 'United Kingdom', 'Ghana', 
+        'Kenya', 'South Africa', 'Germany', 'France', 'Canada',
+        'Australia', 'India', 'Brazil', 'Mexico', 'Spain', 'Italy',
+        'USA', 'UK' // Common abbreviations
+      ]
+    },
+    zipCode: String,
+    formatted: String
   },
   socialLinks: {
     twitter: String,
@@ -330,8 +362,20 @@ const userSchema = new mongoose.Schema({
 
 // ==================== PRE-SAVE MIDDLEWARE ====================
 userSchema.pre('save', function (next) {
+  // Sync KYC verification status
   this.isKYCVerified = this.kycStatus?.status === 'approved';
-
+  
+  // Sync country from address if not set
+  if (!this.country && this.address?.country) {
+    this.country = this.address.country;
+  }
+  
+  // Sync country from business info if not set
+  if (!this.country && this.businessInfo?.businessAddress?.country) {
+    this.country = this.businessInfo.businessAddress.country;
+  }
+  
+  // Monthly usage reset
   const now = new Date();
   const lastReset = this.monthlyUsage?.lastResetDate;
 
@@ -340,6 +384,7 @@ userSchema.pre('save', function (next) {
     this.monthlyUsage.lastResetDate = now;
   }
 
+  // Calculate account age
   if (this.createdAt) {
     const ageInDays = Math.floor((now - this.createdAt) / (1000 * 60 * 60 * 24));
     this.stats.accountAgeDays = ageInDays;
@@ -536,6 +581,117 @@ userSchema.methods.addAuditLog = function (action, description, ip, agent, metad
   }
 
   return this.save();
+};
+
+// ==================== KYC SPECIFIC METHODS ====================
+userSchema.methods.getVerificationMethod = function() {
+  const accountType = this.accountType || 'individual';
+  const country = this.country || this.address?.country || this.businessInfo?.businessAddress?.country;
+  
+  if (accountType === 'individual') {
+    return 'didit'; // Always DiDIT for individuals
+  }
+  
+  if (accountType === 'business') {
+    // Countries where DiDIT business verification works
+    const diditSupportedCountries = [
+      'United States', 'USA', 'United Kingdom', 'UK', 'Canada', 'Australia',
+      'Germany', 'France', 'Italy', 'Spain', 'Netherlands', 'Belgium',
+      'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Finland', 'Ireland',
+      'Austria', 'Portugal', 'Luxembourg'
+    ];
+    
+    if (country && diditSupportedCountries.includes(country)) {
+      return 'didit';
+    }
+    
+    return 'manual'; // Manual for unsupported countries
+  }
+  
+  return 'manual'; // Default to manual
+};
+
+userSchema.methods.requiresManualKYC = function() {
+  return this.getVerificationMethod() === 'manual' && 
+         this.accountType === 'business' && 
+         this.kycStatus?.status !== 'approved';
+};
+
+userSchema.methods.getKYCStatusDisplay = function() {
+  const status = this.kycStatus?.status || 'unverified';
+  const verificationMethod = this.kycStatus?.verificationMethod || this.getVerificationMethod();
+  
+  const statusMap = {
+    'unverified': { label: 'Not Started', color: 'gray' },
+    'pending': { 
+      label: verificationMethod === 'didit' ? 'Pending - Complete with DiDIT' : 'Pending - Upload Documents', 
+      color: 'yellow' 
+    },
+    'pending_documents': { label: 'Documents Required', color: 'blue' },
+    'in_progress': { 
+      label: verificationMethod === 'didit' ? 'In Progress - DiDIT' : 'In Progress - Manual Review', 
+      color: 'blue' 
+    },
+    'under_review': { label: 'Under Review', color: 'blue' },
+    'approved': { label: 'Verified', color: 'green' },
+    'rejected': { label: 'Rejected', color: 'red' },
+    'expired': { label: 'Expired', color: 'orange' }
+  };
+  
+  return statusMap[status] || { label: 'Unknown', color: 'gray' };
+};
+
+userSchema.methods.getRequiredDocuments = function() {
+  const country = this.country || this.address?.country || this.businessInfo?.businessAddress?.country || 'Global';
+  
+  const documentTemplates = {
+    'Nigeria': {
+      registration: 'CAC Certificate of Incorporation',
+      tax: 'Tax Identification Number (TIN)',
+      idType: 'NIN, Driver\'s License, or International Passport'
+    },
+    'Kenya': {
+      registration: 'Certificate of Incorporation',
+      tax: 'KRA PIN Certificate',
+      idType: 'National ID or Passport'
+    },
+    'Ghana': {
+      registration: 'Company Registration Certificate',
+      tax: 'TIN Certificate',
+      idType: 'Ghana Card or Passport'
+    },
+    'South Africa': {
+      registration: 'CIPC Registration Certificate',
+      tax: 'Tax Clearance Certificate',
+      idType: 'ID Book or Passport'
+    },
+    'United States': {
+      registration: 'Articles of Incorporation',
+      tax: 'EIN Confirmation Letter',
+      idType: 'Driver\'s License or Passport'
+    },
+    'USA': {
+      registration: 'Articles of Incorporation',
+      tax: 'EIN Confirmation Letter',
+      idType: 'Driver\'s License or Passport'
+    },
+    'United Kingdom': {
+      registration: 'Certificate of Incorporation',
+      tax: 'UTR (Unique Taxpayer Reference)',
+      idType: 'Passport or Driver\'s Licence'
+    },
+    'UK': {
+      registration: 'Certificate of Incorporation',
+      tax: 'UTR (Unique Taxpayer Reference)',
+      idType: 'Passport or Driver\'s Licence'
+    }
+  };
+  
+  return documentTemplates[country] || {
+    registration: 'Business Registration Certificate',
+    tax: 'Tax Identification Document',
+    idType: 'Government-issued ID or Passport'
+  };
 };
 
 module.exports = mongoose.model('User', userSchema);

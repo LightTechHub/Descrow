@@ -147,38 +147,45 @@ export const authService = {
     }
   },
 
-  /**
-   * 📧 Verify email - ✅ FIXED
-   */
-  async verifyEmail(token) {
-    try {
-      console.log('📧 Verifying email with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
-      
-      if (!token) {
-        throw new Error('Verification token is required');
-      }
+   // src/services/authService.js
 
-      // ✅ FIX: Send token as query parameter, not in body
-      const res = await api.post(`/auth/verify-email?token=${token}`);
-      
-      toast.success('✅ Email verified successfully! You can now log in.');
+async verifyEmail(token) {
+  try {
+    console.log('📧 Verifying email with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
 
-      const storedUser = this.getCurrentUser();
-      if (storedUser && storedUser.email === res.data.user?.email) {
-        localStorage.setItem(
-          'user',
-          JSON.stringify({ ...storedUser, verified: true })
-        );
-      }
-
-      return res.data;
-    } catch (err) {
-      console.error('❌ Verify email error:', err);
-      const errorMsg = err.response?.data?.message || 'Invalid or expired verification link.';
-      toast.error(errorMsg);
-      throw err.response?.data || { message: errorMsg };
+    if (!token || token === 'undefined' || token.trim() === '') {
+      throw new Error('Verification token is required');
     }
-  },
+
+    // NEW: Call the JSON-friendly endpoint
+    const res = await api.post('/auth/verify-email/verify', { token });
+
+    if (!res.data.success) {
+      throw new Error(res.data.message || 'Verification failed');
+    }
+
+    toast.success(res.data.message || 'Email verified successfully!');
+
+    // Update local user if we have a matching stored user
+    const storedUser = this.getCurrentUser();
+    if (storedUser && storedUser.email === res.data.user?.email) {
+      const updatedUser = { ...storedUser, verified: true };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      console.log('✅ Local user marked as verified');
+    }
+
+    return res.data;
+
+  } catch (err) {
+    console.error('❌ Verify email error:', err);
+    const errorMsg = err.response?.data?.message 
+      || err.message 
+      || 'Invalid or expired verification link. Please request a new one.';
+    
+    toast.error(errorMsg);
+    throw { message: errorMsg };
+  }
+},
 
   /**
    * 🔁 Resend verification email

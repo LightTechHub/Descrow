@@ -412,7 +412,6 @@ exports.register = async (req, res) => {
   }
 };
 
-',
   
   // ... other imports and code remain the same ...
 

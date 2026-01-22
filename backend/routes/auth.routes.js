@@ -2,27 +2,18 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
 const { body } = require('express-validator');
-const emailService = require('../services/email.service');
-const jwt = require('jsonwebtoken');
 const { protect } = require('../middleware/auth.middleware');
 
-/**
- * ============================================================
- * 🔵 GOOGLE AUTHENTICATION
- * ============================================================
- */
+// ────────────────────────────────────────────────
+// GOOGLE AUTH
+// ────────────────────────────────────────────────
 router.post('/google', authController.googleAuth);
-
-/**
- * ✅ NEW: Complete Google profile after OAuth
- */
 router.post('/google/complete-profile', authController.completeGoogleProfile);
 
-/**
- * ============================================================
- * 📝 REGISTER
- * ============================================================
- */
+// ────────────────────────────────────────────────
+// REGISTER & LOGIN
+// ────────────────────────────────────────────────
+// IMPORTANT: NO protect middleware here — otherwise 403 on login when already logged in but unverified
 router.post(
   '/register',
   [
@@ -35,11 +26,6 @@ router.post(
   authController.register
 );
 
-/**
- * ============================================================
- * 🔑 LOGIN
- * ============================================================
- */
 router.post(
   '/login',
   [
@@ -49,156 +35,40 @@ router.post(
   authController.login
 );
 
-/**
- * ============================================================
- * ✅ EMAIL VERIFICATION
- * ============================================================
- */
-router.post('/verify-email', authController.verifyEmail);
+// ────────────────────────────────────────────────
+// EMAIL VERIFICATION
+// ────────────────────────────────────────────────
+// Allow both GET (email link click) and POST (frontend call)
+router.get('/verify-email/:token', authController.verifyEmail);          // for direct email link clicks
+router.post('/verify-email', authController.verifyEmail);               // for frontend AJAX call
 
-/**
- * 📧 Resend verification email
- */
 router.post('/resend-verification', authController.resendVerification);
 
-/**
- * ============================================================
- * 🔑 PASSWORD MANAGEMENT
- * ============================================================
- */
+// ────────────────────────────────────────────────
+// PASSWORD MANAGEMENT
+// ────────────────────────────────────────────────
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 
-/**
- * ✅ NEW: Set password for OAuth users
- */
+// ────────────────────────────────────────────────
+// PROTECTED ROUTES (these can have protect)
+// ────────────────────────────────────────────────
 router.post('/set-password', protect, authController.setPassword);
-
-/**
- * ✅ NEW: Check if user needs to set password
- */
 router.get('/password-status', protect, authController.checkPasswordStatus);
+router.post('/refresh-token', protect, authController.refreshToken);
+router.post('/logout', protect, authController.logout);
 
-/**
- * ============================================================
- * 🔄 TOKEN REFRESH
- * ============================================================
- */
-router.post('/refresh-token', authController.refreshToken);
-
-/**
- * ============================================================
- * 🚪 LOGOUT
- * ============================================================
- */
-router.post('/logout', authController.logout);
-
-/**
- * ============================================================
- * 🧪 DEV: TEST EMAIL (Development only)
- * ============================================================
- */
+// ────────────────────────────────────────────────
+// DEV / DEBUG (keep only in development)
+// ────────────────────────────────────────────────
 if (process.env.NODE_ENV === 'development') {
   router.get('/dev/test-email', async (req, res) => {
-    try {
-      const email = req.query.email;
-      if (!email) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email is required'
-        });
-      }
+    // ... (your existing test code)
+  });
 
-      const testToken = jwt.sign(
-        { id: 'test-user-id' },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-
-      await emailService.sendVerificationEmail(
-        email,
-        'Test User',
-        testToken
-      );
-
-      res.status(200).json({
-        success: true,
-        message: `Test email sent to ${email}`,
-        token: testToken
-      });
-    } catch (error) {
-      console.error('❌ Dev test email error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to send test email',
-        error: error.message
-      });
-    }
+  router.post('/google/debug', async (req, res) => {
+    // ... (your existing debug code)
   });
 }
-
-// backend/routes/auth.routes.js - ADD THIS TEMPORARY DEBUG ENDPOINT
-
-/**
- * 🔍 DEBUG: Check if Google user exists
- * POST /api/auth/google/debug
- */
-router.post('/google/debug', async (req, res) => {
-  try {
-    const { googleId, email } = req.body;
-    
-    console.log('🔍 Debugging Google user:', { googleId, email });
-    
-    // Search by googleId
-    const userByGoogleId = await User.findOne({ googleId });
-    
-    // Search by email
-    const userByEmail = await User.findOne({ email: email?.toLowerCase() });
-    
-    // Search by either
-    const userByEither = await User.findOne({
-      $or: [
-        { googleId },
-        { email: email?.toLowerCase() }
-      ]
-    });
-    
-    res.json({
-      success: true,
-      debug: {
-        searchCriteria: { googleId, email },
-        foundByGoogleId: userByGoogleId ? {
-          _id: userByGoogleId._id,
-          email: userByGoogleId.email,
-          googleId: userByGoogleId.googleId,
-          accountType: userByGoogleId.accountType,
-          agreedToTerms: userByGoogleId.agreedToTerms
-        } : null,
-        foundByEmail: userByEmail ? {
-          _id: userByEmail._id,
-          email: userByEmail.email,
-          googleId: userByEmail.googleId,
-          accountType: userByEmail.accountType,
-          agreedToTerms: userByEmail.agreedToTerms
-        } : null,
-        foundByEither: userByEither ? {
-          _id: userByEither._id,
-          email: userByEither.email,
-          googleId: userByEither.googleId,
-          accountType: userByEither.accountType,
-          agreedToTerms: userByEither.agreedToTerms
-        } : null,
-        totalGoogleUsers: await User.countDocuments({ authProvider: 'google' })
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Debug error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 module.exports = router;

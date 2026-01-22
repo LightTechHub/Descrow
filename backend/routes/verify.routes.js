@@ -70,4 +70,49 @@ function renderTemplate(title, body) {
   `;
 }
 
+// backend/routes/verify.routes.js  (add below the existing GET /:token)
+
+// NEW: JSON endpoint for frontend/AJAX verification
+router.post('/verify', async (req, res) => {
+  const { token } = req.body;   // or req.query.token if you prefer query
+
+  if (!token) {
+    return res.status(400).json({ success: false, message: 'Token is required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.verified) {
+      return res.status(200).json({
+        success: true,
+        message: 'Email already verified',
+        alreadyVerified: true,
+        user: { id: user._id, email: user.email, verified: user.verified }
+      });
+    }
+
+    user.verified = true;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email verified successfully',
+      user: { id: user._id, email: user.email, verified: user.verified }
+    });
+  } catch (err) {
+    console.error('JSON verification failed:', err.message);
+    let message = 'Invalid or expired token';
+    if (err.name === 'TokenExpiredError') message = 'Verification link expired';
+    if (err.name === 'JsonWebTokenError') message = 'Invalid verification token';
+
+    return res.status(400).json({ success: false, message });
+  }
+});
+
 module.exports = router;

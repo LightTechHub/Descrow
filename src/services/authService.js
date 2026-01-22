@@ -157,8 +157,8 @@ async verifyEmail(token) {
       throw new Error('Verification token is required');
     }
 
-    // NEW: Call the JSON-friendly endpoint
-    const res = await api.post('/auth/verify-email/verify', { token });
+    // FIXED: Use POST with token in body (matches new backend support)
+    const res = await api.post('/auth/verify-email', { token });
 
     if (!res.data.success) {
       throw new Error(res.data.message || 'Verification failed');
@@ -166,7 +166,7 @@ async verifyEmail(token) {
 
     toast.success(res.data.message || 'Email verified successfully!');
 
-    // Update local user if we have a matching stored user
+    // Update local storage user
     const storedUser = this.getCurrentUser();
     if (storedUser && storedUser.email === res.data.user?.email) {
       const updatedUser = { ...storedUser, verified: true };

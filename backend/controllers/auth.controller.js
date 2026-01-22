@@ -412,9 +412,12 @@ exports.register = async (req, res) => {
   }
 };
 
+',
+  
+  // ... other imports and code remain the same ...
+
 /* ============================================================
-   LOGIN (FIXED VERIFICATION CHECK)
-   ✅ FIXED: Checks both verified flag AND verifiedAt timestamp
+   LOGIN (enhanced debug info when unverified)
 ============================================================ */
 exports.login = async (req, res) => {
   try {
@@ -438,7 +441,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Check both verified flag AND verification timestamp
     const isActuallyVerified = user.verified && user.verifiedAt;
 
     if (!isActuallyVerified) {
@@ -446,14 +448,20 @@ exports.login = async (req, res) => {
         success: false,
         message: 'Please verify your email first',
         requiresVerification: true,
-        email: user.email
+        email: user.email,
+        // FIXED: added debug info (remove in production if you want)
+        debug: {
+          verifiedFlag: user.verified,
+          hasVerifiedAt: !!user.verifiedAt,
+          status: user.status
+        }
       });
     }
 
     if (!user.isActive || user.status === 'suspended') {
       return res.status(403).json({
         success: false,
-        message: 'Account is suspended'
+        message: 'Account is suspended or inactive'
       });
     }
 
@@ -465,8 +473,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Update last login
-    await User.findByIdAndUpdate(user._id, { lastLogin: new Date() }, { runValidators: false });
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
 
     const token = generateToken(user._id, user.email);
 
@@ -486,7 +494,7 @@ exports.login = async (req, res) => {
         kycStatus: user.kycStatus,
         accountType: user.accountType,
         businessInfo: user.businessInfo,
-        hasBankAccount: user.hasBankAccount
+        hasBankAccount: user.hasBankAccount || false
       }
     });
 
@@ -501,22 +509,19 @@ exports.login = async (req, res) => {
 };
 
 /* ============================================================
-   VERIFY EMAIL (FIXED - SETS BOTH verified AND verifiedAt)
-   ✅ FIXED: Sets verifiedAt timestamp to prevent verification loop
+   VERIFY EMAIL (always set verifiedAt)
 ============================================================ */
 exports.verifyEmail = async (req, res) => {
   try {
+    // Support token from query, params or body
     const token = req.query.token || req.params.token || req.body.token;
 
-    if (!token || token === 'undefined' || token.trim() === '') {
-      console.log('❌ Missing or invalid token:', token);
+    if (!token || token === 'undefined' || !token.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Verification token is required'
       });
     }
-
-    console.log('📧 Verifying email with token:', token.substring(0, 20) + '...');
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
@@ -536,35 +541,34 @@ exports.verifyEmail = async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Set BOTH verified flag AND verifiedAt timestamp
-    user.verified = true;
+    // FIXED: always set both fields
+    user.verified   = true;
     user.verifiedAt = new Date();
-    user.status = 'active'; // Ensure status is active
-    
-    await user.save();
+    user.status     = 'active';
 
-    console.log('✅ Email verified successfully for user:', user.email);
+    await user.save();
 
     res.status(200).json({
       success: true,
-      message: 'Email verified successfully'
+      message: 'Email verified successfully',
+      user: { email: user.email, verified: true }
     });
 
   } catch (error) {
     console.error('❌ Verify email error:', error);
 
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification link has expired',
+        expired: true
+      });
+    }
+
     if (error.name === 'JsonWebTokenError') {
       return res.status(400).json({
         success: false,
         message: 'Invalid verification token'
-      });
-    }
-
-    if (error.name === 'TokenExpiredError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Verification token has expired',
-        expired: true
       });
     }
 
@@ -574,6 +578,8 @@ exports.verifyEmail = async (req, res) => {
     });
   }
 };
+
+// ... rest of the file remains unchanged ...
 
 /* ============================================================
    RESEND VERIFICATION

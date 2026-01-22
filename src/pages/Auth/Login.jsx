@@ -1,4 +1,4 @@
-// src/pages/Auth/Login.jsx - SMART LOGIN
+// src/pages/Auth/Login.jsx - FIXED
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Loader, AlertCircle } from 'lucide-react';
@@ -43,34 +43,15 @@ const Login = () => {
           return;
         }
         
-        // Check KYC status and redirect accordingly
-        await handlePostLoginRedirect(response.user);
+        // ✅ Google users are auto-verified, just go to dashboard
+        toast.success('Welcome back!');
+        navigate('/dashboard');
       }
     } catch (error) {
       toast.error('Google login failed');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handlePostLoginRedirect = async (user) => {
-    // Check if email is verified
-    if (!user.isEmailVerified) {
-      toast.error('Please verify your email first');
-      navigate('/verify-email', { state: { email: user.email } });
-      return;
-    }
-
-    // Check KYC status
-    if (!user.kycVerified) {
-      toast.success('Welcome! Please complete verification to access all features.');
-      navigate('/kyc-verification');
-      return;
-    }
-
-    // All good - go to dashboard
-    toast.success('Welcome back!');
-    navigate('/dashboard');
   };
 
   const handleSubmit = async (e) => {
@@ -89,12 +70,27 @@ const Login = () => {
         password: formData.password
       });
 
+      // ✅ FIX: If backend returns success, they're already verified!
       if (response.success) {
-        await handlePostLoginRedirect(response.user);
+        toast.success('Welcome back!');
+        navigate('/dashboard');
       }
 
     } catch (error) {
       console.error('Login error:', error);
+      
+      // ✅ Handle specific error codes from backend
+      if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        toast.error('Please verify your email first');
+        navigate('/verify-email', { 
+          state: { 
+            email: formData.email,
+            requiresVerification: true 
+          } 
+        });
+        return;
+      }
+
       const errorMessage = error.response?.data?.message || 'Login failed';
       toast.error(errorMessage);
     } finally {

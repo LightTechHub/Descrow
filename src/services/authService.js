@@ -1,4 +1,4 @@
-// src/services/authService.js - COMPLETE FIXED VERSION
+// src/services/authService.js - FINAL FIXED VERSION
 import api from '../config/api';
 import { toast } from 'react-hot-toast';
 
@@ -23,7 +23,7 @@ export const authService = {
   },
 
   /**
-   * 🔑 Login user
+   * 🔑 Login user - FIXED: Backend handles verification check
    */
   async login(credentials) {
     try {
@@ -33,6 +33,7 @@ export const authService = {
       
       console.log('📦 Backend response:', res.data);
 
+      // ✅ FIX: If backend returns success, user is verified!
       if (!res.data.success) {
         const errorMsg = res.data.message || 'Login failed';
         toast.error(errorMsg);
@@ -44,24 +45,12 @@ export const authService = {
         throw new Error('No user data in response');
       }
 
-      if (!res.data.user.verified) {
-        console.warn('⚠️ User not verified');
-        localStorage.setItem('user', JSON.stringify(res.data.user));
-        toast.error('Your email is not verified yet. Please check your inbox.');
-        
-        return {
-          success: false,
-          message: 'Email not verified',
-          user: res.data.user,
-          requiresVerification: true
-        };
-      }
-
       if (!res.data.token) {
         toast.error('Authentication token missing');
         throw new Error('No token in response');
       }
 
+      // ✅ Save credentials (backend already verified email)
       console.log('✅ Saving token and user to localStorage');
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
@@ -73,6 +62,18 @@ export const authService = {
 
     } catch (err) {
       console.error('❌ authService.login error:', err);
+      
+      // ✅ FIX: Backend returns 403 with specific code for unverified users
+      if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        // DON'T save anything to localStorage
+        throw {
+          code: 'EMAIL_NOT_VERIFIED',
+          message: err.response.data.message,
+          email: err.response.data.email,
+          requiresVerification: true
+        };
+      }
+
       const errorMessage = err.response?.data?.message || err.message || 'Invalid credentials.';
       toast.error(errorMessage);
       throw err.response?.data || { message: errorMessage };
@@ -95,7 +96,7 @@ export const authService = {
       // ✅ Check if profile completion is required
       if (res.data.requiresProfileCompletion) {
         console.log('📝 Profile completion required');
-        return res.data; // Return to frontend for profile completion
+        return res.data;
       }
 
       // ✅ Existing user - save token and user
@@ -130,7 +131,6 @@ export const authService = {
         throw new Error(errorMsg);
       }
 
-      // Save token and user data
       if (res.data.token && res.data.user) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
@@ -147,45 +147,45 @@ export const authService = {
     }
   },
 
-   // src/services/authService.js
+  /**
+   * 📧 Verify email
+   */
+  async verifyEmail(token) {
+    try {
+      console.log('📧 Verifying email with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
 
-async verifyEmail(token) {
-  try {
-    console.log('📧 Verifying email with token:', token ? token.substring(0, 20) + '...' : 'MISSING');
+      if (!token || token === 'undefined' || token.trim() === '') {
+        throw new Error('Verification token is required');
+      }
 
-    if (!token || token === 'undefined' || token.trim() === '') {
-      throw new Error('Verification token is required');
+      const res = await api.post('/auth/verify-email', { token });
+
+      if (!res.data.success) {
+        throw new Error(res.data.message || 'Verification failed');
+      }
+
+      toast.success(res.data.message || 'Email verified successfully!');
+
+      // Update local storage user
+      const storedUser = this.getCurrentUser();
+      if (storedUser && storedUser.email === res.data.user?.email) {
+        const updatedUser = { ...storedUser, verified: true };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        console.log('✅ Local user marked as verified');
+      }
+
+      return res.data;
+
+    } catch (err) {
+      console.error('❌ Verify email error:', err);
+      const errorMsg = err.response?.data?.message 
+        || err.message 
+        || 'Invalid or expired verification link. Please request a new one.';
+      
+      toast.error(errorMsg);
+      throw { message: errorMsg };
     }
-
-    // FIXED: Use POST with token in body (matches new backend support)
-    const res = await api.post('/auth/verify-email', { token });
-
-    if (!res.data.success) {
-      throw new Error(res.data.message || 'Verification failed');
-    }
-
-    toast.success(res.data.message || 'Email verified successfully!');
-
-    // Update local storage user
-    const storedUser = this.getCurrentUser();
-    if (storedUser && storedUser.email === res.data.user?.email) {
-      const updatedUser = { ...storedUser, verified: true };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      console.log('✅ Local user marked as verified');
-    }
-
-    return res.data;
-
-  } catch (err) {
-    console.error('❌ Verify email error:', err);
-    const errorMsg = err.response?.data?.message 
-      || err.message 
-      || 'Invalid or expired verification link. Please request a new one.';
-    
-    toast.error(errorMsg);
-    throw { message: errorMsg };
-  }
-},
+  },
 
   /**
    * 🔁 Resend verification email
@@ -220,7 +220,7 @@ async verifyEmail(token) {
   },
 
   /**
-   * 🔁 Reset password - ✅ FIXED
+   * 🔁 Reset password
    */
   async resetPassword(token, password) {
     try {
@@ -234,7 +234,6 @@ async verifyEmail(token) {
         throw new Error('Password must be at least 8 characters');
       }
 
-      // ✅ FIX: Send token as query parameter, password in body
       const res = await api.post(`/auth/reset-password?token=${token}`, { password });
       
       toast.success('✅ Password reset successful! You can now log in.');
@@ -262,22 +261,18 @@ async verifyEmail(token) {
 
   /**
    * 👤 Get current logged-in user
-   * ✅ FIXED: Safe JSON parsing with error handling
    */
   getCurrentUser() {
     const userStr = localStorage.getItem('user');
     
-    // ✅ Check if user exists and is not "undefined" string
     if (!userStr || userStr === 'undefined' || userStr === 'null') {
       return null;
     }
     
-    // ✅ Safe JSON parse with error handling
     try {
       return JSON.parse(userStr);
     } catch (error) {
       console.error('❌ Error parsing user data:', error);
-      // Clear corrupted data
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       return null;

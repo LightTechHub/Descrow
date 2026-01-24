@@ -31,8 +31,30 @@ const Login = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
+      
+      // ✅ FIX: Decode Google JWT token to get user data
+      const credential = credentialResponse.credential;
+      
+      // Decode JWT token (it's base64 encoded)
+      const base64Url = credential.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      
+      const googleUser = JSON.parse(jsonPayload);
+      
+      console.log('📦 Google user data:', googleUser);
+      
+      // ✅ Send properly formatted data to backend
       const response = await authService.googleAuth({
-        credential: credentialResponse.credential
+        googleId: googleUser.sub,          // Google user ID
+        email: googleUser.email,
+        name: googleUser.name,
+        picture: googleUser.picture
       });
       
       if (response.success) {
@@ -45,11 +67,13 @@ const Login = () => {
         
         // Google users are auto-verified, go to dashboard
         toast.success('Welcome back!');
-        navigate('/dashboard');
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 500);
       }
     } catch (error) {
       console.error('Google login error:', error);
-      toast.error('Google login failed');
+      toast.error('Google login failed. Please try again.');
     } finally {
       setLoading(false);
     }

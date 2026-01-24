@@ -1,4 +1,4 @@
-// src/pages/Auth/Login.jsx - FIXED
+// src/pages/Auth/Login.jsx - COMPLETE & FIXED
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, Loader, AlertCircle } from 'lucide-react';
@@ -43,11 +43,12 @@ const Login = () => {
           return;
         }
         
-        // ✅ Google users are auto-verified, just go to dashboard
+        // Google users are auto-verified, go to dashboard
         toast.success('Welcome back!');
         navigate('/dashboard');
       }
     } catch (error) {
+      console.error('Google login error:', error);
       toast.error('Google login failed');
     } finally {
       setLoading(false);
@@ -70,7 +71,7 @@ const Login = () => {
         password: formData.password
       });
 
-      // ✅ FIX: If backend returns success, they're already verified!
+      // If backend returns success, user is verified
       if (response.success) {
         toast.success('Welcome back!');
         navigate('/dashboard');
@@ -79,8 +80,8 @@ const Login = () => {
     } catch (error) {
       console.error('Login error:', error);
       
-      // ✅ Handle specific error codes from backend
-      if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+      // Handle specific error codes from backend
+      if (error.code === 'EMAIL_NOT_VERIFIED') {
         toast.error('Please verify your email first');
         navigate('/verify-email', { 
           state: { 
@@ -91,7 +92,7 @@ const Login = () => {
         return;
       }
 
-      const errorMessage = error.response?.data?.message || 'Login failed';
+      const errorMessage = error.message || 'Login failed';
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -238,59 +239,6 @@ const Login = () => {
       </div>
     </div>
   );
-};
-
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  try {
-    setLoading(true);
-    
-    console.log('🔐 Attempting login with:', formData.email);
-
-    const response = await authService.login({
-      email: formData.email,
-      password: formData.password
-    });
-
-    // ✅ ADD THIS DEBUG LOG
-    console.log('📦 Login response:', {
-      success: response.success,
-      hasToken: !!response.token,
-      hasUser: !!response.user,
-      userVerified: response.user?.verified,
-      fullResponse: response
-    });
-
-    if (response.success) {
-      toast.success('Welcome back!');
-      navigate('/dashboard');
-    }
-
-  } catch (error) {
-    // ✅ ADD THIS DEBUG LOG
-    console.error('❌ Login error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-    
-    if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-      toast.error('Please verify your email first');
-      navigate('/verify-email', { 
-        state: { 
-          email: formData.email,
-          requiresVerification: true 
-        } 
-      });
-      return;
-    }
-
-    const errorMessage = error.response?.data?.message || 'Login failed';
-    toast.error(errorMessage);
-  } finally {
-    setLoading(false);
-  }
 };
 
 export default Login;

@@ -41,24 +41,26 @@ exports.googleAuth = async (req, res) => {
       });
     }
 
-    // ✅ Check if user exists by googleId OR email
+    // ✅ Check if user exists with complete profile
     let user = await User.findOne({
       $or: [
         { googleId },
         { email: email.toLowerCase() }
-      ]
+      ],
+      agreedToTerms: true,
+      phone: { $exists: true, $ne: null }
     });
 
-    // ✅ CASE 1: Existing user found
+    // ✅ CASE 1: Existing complete user - LOGIN
     if (user) {
-      // If found by email but no googleId, link the accounts
+      // Link Google ID if not already linked
       if (!user.googleId && user.email === email.toLowerCase()) {
-        console.log('🔗 Linking existing email account to Google:', email);
+        console.log('🔗 Linking existing account to Google:', email);
         user.googleId = googleId;
-        user.authProvider = 'google';
-        user.verified = true; // Google emails are pre-verified
-        user.verifiedAt = new Date();
-        user.profilePicture = picture;
+        user.authProvider = 'both';
+        user.verified = true;
+        user.verifiedAt = user.verifiedAt || new Date();
+        user.profilePicture = picture || user.profilePicture;
         await user.save();
       }
 
@@ -80,6 +82,7 @@ exports.googleAuth = async (req, res) => {
         message: 'Login successful',
         token,
         user: {
+          id: user._id,
           _id: user._id,
           name: user.name,
           email: user.email,
@@ -87,37 +90,35 @@ exports.googleAuth = async (req, res) => {
           verified: user.verified,
           isKYCVerified: user.isKYCVerified,
           profilePicture: user.profilePicture,
+          role: user.role,
+          tier: user.tier,
           businessInfo: user.accountType === 'business' ? user.businessInfo : undefined
         }
       });
     }
 
-    // ✅ CASE 2: New user - Create temporary user and require profile completion
-    console.log('👤 New Google user, creating temporary account:', email);
+    // ✅ CASE 2: New user OR incomplete profile - Requires profile completion
+    console.log('👤 New Google user, requires profile completion:', email);
 
-    // Create temporary user with googleId
-    const tempUser = await User.create({
-      googleId,
-      email: email.toLowerCase(),
-      name,
-      profilePicture: picture,
-      authProvider: 'google',
-      verified: true, // Google emails are pre-verified
-      verifiedAt: new Date(),
-      role: 'dual',
-      tier: 'free',
-      status: 'active',
-      // ✅ Mark as incomplete profile
-      agreedToTerms: false,
-      accountType: 'individual' // Default, will be updated in complete-profile
+    // Check if there's an incomplete temp user
+    const tempUser = await User.findOne({
+      $or: [
+        { googleId },
+        { email: email.toLowerCase() }
+      ]
     });
 
-    console.log('✅ Temporary Google user created:', tempUser._id);
+    if (tempUser && !tempUser.agreedToTerms) {
+      // Delete incomplete temp user to start fresh
+      console.log('🗑️ Removing incomplete temp user');
+      await User.findByIdAndDelete(tempUser._id);
+    }
 
+    // Return profile completion requirement
     return res.json({
       success: true,
       requiresProfileCompletion: true,
-      message: 'Please complete your profile',
+      message: 'Please complete your profile to continue',
       googleData: {
         googleId,
         email,
@@ -138,7 +139,7 @@ exports.googleAuth = async (req, res) => {
 
 /* ============================================================
    GOOGLE AUTH - COMPLETE PROFILE (FIXED VERSION)
-   ✅ FIXED: Looks up user by both googleId AND email
+   ✅ Creates user with password from profile completion
 ============================================================ */
 exports.completeGoogleProfile = async (req, res) => {
   try {
@@ -146,8 +147,8 @@ exports.completeGoogleProfile = async (req, res) => {
       googleId,
       name,
       email,
-      password,        // ✅ NEW
-      confirmPassword, // ✅ NEW
+      password,
+      confirmPassword,
       phone,
       country,
       accountType,
@@ -159,9 +160,9 @@ exports.completeGoogleProfile = async (req, res) => {
       picture
     } = req.body;
 
-    console.log('📝 Completing Google profile with accountType:', accountType);
+    console.log('📝 Completing Google profile for:', email);
 
-    // Validation
+    // ✅ Validation
     if (!googleId || !email) {
       return res.status(400).json({
         success: false,
@@ -169,15 +170,7 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    // ✅ Password validation
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password is required for security'
-      });
-    }
-
-    if (password.length < 8) {
+    if (!password || password.length < 8) {
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 8 characters'
@@ -188,6 +181,20 @@ exports.completeGoogleProfile = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Passwords do not match'
+      });
+    }
+
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is required'
+      });
+    }
+
+    if (!country) {
+      return res.status(400).json({
+        success: false,
+        message: 'Country is required'
       });
     }
 
@@ -205,15 +212,28 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    if (accountType === 'business') {
-      if (!companyName) {
-        return res.status(400).json({
-          success: false,
-          message: 'Company name is required for business accounts'
-        });
-      }
+    if (accountType === 'business' && !companyName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company name is required for business accounts'
+      });
     }
 
+    // ✅ Check if user already exists with complete profile
+    const existingCompleteUser = await User.findOne({
+      email: email.toLowerCase(),
+      agreedToTerms: true,
+      phone: { $exists: true, $ne: null }
+    });
+
+    if (existingCompleteUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User profile already completed. Please login instead.'
+      });
+    }
+
+    // ✅ Find the temporary/incomplete Google user
     let user = await User.findOne({
       $or: [
         { googleId },
@@ -222,25 +242,31 @@ exports.completeGoogleProfile = async (req, res) => {
     });
 
     if (!user) {
-      console.error('❌ User not found for Google OAuth:', { googleId, email });
+      console.error('❌ Temporary user not found for:', { googleId, email });
       return res.status(404).json({
         success: false,
-        message: 'User not found. Please sign up again.'
+        message: 'Session expired. Please sign in with Google again.'
       });
     }
 
-    // ✅ Update user with complete profile INCLUDING password
+    // ✅ Update user with complete profile data INCLUDING password
+    console.log('📝 Updating user profile with password...');
+    
     user.name = name;
-    user.password = password; // ✅ Will be hashed by pre-save hook
+    user.password = password; // ✅ Will be hashed by pre-save middleware
     user.phone = phone;
     user.address = { country };
     user.accountType = accountType;
     user.agreedToTerms = true;
     user.agreedToTermsAt = new Date();
-    user.profilePicture = picture;
+    user.profilePicture = picture || user.profilePicture;
     user.googleId = googleId;
-    user.authProvider = 'both'; // ✅ Can use both Google AND password
+    user.authProvider = 'both'; // Can use both Google AND password
+    user.verified = true; // Google users are pre-verified
+    user.verifiedAt = new Date();
+    user.status = 'active';
 
+    // ✅ Add business info if business account
     if (accountType === 'business') {
       user.businessInfo = {
         companyName,
@@ -251,35 +277,52 @@ exports.completeGoogleProfile = async (req, res) => {
         businessPhone: phone
       };
       
-      console.log('✅ Business info populated:', {
+      console.log('✅ Business info set:', {
         companyName,
         companyType,
         industry
       });
     }
 
+    // ✅ Save user (password will be hashed automatically)
     await user.save();
 
+    console.log('✅ Profile completed successfully for:', email);
+
+    // ✅ Generate JWT token
     const token = jwt.sign(
       { id: user._id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    console.log('✅ Profile completed for', accountType, 'account:', user.email);
+    // ✅ Send welcome email
+    try {
+      await emailService.sendWelcomeEmail(user.email, user.name, {
+        accountType: user.accountType,
+        companyName: user.businessInfo?.companyName
+      });
+    } catch (emailError) {
+      console.error('⚠️ Failed to send welcome email:', emailError.message);
+      // Don't fail the request if email fails
+    }
 
-    res.json({
+    // ✅ Return success with token and user data
+    return res.json({
       success: true,
       message: 'Profile completed successfully',
       token,
       user: {
+        id: user._id,
         _id: user._id,
         name: user.name,
         email: user.email,
         accountType: user.accountType,
         verified: user.verified,
-        isKYCVerified: user.isKYCVerified,
+        isKYCVerified: user.isKYCVerified || false,
         tier: user.tier,
+        role: user.role,
+        profilePicture: user.profilePicture,
         businessInfo: accountType === 'business' ? user.businessInfo : undefined
       }
     });
@@ -288,11 +331,16 @@ exports.completeGoogleProfile = async (req, res) => {
     console.error('❌ Complete Google profile error:', error);
     
     let errorMessage = 'Failed to complete profile';
+    
+    // Handle specific errors
     if (error.code === 11000) {
-      errorMessage = 'This email is already registered with a different account';
+      errorMessage = 'This email is already registered';
+    } else if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      errorMessage = messages.join(', ');
     }
     
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.message : undefined

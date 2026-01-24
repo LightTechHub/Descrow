@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  Shield, User, Building2, Mail, Lock, Eye, EyeOff,
-  Phone, Globe, CheckCircle, Loader, ArrowRight, AlertCircle
+  Shield, User, Building2, Eye, EyeOff,
+  CheckCircle, Loader, ArrowRight, AlertCircle
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { GoogleLogin } from '@react-oauth/google';
@@ -54,8 +54,13 @@ const UnifiedSignup = () => {
   ];
 
   const countries = [
-    'United States', 'United Kingdom', 'Canada', 'Australia',
-    'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'India', 'Singapore'
+    { code: 'US', name: 'United States' },
+    { code: 'NG', name: 'Nigeria' },
+    { code: 'GB', name: 'United Kingdom' },
+    { code: 'CA', name: 'Canada' },
+    { code: 'GH', name: 'Ghana' },
+    { code: 'KE', name: 'Kenya' },
+    { code: 'ZA', name: 'South Africa' }
   ];
 
   const validateField = (name, value) => {
@@ -151,10 +156,10 @@ const UnifiedSignup = () => {
       
       // ✅ Send correct format to backend
       const response = await authService.googleAuth({
-        googleId: decoded.sub,           // ✅ Google user ID
-        email: decoded.email,            // ✅ Email
-        name: decoded.name,              // ✅ Full name
-        picture: decoded.picture         // ✅ Profile picture
+        googleId: decoded.sub,
+        email: decoded.email,
+        name: decoded.name,
+        picture: decoded.picture
       });
       
       if (response.success) {
@@ -394,6 +399,103 @@ const UnifiedSignup = () => {
           {/* Form Steps */}
           <form onSubmit={handleSubmit} className="space-y-4">
             
+            {/* BUSINESS STEP 1: Company Info */}
+            {accountType === 'business' && step === 1 && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Company Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="companyName"
+                    value={formData.companyName}
+                    onChange={handleChange}
+                    placeholder="Acme Corp"
+                    required
+                    disabled={loading}
+                    className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
+                      errors.companyName ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                    } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
+                  />
+                  {errors.companyName && <p className="mt-1 text-sm text-red-600">{errors.companyName}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Industry *
+                  </label>
+                  <select
+                    name="industry"
+                    value={formData.industry}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                    className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
+                      errors.industry ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                    } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
+                  >
+                    <option value="">Select Industry</option>
+                    {industries.map(ind => (
+                      <option key={ind.value} value={ind.value}>{ind.label}</option>
+                    ))}
+                  </select>
+                  {errors.industry && <p className="mt-1 text-sm text-red-600">{errors.industry}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Company Type
+                    </label>
+                    <select
+                      name="companyType"
+                      value={formData.companyType}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                    >
+                      <option value="">Select</option>
+                      <option value="LLC">LLC</option>
+                      <option value="Corporation">Corporation</option>
+                      <option value="Partnership">Partnership</option>
+                      <option value="Sole Proprietorship">Sole Proprietorship</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Registration Number
+                    </label>
+                    <input
+                      type="text"
+                      name="registrationNumber"
+                      value={formData.registrationNumber}
+                      onChange={handleChange}
+                      placeholder="Optional"
+                      disabled={loading}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Tax ID
+                  </label>
+                  <input
+                    type="text"
+                    name="taxId"
+                    value={formData.taxId}
+                    onChange={handleChange}
+                    placeholder="Optional"
+                    disabled={loading}
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+                  />
+                </div>
+              </>
+            )}
+
             {/* INDIVIDUAL OR BUSINESS STEP 2: Personal Info */}
             {(accountType === 'individual' || (accountType === 'business' && step === 2)) && (
               <>
@@ -470,7 +572,9 @@ const UnifiedSignup = () => {
                       } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                     >
                       <option value="">Select</option>
-                      {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                      {countries.map(c => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -496,6 +600,7 @@ const UnifiedSignup = () => {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-4 top-1/2 -translate-y-1/2"
+                      disabled={loading}
                     >
                       {showPassword ? <EyeOff className="w-5 h-5 text-gray-400" /> : <Eye className="w-5 h-5 text-gray-400" />}
                     </button>
@@ -515,4 +620,92 @@ const UnifiedSignup = () => {
                     placeholder="Repeat password"
                     required
                     disabled={loading}
-                    className={`w-full px-4 py-3 
+                    className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
+                      errors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                    } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
+                  />
+                  {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
+                </div>
+              </>
+            )}
+
+            {/* STEP 3 or INDIVIDUAL: Terms & Submit */}
+            {(accountType === 'individual' || (accountType === 'business' && step === 3)) && (
+              <>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    name="agreedToTerms"
+                    id="terms"
+                    checked={formData.agreedToTerms}
+                    onChange={handleChange}
+                    disabled={loading}
+                    className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <label htmlFor="terms" className="text-sm text-gray-600 dark:text-gray-400">
+                    I agree to the <Link to="/terms" className="text-blue-600 hover:underline">Terms & Conditions</Link> and <Link to="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !formData.agreedToTerms}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <Loader className="w-5 h-5 animate-spin" />
+                      Creating Account...
+                    </>
+                  ) : (
+                    <>
+                      Create Account
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+
+            {/* Business Navigation Buttons */}
+            {accountType === 'business' && step < 3 && (
+              <div className="flex gap-4">
+                {step > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep(prev => prev - 1)}
+                    disabled={loading}
+                    className="flex-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-semibold py-3 px-6 rounded-lg transition disabled:opacity-50"
+                  >
+                    Back
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
+                >
+                  {loading ? (
+                    <Loader className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      Next
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </form>
+
+          {/* Login Link */}
+          <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+            Already have an account? <Link to="/login" className="text-blue-600 hover:underline font-medium">Log In</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UnifiedSignup;

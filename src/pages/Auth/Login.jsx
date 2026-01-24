@@ -74,7 +74,11 @@ const Login = () => {
       // If backend returns success, user is verified
       if (response.success) {
         toast.success('Welcome back!');
-        navigate('/dashboard');
+        
+        // ✅ FIX: Force redirect with window.location instead of navigate
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 500);
       }
 
     } catch (error) {
@@ -83,12 +87,9 @@ const Login = () => {
       // Handle specific error codes from backend
       if (error.code === 'EMAIL_NOT_VERIFIED') {
         toast.error('Please verify your email first');
-        navigate('/verify-email', { 
-          state: { 
-            email: formData.email,
-            requiresVerification: true 
-          } 
-        });
+        setTimeout(() => {
+          window.location.href = '/verify-email';
+        }, 500);
         return;
       }
 

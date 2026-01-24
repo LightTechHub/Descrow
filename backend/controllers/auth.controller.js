@@ -146,6 +146,8 @@ exports.completeGoogleProfile = async (req, res) => {
       googleId,
       name,
       email,
+      password,        // ✅ NEW
+      confirmPassword, // ✅ NEW
       phone,
       country,
       accountType,
@@ -167,6 +169,28 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
+    // ✅ Password validation
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required for security'
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters'
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Passwords do not match'
+      });
+    }
+
     if (!agreedToTerms) {
       return res.status(400).json({
         success: false,
@@ -174,7 +198,6 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    // ✅ Validate accountType
     if (!accountType || !['individual', 'business'].includes(accountType)) {
       return res.status(400).json({
         success: false,
@@ -182,7 +205,6 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    // ✅ Business validation
     if (accountType === 'business') {
       if (!companyName) {
         return res.status(400).json({
@@ -192,7 +214,6 @@ exports.completeGoogleProfile = async (req, res) => {
       }
     }
 
-    // ✅ FIXED: Find user by googleId OR email (not just googleId)
     let user = await User.findOne({
       $or: [
         { googleId },
@@ -208,17 +229,18 @@ exports.completeGoogleProfile = async (req, res) => {
       });
     }
 
-    // ✅ Update user with complete profile data
+    // ✅ Update user with complete profile INCLUDING password
     user.name = name;
+    user.password = password; // ✅ Will be hashed by pre-save hook
     user.phone = phone;
     user.address = { country };
-    user.accountType = accountType; // ✅ CRITICAL: Save account type
+    user.accountType = accountType;
     user.agreedToTerms = true;
     user.agreedToTermsAt = new Date();
     user.profilePicture = picture;
-    user.googleId = googleId; // Ensure googleId is set
+    user.googleId = googleId;
+    user.authProvider = 'both'; // ✅ Can use both Google AND password
 
-    // ✅ If business account, populate businessInfo
     if (accountType === 'business') {
       user.businessInfo = {
         companyName,
@@ -238,7 +260,6 @@ exports.completeGoogleProfile = async (req, res) => {
 
     await user.save();
 
-    // ✅ Generate JWT token
     const token = jwt.sign(
       { id: user._id, email: user.email },
       process.env.JWT_SECRET,
@@ -255,7 +276,7 @@ exports.completeGoogleProfile = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
-        accountType: user.accountType, // ✅ Include in response
+        accountType: user.accountType,
         verified: user.verified,
         isKYCVerified: user.isKYCVerified,
         tier: user.tier,
@@ -278,7 +299,6 @@ exports.completeGoogleProfile = async (req, res) => {
     });
   }
 };
-
 /* ============================================================
    REGISTER (UNIVERSAL - SUPPORTS INDIVIDUAL & BUSINESS)
 ============================================================ */

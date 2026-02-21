@@ -1,4 +1,4 @@
-// src/pages/Auth/UnifiedSignup.jsx - COMPLETE & FIXED
+// src/pages/Auth/UnifiedSignup.jsx - COMPLETE FIXED VERSION
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
@@ -9,6 +9,7 @@ import { authService } from '../../services/authService';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import toast from 'react-hot-toast';
+import { COUNTRIES, INDUSTRIES, COMPANY_TYPES, prepareUserPayload, COMPANY_TYPE_MAP } from '../../constants';
 
 const UnifiedSignup = () => {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ const UnifiedSignup = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
-  
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,36 +33,6 @@ const UnifiedSignup = () => {
     registrationNumber: '',
     taxId: ''
   });
-
-  const industries = [
-    { label: 'E-commerce/Marketplace', value: 'ecommerce' },
-    { label: 'Real Estate', value: 'real_estate' },
-    { label: 'Freelance Platform', value: 'freelance' },
-    { label: 'SaaS/Software', value: 'saas' },
-    { label: 'Professional Services', value: 'professional_services' },
-    { label: 'Government Contracts', value: 'government' },
-    { label: 'Technology', value: 'technology' },
-    { label: 'Finance', value: 'finance' },
-    { label: 'Healthcare', value: 'healthcare' },
-    { label: 'Education', value: 'education' },
-    { label: 'Manufacturing', value: 'manufacturing' },
-    { label: 'Retail', value: 'retail' },
-    { label: 'Fashion', value: 'fashion' },
-    { label: 'Automotive', value: 'automotive' },
-    { label: 'Logistics', value: 'logistics' },
-    { label: 'Services', value: 'services' },
-    { label: 'Other', value: 'other' }
-  ];
-
-  const countries = [
-    { code: 'US', name: 'United States' },
-    { code: 'NG', name: 'Nigeria' },
-    { code: 'GB', name: 'United Kingdom' },
-    { code: 'CA', name: 'Canada' },
-    { code: 'GH', name: 'Ghana' },
-    { code: 'KE', name: 'Kenya' },
-    { code: 'ZA', name: 'South Africa' }
-  ];
 
   const validateField = (name, value) => {
     const newErrors = { ...errors };
@@ -136,7 +107,7 @@ const UnifiedSignup = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
-    
+
     setFormData(prev => ({ ...prev, [name]: newValue }));
 
     if (type !== 'checkbox') {
@@ -144,24 +115,21 @@ const UnifiedSignup = () => {
     }
   };
 
-  // ✅ FIXED: Decode Google JWT and extract user info
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
-      
-      // ✅ Decode the JWT token to get user info
+
       const decoded = jwtDecode(credentialResponse.credential);
-      
+
       console.log('🔵 Decoded Google user:', decoded);
-      
-      // ✅ Send correct format to backend
+
       const response = await authService.googleAuth({
         googleId: decoded.sub,
         email: decoded.email,
         name: decoded.name,
         picture: decoded.picture
       });
-      
+
       if (response.success) {
         if (response.requiresProfileCompletion) {
           navigate('/complete-profile', {
@@ -169,7 +137,7 @@ const UnifiedSignup = () => {
           });
           return;
         }
-        
+
         toast.success('Login successful!');
         setTimeout(() => {
           window.location.href = '/dashboard';
@@ -237,7 +205,7 @@ const UnifiedSignup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateStep()) return;
 
     if (accountType === 'business' && step < 3) {
@@ -248,31 +216,26 @@ const UnifiedSignup = () => {
     try {
       setLoading(true);
 
-      const payload = {
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        phone: formData.phone,
-        country: formData.country,
-        accountType,
-        agreedToTerms: true
+      // Map company type if it's in old format
+      let companyType = formData.companyType;
+      if (formData.companyType && !['sole_proprietor', 'partnership', 'llc', 'corporation', 'ngo', 'other'].includes(formData.companyType)) {
+        companyType = COMPANY_TYPE_MAP[formData.companyType] || formData.companyType.toLowerCase().replace(' ', '_');
+      }
+
+      const updatedFormData = {
+        ...formData,
+        companyType
       };
 
-      if (accountType === 'business') {
-        payload.businessInfo = {
-          companyName: formData.companyName,
-          companyType: formData.companyType,
-          industry: formData.industry,
-          registrationNumber: formData.registrationNumber,
-          taxId: formData.taxId
-        };
-      }
+      const payload = prepareUserPayload(updatedFormData, accountType);
+
+      console.log('📦 Sending payload:', payload);
 
       const response = await authService.register(payload);
 
       if (response.success) {
         toast.success('Account created! Check your email for verification.');
-        
+
         setTimeout(() => {
           navigate('/login', {
             state: {
@@ -294,7 +257,7 @@ const UnifiedSignup = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 py-12 px-4">
       <div className="max-w-2xl mx-auto">
-        
+
         {/* Header */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2 mb-6 text-blue-600 hover:text-blue-700">
@@ -311,7 +274,7 @@ const UnifiedSignup = () => {
 
         {/* Main Form */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
-          
+
           {/* Account Type Selector */}
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
             Account Type
@@ -398,7 +361,7 @@ const UnifiedSignup = () => {
 
           {/* Form Steps */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            
+
             {/* BUSINESS STEP 1: Company Info */}
             {accountType === 'business' && step === 1 && (
               <>
@@ -436,7 +399,7 @@ const UnifiedSignup = () => {
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                   >
                     <option value="">Select Industry</option>
-                    {industries.map(ind => (
+                    {INDUSTRIES.map(ind => (
                       <option key={ind.value} value={ind.value}>{ind.label}</option>
                     ))}
                   </select>
@@ -456,10 +419,11 @@ const UnifiedSignup = () => {
                       className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                     >
                       <option value="">Select</option>
-                      <option value="LLC">LLC</option>
-                      <option value="Corporation">Corporation</option>
-                      <option value="Partnership">Partnership</option>
-                      <option value="Sole Proprietorship">Sole Proprietorship</option>
+                      {COMPANY_TYPES.map(type => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -537,48 +501,6 @@ const UnifiedSignup = () => {
                   {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Phone *
-                    </label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="+1234567890"
-                      required
-                      disabled={loading}
-                      className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
-                        errors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
-                      } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
-                    />
-                    {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Country *
-                    </label>
-                    <select
-                      name="country"
-                      value={formData.country}
-                      onChange={handleChange}
-                      required
-                      disabled={loading}
-                      className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
-                        errors.country ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
-                      } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
-                    >
-                      <option value="">Select</option>
-                      {countries.map(c => (
-                        <option key={c.code} value={c.code}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Password *
@@ -599,10 +521,9 @@ const UnifiedSignup = () => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2"
-                      disabled={loading}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      {showPassword ? <EyeOff className="w-5 h-5 text-gray-400" /> : <Eye className="w-5 h-5 text-gray-400" />}
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
                   {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
@@ -612,95 +533,158 @@ const UnifiedSignup = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Confirm Password *
                   </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      placeholder="Repeat password"
+                      required
+                      disabled={loading}
+                      className={`w-full px-4 py-3 pr-12 bg-gray-50 dark:bg-gray-800 border ${
+                        errors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                      } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
+                    />
+                  </div>
+                  {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Phone Number *
+                  </label>
                   <input
-                    type="password"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
+                    type="tel"
+                    name="phone"
+                    value={formData.phone}
                     onChange={handleChange}
-                    placeholder="Repeat password"
+                    placeholder="+1234567890"
                     required
                     disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
-                      errors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                      errors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                   />
-                  {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
+                  {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Country *
+                  </label>
+                  <select
+                    name="country"
+                    value={formData.country}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                    className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
+                      errors.country ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
+                    } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
+                  >
+                    <option value="">Select country</option>
+                    {COUNTRIES.map(country => (
+                      <option key={country.code} value={country.code}>{country.name}</option>
+                    ))}
+                  </select>
+                  {errors.country && <p className="mt-1 text-sm text-red-600">{errors.country}</p>}
                 </div>
               </>
             )}
 
-            {/* STEP 3 or INDIVIDUAL: Terms & Submit */}
-            {(accountType === 'individual' || (accountType === 'business' && step === 3)) && (
-              <>
-                <div className="flex items-start gap-3">
+            {/* STEP 3: Terms (Business Only) */}
+            {accountType === 'business' && step === 3 && (
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Almost done!
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Please review your information and accept the terms to complete registration.
+                </p>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Company information saved
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Contact details verified
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="agreedToTerms"
+                      checked={formData.agreedToTerms}
+                      onChange={handleChange}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      I agree to the{' '}
+                      <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>
+                      {' '}and{' '}
+                      <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Individual Terms */}
+            {accountType === 'individual' && (
+              <div className="mt-4">
+                <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     name="agreedToTerms"
-                    id="terms"
                     checked={formData.agreedToTerms}
                     onChange={handleChange}
-                    disabled={loading}
-                    className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
-                  <label htmlFor="terms" className="text-sm text-gray-600 dark:text-gray-400">
-                    I agree to the <Link to="/terms" className="text-blue-600 hover:underline">Terms & Conditions</Link> and <Link to="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
-                  </label>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading || !formData.agreedToTerms}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <Loader className="w-5 h-5 animate-spin" />
-                      Creating Account...
-                    </>
-                  ) : (
-                    <>
-                      Create Account
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                  )}
-                </button>
-              </>
-            )}
-
-            {/* Business Navigation Buttons */}
-            {accountType === 'business' && step < 3 && (
-              <div className="flex gap-4">
-                {step > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setStep(prev => prev - 1)}
-                    disabled={loading}
-                    className="flex-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-semibold py-3 px-6 rounded-lg transition disabled:opacity-50"
-                  >
-                    Back
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
-                >
-                  {loading ? (
-                    <Loader className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      Next
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                  )}
-                </button>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    I agree to the{' '}
+                    <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>
+                    {' '}and{' '}
+                    <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>
+                  </span>
+                </label>
               </div>
             )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
+            >
+              {loading ? (
+                <>
+                  <Loader className="w-5 h-5 animate-spin" />
+                  {accountType === 'business' && step < 3 ? 'Next Step...' : 'Creating Account...'}
+                </>
+              ) : (
+                <>
+                  {accountType === 'business' && step < 3 ? 'Continue' : 'Create Account'}
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
           </form>
 
           {/* Login Link */}
-          <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-            Already have an account? <Link to="/login" className="text-blue-600 hover:underline font-medium">Log In</Link>
+          <p className="text-center mt-6 text-sm text-gray-600 dark:text-gray-400">
+            Already have an account?{' '}
+            <Link to="/login" className="text-blue-600 hover:underline font-medium">
+              Sign in
+            </Link>
           </p>
         </div>
       </div>

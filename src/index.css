@@ -369,3 +369,58 @@ body.modal-open {
 .animate-scaleIn {
   animation: scaleIn 0.3s ease-out forwards;
 }
+
+/* ============================================
+   ✅ FIXED SPINNER ANIMATION (ENSURES IT WORKS)
+   ============================================ */
+
+/* Force spinner to work - high specificity */
+div.animate-spin,
+span.animate-spin,
+button.animate-spin,
+.loader.animate-spin {
+  animation: spin 1s linear infinite !important;
+  display: inline-block;
+  border-color: currentColor transparent transparent transparent !important;
+  border-style: solid;
+  border-width: 2px;
+  border-radius: 9999px;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Backup spinner class if animate-spin fails */
+.spinner {
+  animation: spin 1s linear infinite !important;
+  border: 2px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-block;
+}
+
+.dark .spinner {
+  border-color: #1e293b;
+  border-top-color: #60a5fa;
+}
+
+/* Make sure keyframes exist */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* For any element with inline spinner */
+.loading-spinner {
+  animation: spin 1s linear infinite !important;
+  border: 2px solid #f3f4f6;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+}

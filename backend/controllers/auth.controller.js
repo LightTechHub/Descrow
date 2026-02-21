@@ -699,4 +699,85 @@ exports.refreshToken = async (req, res) => {
   }
 };
 
+
+/* ============================================================
+   SET PASSWORD (for Google users or any user to change password)
+============================================================ */
+exports.setPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    const userId = req.user.id; // from protect middleware
+
+    // Validation
+    if (!password || password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters'
+      });
+    }
+
+    // Find user and include password field (pre-save hook will hash)
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Set new password (pre-save hook in User model will hash it)
+    user.password = password;
+    await user.save();
+
+    console.log('✅ Password set for user:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Password set successfully'
+    });
+  } catch (error) {
+    console.error('❌ setPassword error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to set password',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/* ============================================================
+   CHECK PASSWORD STATUS (does user have a password set?)
+   Note: All users have a password field (even Google users get a random one).
+   This function returns true if the field exists. For more accurate detection
+   (e.g., distinguish random vs user-chosen), consider adding a flag to the schema.
+============================================================ */
+exports.checkPasswordStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Password exists if the field is present (always true unless we implement a custom flag)
+    const hasPassword = !!user.password;
+
+    res.json({
+      success: true,
+      hasPassword
+    });
+  } catch (error) {
+    console.error('❌ checkPasswordStatus error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check password status'
+    });
+  }
+};
+
+
 module.exports = exports;

@@ -1,9 +1,10 @@
-// src/pages/Auth/CompleteProfilePage.jsx - COMPLETE WITH PASSWORD
+// src/pages/Auth/CompleteProfilePage.jsx - COMPLETE FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Shield, User, Mail, Phone, Globe, Building2, CheckCircle, Loader, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { authService } from '../../services/authService';
 import toast from 'react-hot-toast';
+import { COUNTRIES, INDUSTRIES, COMPANY_TYPES, prepareUserPayload } from '../../constants';
 
 const CompleteProfilePage = () => {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ const CompleteProfilePage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
-  
+
   const [formData, setFormData] = useState({
     name: googleData?.name || '',
     email: googleData?.email || '',
@@ -35,38 +36,6 @@ const CompleteProfilePage = () => {
       navigate('/login');
     }
   }, [googleData, navigate]);
-
-  const countries = [
-    { code: 'NG', name: 'Nigeria' },
-    { code: 'GH', name: 'Ghana' },
-    { code: 'KE', name: 'Kenya' },
-    { code: 'ZA', name: 'South Africa' },
-    { code: 'US', name: 'United States' },
-    { code: 'GB', name: 'United Kingdom' },
-    { code: 'CA', name: 'Canada' },
-    { code: 'AU', name: 'Australia' },
-    { code: 'IN', name: 'India' }
-  ];
-
-  const industries = [
-    { label: 'E-commerce', value: 'ecommerce' },
-    { label: 'Technology', value: 'technology' },
-    { label: 'Real Estate', value: 'real_estate' },
-    { label: 'Fashion', value: 'fashion' },
-    { label: 'Automotive', value: 'automotive' },
-    { label: 'Services', value: 'services' },
-    { label: 'Manufacturing', value: 'manufacturing' },
-    { label: 'Retail', value: 'retail' },
-    { label: 'Finance', value: 'finance' },
-    { label: 'Healthcare', value: 'healthcare' },
-    { label: 'Education', value: 'education' },
-    { label: 'Logistics', value: 'logistics' },
-    { label: 'Government', value: 'government' },
-    { label: 'Professional Services', value: 'professional_services' },
-    { label: 'SaaS', value: 'saas' },
-    { label: 'Freelance', value: 'freelance' },
-    { label: 'Other', value: 'other' }
-  ];
 
   const validateField = (name, value) => {
     const newErrors = { ...errors };
@@ -125,7 +94,7 @@ const CompleteProfilePage = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: newValue
@@ -173,16 +142,16 @@ const CompleteProfilePage = () => {
     try {
       setLoading(true);
 
-      console.log('📤 Submitting profile data:', {
-        ...formData,
-        googleId: googleData.googleId
+      const payload = prepareUserPayload(formData, formData.accountType, {
+        googleId: googleData.googleId,
+        picture: googleData.picture,
+        verified: true,
+        authProvider: 'google'
       });
 
-      const response = await authService.completeGoogleProfile({
-        ...formData,
-        googleId: googleData.googleId,
-        picture: googleData.picture
-      });
+      console.log('📤 Submitting profile data:', payload);
+
+      const response = await authService.completeGoogleProfile(payload);
 
       if (response.success) {
         toast.success('Welcome to Dealcross! 🎉');
@@ -236,7 +205,7 @@ const CompleteProfilePage = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 space-y-6">
-          
+
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -381,7 +350,7 @@ const CompleteProfilePage = () => {
               className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
             >
               <option value="">Select country</option>
-              {countries.map(country => (
+              {COUNTRIES.map(country => (
                 <option key={country.code} value={country.code}>{country.name}</option>
               ))}
             </select>
@@ -452,12 +421,11 @@ const CompleteProfilePage = () => {
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                   >
                     <option value="">Select type</option>
-                    <option value="sole_proprietor">Sole Proprietor</option>
-                    <option value="partnership">Partnership</option>
-                    <option value="llc">LLC</option>
-                    <option value="corporation">Corporation</option>
-                    <option value="ngo">NGO</option>
-                    <option value="other">Other</option>
+                    {COMPANY_TYPES.map(type => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -472,7 +440,7 @@ const CompleteProfilePage = () => {
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                   >
                     <option value="">Select industry</option>
-                    {industries.map(ind => (
+                    {INDUSTRIES.map(ind => (
                       <option key={ind.value} value={ind.value}>
                         {ind.label}
                       </option>
@@ -516,22 +484,19 @@ const CompleteProfilePage = () => {
             </label>
           </div>
 
-          {/* Submit */}
+          {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading || !formData.agreedToTerms}
-            className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
                 <Loader className="w-5 h-5 animate-spin" />
-                Creating Account...
+                Completing...
               </>
             ) : (
-              <>
-                <CheckCircle className="w-5 h-5" />
-                Complete Sign Up
-              </>
+              'Complete Profile'
             )}
           </button>
         </form>

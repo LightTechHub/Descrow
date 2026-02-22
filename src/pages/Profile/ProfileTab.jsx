@@ -1,5 +1,5 @@
 // src/pages/Profile/ProfileTab.jsx
-// COMPLETE FIXED VERSION - WITH MEMBER SINCE AND COUNTRY FIXES
+// COMPLETE FIXED VERSION - WITH COMPANY NAME FIX AND COUNTRY DROPDOWN
 import React, { useState } from 'react';
 import { 
   Camera, Loader, Save, Edit2, X, User, Phone, Mail, MapPin, 
@@ -216,9 +216,21 @@ const ProfileTab = ({ user, onUpdate }) => {
 
             <div className="flex-1">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                {user.name}
+                {user.accountType === 'business' 
+                  ? (user.businessInfo?.companyName || user.name)
+                  : user.name
+                }
               </h2>
               <p className="text-gray-600 dark:text-gray-400 mb-3">{user.email}</p>
+              
+              {/* Show owner name for business accounts */}
+              {user.accountType === 'business' && user.name && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  <User className="w-3 h-3 inline mr-1" />
+                  Owner: {user.name}
+                </p>
+              )}
+              
               <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer text-sm">
                 <Camera className="w-4 h-4" />
                 {uploading ? 'Uploading...' : 'Change Photo'}
@@ -264,20 +276,25 @@ const ProfileTab = ({ user, onUpdate }) => {
         </div>
 
         {/* Address */}
-        {(user.address?.street || user.address?.city || user.address?.state) && (
+        {(user.address?.street || user.address?.city || user.address?.state || user.address?.country) && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Address</h3>
             <div className="space-y-3">
               {user.address?.street && <p className="text-gray-600 dark:text-gray-400">{user.address.street}</p>}
               <p className="text-gray-600 dark:text-gray-400">
-                {[user.address?.city, user.address?.state, user.address?.postalCode, user.address?.country].filter(Boolean).join(', ')}
+                {[
+                  user.address?.city, 
+                  user.address?.state, 
+                  user.address?.postalCode, 
+                  user.address?.country || user.country
+                ].filter(Boolean).join(', ')}
               </p>
             </div>
           </div>
         )}
 
         {/* Business Info */}
-        {user.accountType === 'business' && (
+        {user.accountType === 'business' && user.businessInfo && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <Building2 className="w-5 h-5" />
@@ -324,7 +341,7 @@ const ProfileTab = ({ user, onUpdate }) => {
     );
   }
 
-  // EDIT MODE (unchanged - keep as is)
+  // ==================== EDIT MODE ====================
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
@@ -335,68 +352,340 @@ const ProfileTab = ({ user, onUpdate }) => {
           </button>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name *</label>
-          <input type="text" name="name" value={formData.name} onChange={handleChange} required
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
+        {/* Full Name / Owner Name */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {user.accountType === 'business' ? 'Owner Full Name *' : 'Full Name *'}
+          </label>
+          <input 
+            type="text" 
+            name="name" 
+            value={formData.name} 
+            onChange={handleChange} 
+            required
+            placeholder={user.accountType === 'business' ? 'John Doe' : 'Your name'}
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          {user.accountType === 'business' && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              This is the name of the person who owns this business account
+            </p>
+          )}
         </div>
 
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label>
-          <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+1 (555) 000-0000"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
+        {/* Company Name (Business Only) */}
+        {user.accountType === 'business' && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Company Name *
+            </label>
+            <input 
+              type="text" 
+              name="businessInfo.companyName" 
+              value={formData.businessInfo.companyName} 
+              onChange={handleChange} 
+              required
+              placeholder="Acme Corporation"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+          </div>
+        )}
+
+        {/* Phone */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone Number</label>
+          <input 
+            type="tel" 
+            name="phone" 
+            value={formData.phone} 
+            onChange={handleChange} 
+            placeholder="+1 (555) 000-0000"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
         </div>
 
-        <div className="mt-4">
+        {/* Bio */}
+        <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bio</label>
-          <textarea name="bio" value={formData.bio} onChange={handleChange} rows={4} placeholder="Tell us about yourself..."
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white resize-none" />
+          <textarea 
+            name="bio" 
+            value={formData.bio} 
+            onChange={handleChange} 
+            rows={4} 
+            placeholder="Tell us about yourself or your business..."
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white resize-none" 
+          />
         </div>
       </div>
 
-      {/* Address */}
+      {/* Address Section - WITH FULL COUNTRY DROPDOWN */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
         <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Address</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
-            <input type="text" name="address.street" value={formData.address.street} onChange={handleChange} placeholder="Street Address"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
+            <input 
+              type="text" 
+              name="address.street" 
+              value={formData.address.street} 
+              onChange={handleChange} 
+              placeholder="Street Address"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
           </div>
-          <input type="text" name="address.city" value={formData.address.city} onChange={handleChange} placeholder="City"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-          <input type="text" name="address.state" value={formData.address.state} onChange={handleChange} placeholder="State/Province"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-          <input type="text" name="address.country" value={formData.address.country} onChange={handleChange} placeholder="Country"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-          <input type="text" name="address.postalCode" value={formData.address.postalCode} onChange={handleChange} placeholder="Postal Code"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
+          <input 
+            type="text" 
+            name="address.city" 
+            value={formData.address.city} 
+            onChange={handleChange} 
+            placeholder="City"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          <input 
+            type="text" 
+            name="address.state" 
+            value={formData.address.state} 
+            onChange={handleChange} 
+            placeholder="State/Province"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          
+            {/* Full Name / Owner Name */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {user.accountType === 'business' ? 'Owner Full Name *' : 'Full Name *'}
+          </label>
+          <input 
+            type="text" 
+            name="name" 
+            value={formData.name} 
+            onChange={handleChange} 
+            required
+            placeholder={user.accountType === 'business' ? 'John Doe' : 'Your name'}
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          {user.accountType === 'business' && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              This is the name of the person who owns this business account
+            </p>
+          )}
+        </div>
+
+        {/* Company Name (Business Only) */}
+        {user.accountType === 'business' && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Company Name *
+            </label>
+            <input 
+              type="text" 
+              name="businessInfo.companyName" 
+              value={formData.businessInfo.companyName} 
+              onChange={handleChange} 
+              required
+              placeholder="Acme Corporation"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+          </div>
+        )}
+
+        {/* Phone */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone Number</label>
+          <input 
+            type="tel" 
+            name="phone" 
+            value={formData.phone} 
+            onChange={handleChange} 
+            placeholder="+1 (555) 000-0000"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+        </div>
+
+        {/* Bio */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bio</label>
+          <textarea 
+            name="bio" 
+            value={formData.bio} 
+            onChange={handleChange} 
+            rows={4} 
+            placeholder="Tell us about yourself or your business..."
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white resize-none" 
+          />
         </div>
       </div>
 
-        {/* Business Info */}
+      {/* Address Section - WITH FULL COUNTRY DROPDOWN */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+        <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Address</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <input 
+              type="text" 
+              name="address.street" 
+              value={formData.address.street} 
+              onChange={handleChange} 
+              placeholder="Street Address"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+          </div>
+          <input 
+            type="text" 
+            name="address.city" 
+            value={formData.address.city} 
+            onChange={handleChange} 
+            placeholder="City"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          <input 
+            type="text" 
+            name="address.state" 
+            value={formData.address.state} 
+            onChange={handleChange} 
+            placeholder="State/Province"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          
+          {/* COUNTRY DROPDOWN - Full list of countries */}
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Country</label>
+            <select
+              name="address.country"
+              value={formData.address.country}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+            >
+              <option value="">Select Country</option>
+              <option value="United States">United States</option>
+              <option value="Nigeria">Nigeria</option>
+              <option value="United Kingdom">United Kingdom</option>
+              <option value="Canada">Canada</option>
+              <option value="Ghana">Ghana</option>
+              <option value="Kenya">Kenya</option>
+              <option value="South Africa">South Africa</option>
+              <option value="Australia">Australia</option>
+              <option value="Germany">Germany</option>
+              <option value="France">France</option>
+              <option value="India">India</option>
+              <option value="Japan">Japan</option>
+              <option value="China">China</option>
+              <option value="Brazil">Brazil</option>
+              <option value="Mexico">Mexico</option>
+              <option value="Italy">Italy</option>
+              <option value="Spain">Spain</option>
+              <option value="Netherlands">Netherlands</option>
+              <option value="Sweden">Sweden</option>
+              <option value="Norway">Norway</option>
+              <option value="Denmark">Denmark</option>
+              <option value="Finland">Finland</option>
+              <option value="Switzerland">Switzerland</option>
+              <option value="Belgium">Belgium</option>
+              <option value="Austria">Austria</option>
+              <option value="Portugal">Portugal</option>
+              <option value="Ireland">Ireland</option>
+              <option value="New Zealand">New Zealand</option>
+              <option value="Singapore">Singapore</option>
+              <option value="Malaysia">Malaysia</option>
+              <option value="United Arab Emirates">United Arab Emirates</option>
+              <option value="Saudi Arabia">Saudi Arabia</option>
+              <option value="Israel">Israel</option>
+              <option value="Turkey">Turkey</option>
+              <option value="Russia">Russia</option>
+              <option value="Ukraine">Ukraine</option>
+              <option value="Poland">Poland</option>
+              <option value="Czech Republic">Czech Republic</option>
+              <option value="Hungary">Hungary</option>
+              <option value="Romania">Romania</option>
+              <option value="Greece">Greece</option>
+              <option value="Egypt">Egypt</option>
+              <option value="Morocco">Morocco</option>
+              <option value="Tunisia">Tunisia</option>
+              <option value="Algeria">Algeria</option>
+              <option value="Uganda">Uganda</option>
+              <option value="Tanzania">Tanzania</option>
+              <option value="Rwanda">Rwanda</option>
+              <option value="Ethiopia">Ethiopia</option>
+              <option value="Zambia">Zambia</option>
+              <option value="Zimbabwe">Zimbabwe</option>
+              <option value="Botswana">Botswana</option>
+              <option value="Namibia">Namibia</option>
+              <option value="Mozambique">Mozambique</option>
+              <option value="Angola">Angola</option>
+              <option value="Cameroon">Cameroon</option>
+              <option value="Senegal">Senegal</option>
+            </select>
+          </div>
+          
+          <input 
+            type="text" 
+            name="address.postalCode" 
+            value={formData.address.postalCode} 
+            onChange={handleChange} 
+            placeholder="Postal Code"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+        </div>
+      </div>
+
+      {/* Business Info (Business Only) */}
       {user.accountType === 'business' && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
           <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Business Information</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" name="businessInfo.companyName" value={formData.businessInfo.companyName} onChange={handleChange} placeholder="Company Name"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-            <select name="businessInfo.companyType" value={formData.businessInfo.companyType} onChange={handleChange}
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white">
+            <input 
+              type="text" 
+              name="businessInfo.companyName" 
+              value={formData.businessInfo.companyName} 
+              onChange={handleChange} 
+              placeholder="Company Name"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+            <select 
+              name="businessInfo.companyType" 
+              value={formData.businessInfo.companyType} 
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+            >
               <option value="">Company Type</option>
               <option value="sole_proprietor">Sole Proprietor</option>
               <option value="partnership">Partnership</option>
               <option value="llc">LLC</option>
               <option value="corporation">Corporation</option>
               <option value="ngo">NGO</option>
+              <option value="other">Other</option>
             </select>
-            <input type="text" name="businessInfo.industry" value={formData.businessInfo.industry} onChange={handleChange} placeholder="Industry"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-            <input type="text" name="businessInfo.taxId" value={formData.businessInfo.taxId} onChange={handleChange} placeholder="Tax ID"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-            <input type="text" name="businessInfo.registrationNumber" value={formData.businessInfo.registrationNumber} onChange={handleChange} placeholder="Registration Number"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-            <input type="url" name="businessInfo.website" value={formData.businessInfo.website} onChange={handleChange} placeholder="Website URL"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
+            <input 
+              type="text" 
+              name="businessInfo.industry" 
+              value={formData.businessInfo.industry} 
+              onChange={handleChange} 
+              placeholder="Industry"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+            <input 
+              type="text" 
+              name="businessInfo.taxId" 
+              value={formData.businessInfo.taxId} 
+              onChange={handleChange} 
+              placeholder="Tax ID"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+            <input 
+              type="text" 
+              name="businessInfo.registrationNumber" 
+              value={formData.businessInfo.registrationNumber} 
+              onChange={handleChange} 
+              placeholder="Registration Number"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
+            <input 
+              type="url" 
+              name="businessInfo.website" 
+              value={formData.businessInfo.website} 
+              onChange={handleChange} 
+              placeholder="Website URL"
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+            />
           </div>
         </div>
       )}
@@ -405,12 +694,30 @@ const ProfileTab = ({ user, onUpdate }) => {
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
         <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Social Links</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input type="url" name="socialLinks.twitter" value={formData.socialLinks.twitter} onChange={handleChange} placeholder="Twitter URL"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-          <input type="url" name="socialLinks.linkedin" value={formData.socialLinks.linkedin} onChange={handleChange} placeholder="LinkedIn URL"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
-          <input type="url" name="socialLinks.website" value={formData.socialLinks.website} onChange={handleChange} placeholder="Website URL"
-            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
+          <input 
+            type="url" 
+            name="socialLinks.twitter" 
+            value={formData.socialLinks.twitter} 
+            onChange={handleChange} 
+            placeholder="Twitter URL"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          <input 
+            type="url" 
+            name="socialLinks.linkedin" 
+            value={formData.socialLinks.linkedin} 
+            onChange={handleChange} 
+            placeholder="LinkedIn URL"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
+          <input 
+            type="url" 
+            name="socialLinks.website" 
+            value={formData.socialLinks.website} 
+            onChange={handleChange} 
+            placeholder="Website URL"
+            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
+          />
         </div>
       </div>
 
@@ -488,4 +795,4 @@ const SocialLink = ({ platform, url }) => (
   </a>
 );
 
-export default ProfileTab; 
+export default ProfileTab;

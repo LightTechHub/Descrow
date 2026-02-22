@@ -1,5 +1,5 @@
 // src/pages/Profile/ProfilePage.jsx
-// COMPLETE FIXED VERSION - NO GRADIENTS, ALL FIXES APPLIED
+// COMPLETE FIXED VERSION - SHOWS COMPANY NAME FOR BUSINESS ACCOUNTS
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -252,6 +252,17 @@ const ProfilePage = () => {
 
   const tierInfo = getTierInfo(user.tier);
 
+  // ===== FIXED: Get display name based on account type =====
+  const getDisplayName = () => {
+    if (user.accountType === 'business') {
+      // For business accounts, show company name first
+      return user.businessInfo?.companyName || user.name || 'Business Account';
+    } else {
+      // For individual accounts, show personal name
+      return user.name || 'User';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
@@ -265,7 +276,7 @@ const ProfilePage = () => {
           </button>
 
           <div className="flex items-center gap-4">
-            {/* Avatar Section - FIXED with proper path handling */}
+            {/* Avatar Section */}
             <div className="relative group">
               <input
                 ref={fileInputRef}
@@ -283,7 +294,7 @@ const ProfilePage = () => {
                     if (url.startsWith('/')) return `${process.env.REACT_APP_API_URL || ''}${url}`;
                     return `${process.env.REACT_APP_API_URL || ''}/uploads/avatars/${url}`;
                   })()}
-                  alt={user.accountType === 'business' ? user.businessInfo?.companyName || user.name : user.name}
+                  alt={getDisplayName()}
                   className="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-lg"
                   onError={(e) => {
                     e.target.onerror = null;
@@ -293,7 +304,7 @@ const ProfilePage = () => {
                 />
               ) : null}
               
-              {/* Fallback Avatar - SOLID BLUE (no gradient) */}
+              {/* Fallback Avatar - SOLID BLUE */}
               <div className={`w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg ${user.profilePicture ? 'hidden' : ''} fallback-avatar`}>
                 {user.accountType === 'business' 
                   ? (user.businessInfo?.companyName?.charAt(0).toUpperCase() || user.name?.charAt(0).toUpperCase() || 'B')
@@ -318,16 +329,13 @@ const ProfilePage = () => {
             </div>
 
             <div className="flex-1">
-              {/* Display Name - Company name for business, personal name for individual */}
+              {/* ===== FIXED: Display Name - Company name for business ===== */}
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {user.accountType === 'business' 
-                  ? (user.businessInfo?.companyName || user.name)
-                  : user.name || 'User'
-                }
+                {getDisplayName()}
               </h1>
               <p className="text-gray-600 dark:text-gray-400">{user.email}</p>
               
-              {/* Show owner name for business accounts */}
+              {/* ===== FIXED: Show owner name for business accounts ===== */}
               {user.accountType === 'business' && user.name && (
                 <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
                   <User className="w-3 h-3 inline mr-1" />

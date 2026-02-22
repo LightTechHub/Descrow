@@ -3,36 +3,90 @@ import api from '../config/api';
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
 const profileService = {
-  // Get profile - FIXED to properly return ALL user data including businessInfo
+  // Get profile - FIXED to fetch complete user data including businessInfo
   getProfile: async () => {
     try {
-      const response = await api.get('/users/me');
+      // Try multiple endpoints to get complete user data
+      let response;
+      let userData = null;
       
-      // Log the full response to see what we're getting
-      console.log('📦 Raw profile response:', response.data);
+      // First try the /users/profile endpoint which might have more data
+      try {
+        console.log('🔍 Trying /users/profile endpoint...');
+        response = await api.get('/users/profile');
+        if (response.data?.success && response.data?.data?.user) {
+          userData = response.data.data.user;
+          console.log('✅ Got user data from /users/profile');
+        }
+      } catch (err) {
+        console.log('⚠️ /users/profile failed, trying /users/me');
+      }
       
-      // Make sure we're returning the user data in a consistent format
-      if (response.data.success) {
-        const userData = response.data.data?.user || response.data.data || response.data;
-        
-        // Enhanced logging to debug
-        console.log('👤 User data extracted:', {
-          name: userData.name,
-          email: userData.email,
-          accountType: userData.accountType,
-          hasBusinessInfo: !!userData.businessInfo,
-          businessInfo: userData.businessInfo
-        });
-        
+      // If that fails, try /users/me
+      if (!userData) {
+        response = await api.get('/users/me');
+        if (response.data?.success && response.data?.data) {
+          userData = response.data.data;
+          console.log('✅ Got user data from /users/me');
+        } else if (response.data) {
+          userData = response.data;
+        }
+      }
+      
+      // If still no data, try /auth/me
+      if (!userData) {
+        try {
+          response = await api.get('/auth/me');
+          if (response.data?.user) {
+            userData = response.data.user;
+          } else if (response.data) {
+            userData = response.data;
+          }
+        } catch (err) {
+          console.log('⚠️ /auth/me failed');
+        }
+      }
+      
+      console.log('📦 Raw profile response:', userData);
+      
+      // Check if we need to get business info from localStorage as fallback
+      const localUser = JSON.parse(localStorage.getItem('user') || '{}');
+      
+      // Merge with localStorage data if needed
+      const mergedUserData = {
+        ...localUser,
+        ...userData,
+        // Ensure businessInfo is preserved
+        businessInfo: userData?.businessInfo || localUser?.businessInfo || null,
+        accountType: userData?.accountType || localUser?.accountType || 'individual'
+      };
+      
+      console.log('👤 User data extracted:', {
+        name: mergedUserData.name,
+        email: mergedUserData.email,
+        accountType: mergedUserData.accountType,
+        hasBusinessInfo: !!mergedUserData.businessInfo,
+        businessInfo: mergedUserData.businessInfo
+      });
+      
+      return {
+        success: true,
+        data: mergedUserData
+      };
+      
+    } catch (error) {
+      console.error('Get profile error:', error);
+      
+      // Fallback to localStorage if API fails
+      const localUser = JSON.parse(localStorage.getItem('user') || '{}');
+      if (localUser && localUser.email) {
+        console.log('⚠️ Using localStorage as fallback');
         return {
           success: true,
-          data: userData
+          data: localUser
         };
       }
       
-      return response.data;
-    } catch (error) {
-      console.error('Get profile error:', error);
       throw error;
     }
   },
@@ -46,10 +100,14 @@ const profileService = {
         const userData = response.data.data?.user || response.data.data;
         const kycData = userData?.kycStatus || {};
         
+        // Get business info from userData or localStorage
+        const localUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const businessInfo = userData?.businessInfo || kycData?.businessInfo || localUser?.businessInfo || {};
+        
         console.log('🔐 KYC data loaded:', {
           status: kycData.status,
           isKYCVerified: userData?.isKYCVerified,
-          hasBusinessInfo: !!kycData.businessInfo
+          hasBusinessInfo: !!businessInfo
         });
         
         return {
@@ -62,7 +120,7 @@ const profileService = {
             rejectionReason: kycData.rejectionReason,
             resubmissionAllowed: kycData.resubmissionAllowed,
             personalInfo: kycData.personalInfo || {},
-            businessInfo: kycData.businessInfo || userData?.businessInfo || {},
+            businessInfo: businessInfo,
             approvedBy: kycData.approvedBy,
             isKYCVerified: userData?.isKYCVerified || false,
             documents: kycData.documents || []
@@ -99,6 +157,14 @@ const profileService = {
   updateProfile: async (data) => {
     try {
       const response = await api.put('/profile', data);
+      
+      // Update localStorage with new data
+      if (response.data.success) {
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const updatedUser = { ...currentUser, ...data };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Update profile error:', error);
@@ -293,9 +359,6 @@ const profileService = {
     }
   },
 
-  /**
-   * ✅ NEW: Set password for OAuth users
-   */
   setPassword: async (newPassword, confirmPassword) => {
     try {
       const response = await api.post('/auth/set-password', {
@@ -309,9 +372,6 @@ const profileService = {
     }
   },
 
-  /**
-   * ✅ NEW: Check if user needs to set a password
-   */
   checkPasswordStatus: async () => {
     try {
       const response = await api.get('/auth/password-status');

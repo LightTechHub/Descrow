@@ -1,5 +1,5 @@
 // src/pages/Profile/ProfilePage.jsx
-// COMPLETE REFINED VERSION
+// COMPLETE FIXED VERSION - NO GRADIENTS, ALL FIXES APPLIED
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -191,7 +191,16 @@ const ProfilePage = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-        <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+        <div 
+          className="rounded-full h-8 w-8 border-b-2 border-blue-600"
+          style={{ 
+            animation: 'spin 1s linear infinite',
+            borderBottomColor: '#2563eb',
+            borderRightColor: 'transparent',
+            borderTopColor: 'transparent',
+            borderLeftColor: 'transparent'
+          }}
+        ></div>
       </div>
     );
   }
@@ -209,7 +218,7 @@ const ProfilePage = () => {
           </p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
           >
             Back to Dashboard
           </button>
@@ -256,6 +265,7 @@ const ProfilePage = () => {
           </button>
 
           <div className="flex items-center gap-4">
+            {/* Avatar Section - FIXED with proper path handling */}
             <div className="relative group">
               <input
                 ref={fileInputRef}
@@ -267,23 +277,40 @@ const ProfilePage = () => {
               
               {user.profilePicture ? (
                 <img
-                  src={user.profilePicture}
-                  alt={user.name}
+                  src={(() => {
+                    const url = user.profilePicture;
+                    if (url.startsWith('http')) return url;
+                    if (url.startsWith('/')) return `${process.env.REACT_APP_API_URL || ''}${url}`;
+                    return `${process.env.REACT_APP_API_URL || ''}/uploads/avatars/${url}`;
+                  })()}
+                  alt={user.accountType === 'business' ? user.businessInfo?.companyName || user.name : user.name}
                   className="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-lg"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.style.display = 'none';
+                    e.target.parentElement.querySelector('.fallback-avatar').classList.remove('hidden');
+                  }}
                 />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg">
-                  {user.name?.charAt(0).toUpperCase() || 'U'}
-                </div>
-              )}
+              ) : null}
+              
+              {/* Fallback Avatar - SOLID BLUE (no gradient) */}
+              <div className={`w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg ${user.profilePicture ? 'hidden' : ''} fallback-avatar`}>
+                {user.accountType === 'business' 
+                  ? (user.businessInfo?.companyName?.charAt(0).toUpperCase() || user.name?.charAt(0).toUpperCase() || 'B')
+                  : (user.name?.charAt(0).toUpperCase() || 'U')
+                }
+              </div>
               
               <button
                 onClick={handleAvatarClick}
                 disabled={uploadingAvatar}
-                className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute inset-0 rounded-full bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 {uploadingAvatar ? (
-                  <Loader className="w-6 h-6 text-white animate-spin" />
+                  <div 
+                    className="w-6 h-6 border-2 border-white border-t-transparent rounded-full"
+                    style={{ animation: 'spin 1s linear infinite' }}
+                  ></div>
                 ) : (
                   <Camera className="w-6 h-6 text-white" />
                 )}
@@ -291,10 +318,23 @@ const ProfilePage = () => {
             </div>
 
             <div className="flex-1">
+              {/* Display Name - Company name for business, personal name for individual */}
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {user.name || 'User'}
+                {user.accountType === 'business' 
+                  ? (user.businessInfo?.companyName || user.name)
+                  : user.name || 'User'
+                }
               </h1>
               <p className="text-gray-600 dark:text-gray-400">{user.email}</p>
+              
+              {/* Show owner name for business accounts */}
+              {user.accountType === 'business' && user.name && (
+                <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                  <User className="w-3 h-3 inline mr-1" />
+                  Owner: {user.name}
+                </p>
+              )}
+              
               <div className="flex flex-wrap gap-2 mt-2">
                 <button
                   onClick={() => navigate('/upgrade')}
@@ -412,40 +452,64 @@ const TierUpgradeCTA = ({ currentTier, navigate }) => {
   if (!upgradeInfo) return null;
 
   return (
-    <div className={`mt-4 bg-gradient-to-r ${
-      upgradeInfo.color === 'blue' ? 'from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800' :
-      upgradeInfo.color === 'green' ? 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800' :
-      'from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800'
-    } border rounded-xl p-4`}>
+    <div className={`mt-4 bg-${
+      upgradeInfo.color === 'blue' ? 'blue' :
+      upgradeInfo.color === 'green' ? 'green' :
+      'purple'
+    }-50 dark:bg-${
+      upgradeInfo.color === 'blue' ? 'blue' :
+      upgradeInfo.color === 'green' ? 'green' :
+      'purple'
+    }-900/20 border border-${
+      upgradeInfo.color === 'blue' ? 'blue' :
+      upgradeInfo.color === 'green' ? 'green' :
+      'purple'
+    }-200 dark:border-${
+      upgradeInfo.color === 'blue' ? 'blue' :
+      upgradeInfo.color === 'green' ? 'green' :
+      'purple'
+    }-800 rounded-xl p-4`}>
       <div className="flex items-center gap-3">
-        <Crown className={`w-6 h-6 ${
-          upgradeInfo.color === 'blue' ? 'text-blue-600' :
-          upgradeInfo.color === 'green' ? 'text-green-600' :
-          'text-purple-600'
-        } flex-shrink-0`} />
+        <Crown className={`w-6 h-6 text-${
+          upgradeInfo.color === 'blue' ? 'blue' :
+          upgradeInfo.color === 'green' ? 'green' :
+          'purple'
+        }-600 flex-shrink-0`} />
         <div className="flex-1">
-          <p className={`text-sm font-semibold ${
-            upgradeInfo.color === 'blue' ? 'text-blue-900 dark:text-blue-200' :
-            upgradeInfo.color === 'green' ? 'text-green-900 dark:text-green-200' :
-            'text-purple-900 dark:text-purple-200'
-          }`}>
+          <p className={`text-sm font-semibold text-${
+            upgradeInfo.color === 'blue' ? 'blue' :
+            upgradeInfo.color === 'green' ? 'green' :
+            'purple'
+          }-900 dark:text-${
+            upgradeInfo.color === 'blue' ? 'blue' :
+            upgradeInfo.color === 'green' ? 'green' :
+            'purple'
+          }-200`}>
             Unlock More Features
           </p>
-          <p className={`text-sm mt-1 ${
-            upgradeInfo.color === 'blue' ? 'text-blue-800 dark:text-blue-300' :
-            upgradeInfo.color === 'green' ? 'text-green-800 dark:text-green-300' :
-            'text-purple-800 dark:text-purple-300'
-          }`}>
+          <p className={`text-sm mt-1 text-${
+            upgradeInfo.color === 'blue' ? 'blue' :
+            upgradeInfo.color === 'green' ? 'green' :
+            'purple'
+          }-800 dark:text-${
+            upgradeInfo.color === 'blue' ? 'blue' :
+            upgradeInfo.color === 'green' ? 'green' :
+            'purple'
+          }-300`}>
             {upgradeInfo.message}
           </p>
         </div>
         <button
           onClick={() => navigate('/upgrade')}
-          className={`px-6 py-2.5 ${
-            upgradeInfo.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
-            upgradeInfo.color === 'green' ? 'bg-green-600 hover:bg-green-700' :
-            'bg-purple-600 hover:bg-purple-700'
-          } text-white text-sm font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-2`}
+          className={`px-6 py-2.5 bg-${
+            upgradeInfo.color === 'blue' ? 'blue' :
+            upgradeInfo.color === 'green' ? 'green' :
+            'purple'
+          }-600 hover:bg-${
+            upgradeInfo.color === 'blue' ? 'blue' :
+            upgradeInfo.color === 'green' ? 'green' :
+            'purple'
+          }-700 text-white text-sm font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-2`}
         >
           <Crown className="w-4 h-4" />
           Upgrade to {upgradeInfo.nextTier}
@@ -513,10 +577,10 @@ const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApprov
     {tabs.map((tab) => {
       const Icon = tab.icon;
       const isActive = activeTab === tab.id;
-      
+
       let isDisabled = false;
       let disabledReason = '';
-      
+
       if (tab.id === 'kyc' && !isEmailVerified) {
         isDisabled = true;
         disabledReason = 'Verify email first';

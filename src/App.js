@@ -104,41 +104,80 @@ function App() {
   }, []);
 
   // ==================== PROTECTED ROUTES ====================
-  const ProtectedRoute = ({ children }) => {
-    if (loading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      );
-    }
+const ProtectedRoute = ({ children }) => {
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        {/* ✅ FIXED: Added !important style to force animation */}
+        <div 
+          className="rounded-full h-12 w-12 border-b-2 border-blue-600"
+          style={{ 
+            animation: 'spin 1s linear infinite',
+            borderBottomColor: '#3b82f6',
+            borderRightColor: 'transparent',
+            borderTopColor: 'transparent',
+            borderLeftColor: 'transparent'
+          }}
+        ></div>
+      </div>
+    );
+  }
 
-    if (!isAuthenticated) {
-      return <Navigate to="/login" replace />;
-    }
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
-    return children;
-  };
+  return children;
+};
 
-  const AdminProtectedRoute = ({ children, requiredPermission }) => {
-    if (adminLoading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-900">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-        </div>
-      );
-    }
+const AdminProtectedRoute = ({ children, requiredPermission }) => {
+  if (adminLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        {/* ✅ FIXED: Added !important style to force animation */}
+        <div 
+          className="rounded-full h-12 w-12 border-b-2 border-red-600"
+          style={{ 
+            animation: 'spin 1s linear infinite',
+            borderBottomColor: '#dc2626',
+            borderRightColor: 'transparent',
+            borderTopColor: 'transparent',
+            borderLeftColor: 'transparent'
+          }}
+        ></div>
+      </div>
+    );
+  }
 
-    if (!admin) {
-      return <Navigate to="/admin/login" replace />;
-    }
+  if (!admin) {
+    return <Navigate to="/admin/login" replace />;
+  }
 
-    if (requiredPermission && admin.role !== 'master' && !admin.permissions?.[requiredPermission]) {
-      return <Navigate to="/admin/dashboard" replace />;
-    }
+  if (requiredPermission && admin.role !== 'master' && !admin.permissions?.[requiredPermission]) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
 
-    return children;
-  };
+  return children;
+};
+
+// Also update the main loading spinner (around line 185)
+if (loading || adminLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+      {/* ✅ FIXED: Added !important style to force animation */}
+      <div 
+        className="rounded-full h-16 w-16 border-b-2 border-blue-600"
+        style={{ 
+          animation: 'spin 1s linear infinite',
+          borderBottomColor: '#3b82f6',
+          borderRightColor: 'transparent',
+          borderTopColor: 'transparent',
+          borderLeftColor: 'transparent'
+        }}
+      ></div>
+    </div>
+  );
+}
 
   // ==================== NAVBAR & FOOTER LOGIC ====================
   const showNavbar = () => {

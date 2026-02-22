@@ -1,5 +1,5 @@
 // src/pages/Profile/ProfileTab.jsx
-// COMPLETE FIXED VERSION - WITH COMPANY NAME FIX AND COUNTRY DROPDOWN
+// COMPLETE FIXED VERSION - FIXES EMPTY STRING VALIDATION ERROR
 import React, { useState } from 'react';
 import { 
   Camera, Loader, Save, Edit2, X, User, Phone, Mail, MapPin, 
@@ -91,7 +91,26 @@ const ProfileTab = ({ user, onUpdate }) => {
 
     try {
       setLoading(true);
-      const response = await profileService.updateProfile(formData);
+      
+      // ===== FIXED: Prepare data for submission - remove empty strings for enum fields =====
+      const submissionData = { ...formData };
+      
+      // For business accounts, handle enum fields properly
+      if (user.accountType === 'business') {
+        // If companyType is empty string, remove it (let backend keep existing value)
+        if (submissionData.businessInfo.companyType === '') {
+          delete submissionData.businessInfo.companyType;
+        }
+        
+        // If industry is empty string, remove it (let backend keep existing value)
+        if (submissionData.businessInfo.industry === '') {
+          delete submissionData.businessInfo.industry;
+        }
+      }
+      
+      console.log('Submitting profile data:', submissionData);
+      
+      const response = await profileService.updateProfile(submissionData);
 
       if (response.success) {
         toast.success('Profile updated successfully!');
@@ -201,7 +220,10 @@ const ProfileTab = ({ user, onUpdate }) => {
               
               {/* Fallback Avatar - SOLID BLUE */}
               <div className={`w-24 h-24 rounded-full bg-blue-600 flex items-center justify-center text-white text-3xl font-bold border-4 border-gray-200 dark:border-gray-700 ${user.profilePicture ? 'hidden' : ''} fallback-avatar`}>
-                {user.name?.charAt(0).toUpperCase() || 'U'}
+                {user.accountType === 'business' 
+                  ? (user.businessInfo?.companyName?.charAt(0).toUpperCase() || user.name?.charAt(0).toUpperCase() || 'B')
+                  : (user.name?.charAt(0).toUpperCase() || 'U')
+                }
               </div>
               
               {uploading && (
@@ -534,6 +556,9 @@ const ProfileTab = ({ user, onUpdate }) => {
       {user.accountType === 'business' && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
           <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Business Information</h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Leave fields empty if you don't want to change them
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input 
               type="text" 
@@ -543,13 +568,15 @@ const ProfileTab = ({ user, onUpdate }) => {
               placeholder="Company Name"
               className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
             />
+            
+            {/* ===== FIXED: Company Type with default option ===== */}
             <select 
               name="businessInfo.companyType" 
               value={formData.businessInfo.companyType} 
               onChange={handleChange}
               className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
             >
-              <option value="">Company Type</option>
+              <option value="">Keep Current ({user.businessInfo?.companyType?.replace('_', ' ') || 'Not set'})</option>
               <option value="sole_proprietor">Sole Proprietor</option>
               <option value="partnership">Partnership</option>
               <option value="llc">LLC</option>
@@ -557,14 +584,34 @@ const ProfileTab = ({ user, onUpdate }) => {
               <option value="ngo">NGO</option>
               <option value="other">Other</option>
             </select>
-            <input 
-              type="text" 
+            
+            {/* ===== FIXED: Industry with default option ===== */}
+            <select 
               name="businessInfo.industry" 
               value={formData.businessInfo.industry} 
-              onChange={handleChange} 
-              placeholder="Industry"
-              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" 
-            />
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
+            >
+              <option value="">Keep Current ({user.businessInfo?.industry || 'Not set'})</option>
+              <option value="ecommerce">E-commerce</option>
+              <option value="real_estate">Real Estate</option>
+              <option value="freelance">Freelance</option>
+              <option value="saas">SaaS/Software</option>
+              <option value="professional_services">Professional Services</option>
+              <option value="government">Government</option>
+              <option value="logistics">Logistics</option>
+              <option value="finance">Finance</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="education">Education</option>
+              <option value="manufacturing">Manufacturing</option>
+              <option value="retail">Retail</option>
+              <option value="technology">Technology</option>
+              <option value="fashion">Fashion</option>
+              <option value="automotive">Automotive</option>
+              <option value="services">Services</option>
+              <option value="other">Other</option>
+            </select>
+            
             <input 
               type="text" 
               name="businessInfo.taxId" 

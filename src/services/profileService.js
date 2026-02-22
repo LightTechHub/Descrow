@@ -3,10 +3,33 @@ import api from '../config/api';
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
 const profileService = {
-  // Get profile
+  // Get profile - FIXED to properly return ALL user data including businessInfo
   getProfile: async () => {
     try {
       const response = await api.get('/users/me');
+      
+      // Log the full response to see what we're getting
+      console.log('📦 Raw profile response:', response.data);
+      
+      // Make sure we're returning the user data in a consistent format
+      if (response.data.success) {
+        const userData = response.data.data?.user || response.data.data || response.data;
+        
+        // Enhanced logging to debug
+        console.log('👤 User data extracted:', {
+          name: userData.name,
+          email: userData.email,
+          accountType: userData.accountType,
+          hasBusinessInfo: !!userData.businessInfo,
+          businessInfo: userData.businessInfo
+        });
+        
+        return {
+          success: true,
+          data: userData
+        };
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Get profile error:', error);
@@ -14,13 +37,21 @@ const profileService = {
     }
   },
 
-  // Get KYC Status
+  // Get KYC Status - FIXED to better handle business info
   getKYCStatus: async () => {
     try {
       const response = await api.get('/users/profile');
       
       if (response.data.success) {
-        const kycData = response.data.data?.user?.kycStatus || {};
+        const userData = response.data.data?.user || response.data.data;
+        const kycData = userData?.kycStatus || {};
+        
+        console.log('🔐 KYC data loaded:', {
+          status: kycData.status,
+          isKYCVerified: userData?.isKYCVerified,
+          hasBusinessInfo: !!kycData.businessInfo
+        });
+        
         return {
           success: true,
           data: {
@@ -31,9 +62,9 @@ const profileService = {
             rejectionReason: kycData.rejectionReason,
             resubmissionAllowed: kycData.resubmissionAllowed,
             personalInfo: kycData.personalInfo || {},
-            businessInfo: kycData.businessInfo || {},
+            businessInfo: kycData.businessInfo || userData?.businessInfo || {},
             approvedBy: kycData.approvedBy,
-            isKYCVerified: response.data.data?.user?.isKYCVerified || false,
+            isKYCVerified: userData?.isKYCVerified || false,
             documents: kycData.documents || []
           }
         };

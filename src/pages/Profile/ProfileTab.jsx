@@ -1,5 +1,5 @@
 // src/pages/Profile/ProfileTab.jsx
-// COMPLETE REFINED VERSION
+// COMPLETE FIXED VERSION - WITH MEMBER SINCE AND COUNTRY FIXES
 import React, { useState } from 'react';
 import { 
   Camera, Loader, Save, Edit2, X, User, Phone, Mail, MapPin, 
@@ -41,7 +41,7 @@ const ProfileTab = ({ user, onUpdate }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setFormData(prev => ({
@@ -135,6 +135,30 @@ const ProfileTab = ({ user, onUpdate }) => {
     });
   };
 
+  // Helper function to format date safely
+  const formatMemberSince = () => {
+    if (!user.createdAt) return 'Recently joined';
+    try {
+      const date = new Date(user.createdAt);
+      if (isNaN(date.getTime())) return 'Recently joined';
+      return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    } catch (e) {
+      return 'Recently joined';
+    }
+  };
+
+  // Helper function to get country from multiple sources
+  const getUserCountry = () => {
+    return user.country 
+      || user.address?.country 
+      || user.businessInfo?.businessAddress?.country 
+      || 'Not provided';
+  };
+
   // VIEW MODE
   if (!editMode) {
     return (
@@ -154,23 +178,38 @@ const ProfileTab = ({ user, onUpdate }) => {
             </button>
           </div>
 
-          {/* Avatar */}
+          {/* Avatar - SOLID BLUE (no gradient) */}
           <div className="flex items-center gap-6 pb-6 border-b border-gray-200 dark:border-gray-800">
             <div className="relative">
               {user.profilePicture ? (
                 <img
-                  src={user.profilePicture}
+                  src={(() => {
+                    const url = user.profilePicture;
+                    if (url.startsWith('http')) return url;
+                    if (url.startsWith('/')) return `${process.env.REACT_APP_API_URL || ''}${url}`;
+                    return `${process.env.REACT_APP_API_URL || ''}/uploads/avatars/${url}`;
+                  })()}
                   alt={user.name}
                   className="w-24 h-24 rounded-full object-cover border-4 border-gray-200 dark:border-gray-700"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.style.display = 'none';
+                    e.target.parentElement.querySelector('.fallback-avatar').classList.remove('hidden');
+                  }}
                 />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-3xl font-bold border-4 border-gray-200 dark:border-gray-700">
-                  {user.name?.charAt(0).toUpperCase()}
-                </div>
-              )}
+              ) : null}
+              
+              {/* Fallback Avatar - SOLID BLUE */}
+              <div className={`w-24 h-24 rounded-full bg-blue-600 flex items-center justify-center text-white text-3xl font-bold border-4 border-gray-200 dark:border-gray-700 ${user.profilePicture ? 'hidden' : ''} fallback-avatar`}>
+                {user.name?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              
               {uploading && (
-                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
-                  <Loader className="w-6 h-6 text-white animate-spin" />
+                <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+                  <div 
+                    className="w-6 h-6 border-2 border-white border-t-transparent rounded-full"
+                    style={{ animation: 'spin 1s linear infinite' }}
+                  ></div>
                 </div>
               )}
             </div>
@@ -198,7 +237,8 @@ const ProfileTab = ({ user, onUpdate }) => {
             <InfoItem icon={User} label="Full Name" value={user.name || 'Not provided'} />
             <InfoItem icon={Mail} label="Email" value={user.email} verified={user.verified} />
             <InfoItem icon={Phone} label="Phone" value={user.phone || 'Not provided'} />
-            <InfoItem icon={MapPin} label="Country" value={user.country || user.address?.country || 'Not provided'} />
+            {/* FIXED: Country from multiple sources */}
+            <InfoItem icon={MapPin} label="Country" value={getUserCountry()} />
             {user.accountType && (
               <InfoItem 
                 icon={Building2} 
@@ -207,10 +247,11 @@ const ProfileTab = ({ user, onUpdate }) => {
                 badge={user.accountType === 'business' ? 'BUSINESS' : 'PERSONAL'}
               />
             )}
+            {/* FIXED: Member Since with fallback */}
             <InfoItem 
               icon={Calendar} 
               label="Member Since" 
-              value={new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} 
+              value={formatMemberSince()} 
             />
           </div>
 
@@ -283,7 +324,7 @@ const ProfileTab = ({ user, onUpdate }) => {
     );
   }
 
-  // EDIT MODE
+  // EDIT MODE (unchanged - keep as is)
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
@@ -332,7 +373,7 @@ const ProfileTab = ({ user, onUpdate }) => {
         </div>
       </div>
 
-      {/* Business Info */}
+        {/* Business Info */}
       {user.accountType === 'business' && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
           <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Business Information</h4>
@@ -381,7 +422,20 @@ const ProfileTab = ({ user, onUpdate }) => {
         </button>
         <button type="submit" disabled={loading}
           className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
-          {loading ? <><Loader className="w-5 h-5 animate-spin" />Saving...</> : <><Save className="w-5 h-5" />Save Changes</>}
+          {loading ? (
+            <>
+              <div 
+                className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                style={{ animation: 'spin 1s linear infinite' }}
+              ></div>
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="w-5 h-5" />
+              Save Changes
+            </>
+          )}
         </button>
       </div>
     </form>
@@ -434,4 +488,4 @@ const SocialLink = ({ platform, url }) => (
   </a>
 );
 
-export default ProfileTab;
+export default ProfileTab; 

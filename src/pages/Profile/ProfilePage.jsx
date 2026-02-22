@@ -1,5 +1,5 @@
 // src/pages/Profile/ProfilePage.jsx
-// COMPLETE FIXED VERSION - SHOWS COMPANY NAME FOR BUSINESS ACCOUNTS
+// COMPLETE FIXED VERSION - PROPERLY LOADS AND DISPLAYS BUSINESS INFO
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -38,6 +38,7 @@ const ProfilePage = () => {
         return;
       }
 
+      // Get full profile data from API (this includes businessInfo)
       const [profileResponse, kycResponse] = await Promise.allSettled([
         profileService.getProfile(),
         profileService.getKYCStatus()
@@ -46,6 +47,11 @@ const ProfilePage = () => {
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         const profileData = profileResponse.value.data;
         const userData = profileData.user || profileData;
+        
+        // Log to see what we're getting
+        console.log('📊 Profile data loaded:', userData);
+        console.log('🏢 Business info:', userData.businessInfo);
+        console.log('📧 Email:', userData.email);
         
         if (!userData.kycStatus) {
           userData.kycStatus = {
@@ -256,12 +262,21 @@ const ProfilePage = () => {
   const getDisplayName = () => {
     if (user.accountType === 'business') {
       // For business accounts, show company name first
+      console.log('🏢 Business account - companyName:', user.businessInfo?.companyName);
       return user.businessInfo?.companyName || user.name || 'Business Account';
     } else {
       // For individual accounts, show personal name
       return user.name || 'User';
     }
   };
+
+  // ===== FIXED: Debug what we have =====
+  console.log('👤 Current user data:', {
+    accountType: user.accountType,
+    name: user.name,
+    businessInfo: user.businessInfo,
+    companyName: user.businessInfo?.companyName
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

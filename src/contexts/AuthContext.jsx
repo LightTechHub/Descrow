@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.jsx
+// src/contexts/AuthContext.jsx - FIXED
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import authService from '../services/authService';
 import { toast } from 'react-hot-toast';
@@ -17,55 +17,43 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize auth state from localStorage on mount
   useEffect(() => {
-    console.log('🔄 Initializing auth state...');
-    
     const initAuth = async () => {
       try {
         const token = authService.getToken();
         const savedUser = authService.getCurrentUser();
-        
-        console.log('📦 Token exists:', !!token);
-        console.log('👤 User exists:', !!savedUser);
-        
+
         if (token && savedUser) {
-          // Optionally verify token is still valid by fetching fresh user data
+          // Set cached user immediately so UI is not blocked while we verify
+          setUser(savedUser);
+
           try {
-            const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api'}/users/me`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
-            
+            const response = await fetch(
+              `${process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api'}/users/me`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
             if (response.ok) {
               const data = await response.json();
               if (data.success && data.user) {
-                setUser(data.user);
-                console.log('✅ Auth state restored with fresh data:', data.user.email);
-              } else {
-                setUser(savedUser);
-                console.log('✅ Auth state restored from localStorage:', savedUser.email);
+                // Merge fresh server data with cache so nothing is lost
+                const merged = { ...savedUser, ...data.user };
+                setUser(merged);
+                authService.updateUser(merged);
               }
-            } else {
-              // Token might be invalid, use cached user but it will be revalidated on next API call
-              setUser(savedUser);
-              console.log('⚠️ Could not verify token, using cached user');
             }
-          } catch (error) {
-            // Network error, use cached data
-            setUser(savedUser);
-            console.log('⚠️ Network error during init, using cached user');
+            // Non-ok (401 etc) — cached user stays, will be redirected on next
+            // protected API call
+          } catch {
+            // Network error — keep cached user, app still works offline
           }
-        } else {
-          console.log('❌ No saved auth state');
         }
       } catch (error) {
-        console.error('❌ Error initializing auth:', error);
-        // Clear corrupted data
+        console.error('Error initializing auth:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       } finally {
+        // Always release loading — never leave the app stuck on spinner
         setLoading(false);
       }
     };
@@ -75,87 +63,100 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      console.log('🔐 Logging in...');
       const response = await authService.login(credentials);
-      
-      if (response && response.success && response.user) {
+      if (response?.success && response.user) {
         setUser(response.user);
-        console.log('✅ User logged in:', response.user.email);
-        return response;
       }
-      
       return response;
     } catch (error) {
-      console.error('❌ Login error in context:', error);
       throw error;
     }
   };
 
   const googleLogin = async (googleData) => {
     try {
-      console.log('🔵 Google login...');
       const response = await authService.googleAuth(googleData);
-      
       if (response.success && response.user && !response.requiresProfileCompletion) {
         setUser(response.user);
-        console.log('✅ Google user logged in:', response.user.email);
       }
-      
       return response;
     } catch (error) {
-      console.error('❌ Google login error in context:', error);
       throw error;
     }
   };
 
   const completeGoogleProfile = async (profileData) => {
     try {
-      console.log('📝 Completing Google profile...');
       const response = await authService.completeGoogleProfile(profileData);
-      
       if (response.success && response.user) {
         setUser(response.user);
-        console.log('✅ Google profile completed:', response.user.email);
       }
-      
       return response;
     } catch (error) {
-      console.error('❌ Complete profile error in context:', error);
       throw error;
     }
   };
 
   const register = async (userData) => {
     try {
-      console.log('📝 Registering user...');
-      const response = await authService.register(userData);
-      return response;
+      return await authService.register(userData);
     } catch (error) {
-      console.error('❌ Register error in context:', error);
       throw error;
     }
   };
 
   const logout = () => {
-    console.log('🚪 Logging out...');
     setUser(null);
     authService.logout();
   };
 
+  // Deep merge so nested fields like businessInfo.companyName are never wiped
+  // when a partial update comes back from the server or profile save
   const updateUser = (userData) => {
-    const updatedUser = authService.updateUser(userData);
-    if (updatedUser) {
-      setUser(updatedUser);
-      console.log('✅ User updated in context');
-    }
-    return updatedUser;
+    setUser(prev => {
+      const merged = {
+        ...prev,
+        ...userData,
+        businessInfo: {
+          ...(prev?.businessInfo || {}),
+          ...(userData?.businessInfo || {}),
+        },
+        address: {
+          ...(prev?.address || {}),
+          ...(userData?.address || {}),
+        },
+      };
+      authService.updateUser(merged);
+      return merged;
+    });
   };
 
-  const refreshUser = () => {
-    const currentUser = authService.getCurrentUser();
-    setUser(currentUser);
-    console.log('🔄 User refreshed in context');
-    return currentUser;
+  // Fetches fresh user data from the API and syncs context + localStorage
+  const refreshUser = async () => {
+    try {
+      const token = authService.getToken();
+      if (!token) return null;
+
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api'}/users/me`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          setUser(data.user);
+          authService.updateUser(data.user);
+          return data.user;
+        }
+      }
+    } catch (error) {
+      console.error('refreshUser error:', error);
+    }
+
+    const cached = authService.getCurrentUser();
+    if (cached) setUser(cached);
+    return cached;
   };
 
   const value = {
@@ -168,12 +169,15 @@ export const AuthProvider = ({ children }) => {
     updateUser,
     refreshUser,
     isAuthenticated: !!user,
-    loading
+    loading,
   };
 
+  // Always render children. ProtectedRoute handles the loading UI.
+  // The previous {!loading && children} was causing the spinner in ProtectedRoute
+  // to never mount, so nothing was visible during the auth check.
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

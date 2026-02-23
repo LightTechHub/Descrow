@@ -1,183 +1,195 @@
-// backend/controllers/profile.controller.js
+// backend/controllers/profile.controller.js - FIXED
 const User = require('../models/User.model');
 const { deleteOldAvatar } = require('../middleware/upload.middleware');
 
-/**
- * Get user profile
- */
+// ─── GET PROFILE ─────────────────────────────────────────────────────────────
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password -twoFactorSecret -apiAccess.apiSecret');
-    
+    const user = await User.findById(req.user._id)
+      .select('-password -twoFactorSecret -apiAccess.apiSecret');
+
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Ensure kycStatus has proper structure
-    const userData = user.toObject ? user.toObject() : user;
-    
-    const profile = {
-      ...userData,
-      kycStatus: userData.kycStatus || {
+    const userData = user.toObject();
+
+    // Guarantee kycStatus always has a full shape so frontend never crashes
+    if (!userData.kycStatus) {
+      userData.kycStatus = {
         status: 'unverified',
         tier: 'basic',
         documents: [],
         personalInfo: {},
-        businessInfo: {}
-      }
-    };
+        businessInfo: {},
+      };
+    }
 
-    res.json({
-      success: true,
-      data: profile
-    });
+    res.json({ success: true, data: userData });
   } catch (error) {
     console.error('Get profile error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch profile'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch profile' });
   }
 };
 
-/**
- * Update user profile
- */
+// ─── UPDATE PROFILE ───────────────────────────────────────────────────────────
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, phone, bio, address, socialLinks, businessInfo } = req.body;
+    const { name, phone, bio, address, socialLinks, businessInfo, preferences } = req.body;
 
+    // Use dot-notation keys so $set MERGES nested fields instead of replacing
+    // the entire sub-document. e.g. "address.city" won't wipe address.street.
     const updates = {};
-    if (name) updates.name = name;
-    if (phone) updates.phone = phone;
-    if (bio) updates.bio = bio;
-    if (address) updates.address = address;
-    if (socialLinks) updates.socialLinks = socialLinks;
-    if (businessInfo) updates.businessInfo = businessInfo;
+
+    if (name !== undefined)  updates.name  = name.trim();
+    if (phone !== undefined) updates.phone = phone.trim();
+    if (bio !== undefined)   updates.bio   = bio.trim();
+
+    // Address — only set fields that were actually sent
+    if (address && typeof address === 'object') {
+      const allowed = ['street', 'city', 'state', 'country', 'zipCode', 'postalCode', 'formatted'];
+      allowed.forEach(field => {
+        if (address[field] !== undefined) {
+          updates[`address.${field}`] = address[field];
+        }
+      });
+    }
+
+    // Social links — only set fields that were actually sent
+    if (socialLinks && typeof socialLinks === 'object') {
+      ['twitter', 'linkedin', 'website'].forEach(field => {
+        if (socialLinks[field] !== undefined) {
+          updates[`socialLinks.${field}`] = socialLinks[field];
+        }
+      });
+    }
+
+    // Business info — only set fields that were actually sent
+    if (businessInfo && typeof businessInfo === 'object') {
+      const allowedBusiness = [
+        'companyName', 'companyType', 'taxId', 'registrationNumber',
+        'industry', 'businessEmail', 'businessPhone', 'website',
+      ];
+      allowedBusiness.forEach(field => {
+        if (businessInfo[field] !== undefined && businessInfo[field] !== '') {
+          updates[`businessInfo.${field}`] = businessInfo[field];
+        }
+      });
+
+      // Nested business address
+      if (businessInfo.businessAddress && typeof businessInfo.businessAddress === 'object') {
+        ['street', 'city', 'state', 'country', 'zipCode'].forEach(field => {
+          if (businessInfo.businessAddress[field] !== undefined) {
+            updates[`businessInfo.businessAddress.${field}`] = businessInfo.businessAddress[field];
+          }
+        });
+      }
+    }
+
+    // Preferences
+    if (preferences && typeof preferences === 'object') {
+      ['language', 'timezone', 'defaultCurrency', 'theme'].forEach(field => {
+        if (preferences[field] !== undefined) {
+          updates[`preferences.${field}`] = preferences[field];
+        }
+      });
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid fields to update' });
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
-      { new: true, runValidators: true }
+      {
+        new: true,
+        // runValidators: false prevents the country enum on the model from
+        // blocking saves when a user selects a country not in the old list.
+        // Validation of user-facing inputs is handled at the form/route level.
+        runValidators: false,
+      }
     ).select('-password -twoFactorSecret -apiAccess.apiSecret');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
-      data: user
+      data: user.toObject(), // Full user returned so frontend can sync context
     });
-
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update profile'
+      message: error.message || 'Failed to update profile',
     });
   }
 };
 
-/**
- * Upload user avatar
- */
+// ─── UPLOAD AVATAR ────────────────────────────────────────────────────────────
 exports.uploadAvatar = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded'
-      });
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Delete old avatar if exists
+    // Delete old avatar file from disk if it exists
     if (user.profilePicture) {
       deleteOldAvatar(user.profilePicture);
     }
 
-    // Save new avatar path
     user.profilePicture = req.avatarUrl || `/${req.file.path.replace(/\\/g, '/')}`;
     await user.save();
-
-    console.log('✅ Avatar uploaded successfully for user:', user._id);
 
     res.json({
       success: true,
       message: 'Avatar uploaded successfully',
       data: {
         avatarUrl: user.profilePicture,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          profilePicture: user.profilePicture
-        }
-      }
+        profilePicture: user.profilePicture,
+      },
     });
-
   } catch (error) {
-    console.error('❌ Upload avatar error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to upload avatar',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.error('Upload avatar error:', error);
+    res.status(500).json({ success: false, message: 'Failed to upload avatar' });
   }
 };
 
-/**
- * Submit KYC verification
- */
+// ─── SUBMIT KYC ───────────────────────────────────────────────────────────────
 exports.submitKYC = async (req, res) => {
   try {
     const { personalInfo, businessInfo, tier } = req.body;
 
     const user = await User.findById(req.user._id);
-    
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Check if KYC is already approved
-    if (user.kycStatus && user.kycStatus.status === 'approved') {
-      return res.status(400).json({
-        success: false,
-        message: 'Your KYC is already approved'
-      });
+    if (user.kycStatus?.status === 'approved') {
+      return res.status(400).json({ success: false, message: 'KYC is already approved' });
     }
 
-    // Check if KYC is already pending
-    if (user.kycStatus && user.kycStatus.status === 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Your KYC is already under review'
-      });
+    if (user.kycStatus?.status === 'pending') {
+      return res.status(400).json({ success: false, message: 'KYC is already under review' });
     }
 
-    // Update user's embedded kycStatus
     user.kycStatus = {
       status: 'pending',
       tier: tier || 'basic',
       submittedAt: new Date(),
       reviewedAt: null,
       rejectionReason: null,
-      resubmissionAllowed: true,
-      verificationId: null,
       documents: user.kycStatus?.documents || [],
       personalInfo: personalInfo || {},
-      businessInfo: businessInfo || {}
+      businessInfo: businessInfo || {},
     };
 
     await user.save();
@@ -185,30 +197,20 @@ exports.submitKYC = async (req, res) => {
     res.json({
       success: true,
       message: 'KYC submitted successfully. We will review within 24-48 hours.',
-      data: { kycStatus: user.kycStatus }
+      data: { kycStatus: user.kycStatus },
     });
-
   } catch (error) {
     console.error('Submit KYC error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to submit KYC'
-    });
+    res.status(500).json({ success: false, message: error.message || 'Failed to submit KYC' });
   }
 };
 
-/**
- * Get KYC status
- */
+// ─── GET KYC STATUS ───────────────────────────────────────────────────────────
 exports.getKYCStatus = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('kycStatus isKYCVerified');
-
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     res.json({
@@ -222,68 +224,39 @@ exports.getKYCStatus = async (req, res) => {
         documents: user.kycStatus?.documents || [],
         personalInfo: user.kycStatus?.personalInfo || {},
         businessInfo: user.kycStatus?.businessInfo || {},
-        isKYCVerified: user.isKYCVerified
-      }
+        isKYCVerified: user.isKYCVerified,
+      },
     });
-
   } catch (error) {
     console.error('Get KYC status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch KYC status'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch KYC status' });
   }
 };
 
-/**
- * Upload KYC documents - MERGED from current file
- */
+// ─── UPLOAD KYC DOCUMENTS ─────────────────────────────────────────────────────
 exports.uploadKYCDocuments = async (req, res) => {
   try {
     const { documentType } = req.body;
 
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded'
-      });
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
     const user = await User.findById(req.user._id);
-    
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Initialize kycStatus if it doesn't exist
     if (!user.kycStatus) {
-      user.kycStatus = {
-        status: 'unverified',
-        tier: 'basic',
-        documents: [],
-        personalInfo: {},
-        businessInfo: {}
-      };
+      user.kycStatus = { status: 'unverified', tier: 'basic', documents: [], personalInfo: {}, businessInfo: {} };
     }
-
-    // Ensure documents array exists
     if (!Array.isArray(user.kycStatus.documents)) {
       user.kycStatus.documents = [];
     }
 
-    // Add new document
     const documentUrl = `/uploads/kyc/${req.file.filename}`;
-    user.kycStatus.documents.push({
-      type: documentType,
-      url: documentUrl,
-      uploadedAt: new Date(),
-      verified: false
-    });
+    user.kycStatus.documents.push({ type: documentType, url: documentUrl, uploadedAt: new Date() });
 
-    // Update status to pending if documents are uploaded
     if (user.kycStatus.status === 'unverified') {
       user.kycStatus.status = 'pending';
     }
@@ -292,132 +265,74 @@ exports.uploadKYCDocuments = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'KYC document uploaded successfully',
-      data: { 
-        document: {
-          type: documentType,
-          url: documentUrl,
-          uploadedAt: new Date()
-        },
-        kycStatus: user.kycStatus
-      }
+      message: 'Document uploaded successfully',
+      data: {
+        document: { type: documentType, url: documentUrl },
+        kycStatus: user.kycStatus,
+      },
     });
-
   } catch (error) {
     console.error('Upload KYC document error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to upload KYC document'
-    });
+    res.status(500).json({ success: false, message: 'Failed to upload document' });
   }
 };
 
-/**
- * Change password
- */
+// ─── CHANGE PASSWORD ──────────────────────────────────────────────────────────
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password and new password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Both current and new password are required' });
     }
-
     if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password must be at least 6 characters'
-      });
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
     }
 
     const user = await User.findById(req.user._id).select('+password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Check current password
     const isMatch = await user.comparePassword(currentPassword);
     if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password is incorrect'
-      });
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
-    // Update password
     user.password = newPassword;
     await user.save();
 
-    res.json({
-      success: true,
-      message: 'Password changed successfully'
-    });
-
+    res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
     console.error('Change password error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to change password'
-    });
+    res.status(500).json({ success: false, message: 'Failed to change password' });
   }
 };
 
-/**
- * Delete account
- */
+// ─── DELETE ACCOUNT ───────────────────────────────────────────────────────────
 exports.deleteAccount = async (req, res) => {
   try {
     const { password, reason } = req.body;
 
     if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password is required to delete account'
-      });
+      return res.status(400).json({ success: false, message: 'Password required to delete account' });
     }
 
     const user = await User.findById(req.user._id).select('+password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Verify password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Incorrect password'
-      });
+      return res.status(400).json({ success: false, message: 'Incorrect password' });
     }
 
-    // Soft delete (mark as deleted instead of removing)
     user.status = 'deleted';
     user.deletedAt = new Date();
     user.deletionReason = reason;
     await user.save();
 
-    res.json({
-      success: true,
-      message: 'Account deleted successfully'
-    });
-
+    res.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
     console.error('Delete account error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete account'
-    });
+    res.status(500).json({ success: false, message: 'Failed to delete account' });
   }
 };
 

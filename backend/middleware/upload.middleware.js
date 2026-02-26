@@ -1,9 +1,15 @@
-// backend/middleware/upload.middleware.js
+// backend/middleware/upload.middleware.js - FIXED
+// Fix: req.avatarUrl now stores ONLY the path without BACKEND_URL prefix.
+//      The frontend resolveAvatarUrl already prepends the API base, so adding
+//      the full URL here caused double-prefixing → 404 on /api/uploads/avatars/...
+//      Correct stored value: /uploads/avatars/filename.jpg
+//      Frontend resolves it to: https://your-backend.com/uploads/avatars/filename.jpg
+
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// ✅ Ensure upload directories exist (including avatars)
+// Ensure upload directories exist
 const uploadDirs = [
   'uploads/avatars',
   'uploads/kyc',
@@ -25,8 +31,7 @@ uploadDirs.forEach(dir => {
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     let uploadPath = 'uploads/';
-    
-    // ✅ Route-based directory selection
+
     if (req.baseUrl.includes('/profile') || req.path.includes('/avatar')) {
       uploadPath += 'avatars/';
     } else if (req.baseUrl.includes('/delivery')) {
@@ -40,20 +45,18 @@ const storage = multer.diskStorage({
     } else if (req.baseUrl.includes('/escrow')) {
       uploadPath += 'escrow/';
     }
-    
-    // ✅ Ensure the specific directory exists
+
     const fullPath = path.join(__dirname, '..', uploadPath);
     if (!fs.existsSync(fullPath)) {
       fs.mkdirSync(fullPath, { recursive: true });
     }
-    
+
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    
-    // ✅ Special naming for avatars
+
     if (file.fieldname === 'avatar') {
       cb(null, `avatar-${req.user._id}-${uniqueSuffix}${ext}`);
     } else {
@@ -62,78 +65,52 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter
+// General file filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|pdf|gif|doc|docx|txt|mp4|mov|avi|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
-
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
-    cb(new Error('Only images, PDFs, documents, and video files are allowed'));
-  }
+  if (mimetype && extname) return cb(null, true);
+  cb(new Error('Only images, PDFs, documents, and video files are allowed'));
 };
 
-// ✅ Avatar-specific file filter (images only)
+// Avatar-specific file filter
 const avatarFileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = file.mimetype.startsWith('image/');
-
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed for avatars'));
-  }
+  if (mimetype && extname) return cb(null, true);
+  cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed for avatars'));
 };
 
-// Multer upload instance
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 25 * 1024 * 1024 // 25MB max file size
-  },
-  fileFilter: fileFilter
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter
 });
 
-// ✅ Avatar upload instance (smaller size limit, images only)
 const avatarUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB max for avatars
-  },
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: avatarFileFilter
 });
 
 // Upload single file
 exports.uploadSingle = (fieldName = 'file') => {
   return (req, res, next) => {
-    const uploadSingle = upload.single(fieldName);
-    
-    uploadSingle(req, res, (err) => {
+    upload.single(fieldName)(req, res, (err) => {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({
-            success: false,
-            message: 'File too large. Maximum size is 25MB'
-          });
+          return res.status(400).json({ success: false, message: 'File too large. Maximum size is 25MB' });
         }
-        return res.status(400).json({
-          success: false,
-          message: 'File upload error',
-          error: err.message
-        });
+        return res.status(400).json({ success: false, message: 'File upload error', error: err.message });
       } else if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message
-        });
+        return res.status(400).json({ success: false, message: err.message });
       }
-      
-      // Add file URL to request
+
       if (req.file) {
-        req.fileUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/${req.file.path}`;
+        // Store full URL for non-avatar files (used in escrow/chat/etc)
+        req.fileUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/${req.file.path.replace(/\\/g, '/')}`;
         req.fileData = {
           filename: req.file.filename,
           originalname: req.file.originalname,
@@ -142,39 +119,30 @@ exports.uploadSingle = (fieldName = 'file') => {
           path: req.file.path
         };
       }
-      
+
       next();
     });
   };
 };
 
-// ✅ Avatar upload middleware
+// ✅ FIXED: Avatar upload middleware
+// Stores ONLY the path (e.g. /uploads/avatars/avatar-xxx.jpg) — NOT the full URL.
+// The frontend resolveAvatarUrl() prepends REACT_APP_BACKEND_URL (NOT REACT_APP_API_URL)
+// to build the correct full URL. See profileService notes below.
 exports.uploadAvatar = (req, res, next) => {
-  const uploadSingle = avatarUpload.single('avatar');
-  
-  uploadSingle(req, res, (err) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({
-          success: false,
-          message: 'Avatar too large. Maximum size is 5MB'
-        });
+        return res.status(400).json({ success: false, message: 'Avatar too large. Maximum size is 5MB' });
       }
-      return res.status(400).json({
-        success: false,
-        message: 'Avatar upload error',
-        error: err.message
-      });
+      return res.status(400).json({ success: false, message: 'Avatar upload error', error: err.message });
     } else if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message
-      });
+      return res.status(400).json({ success: false, message: err.message });
     }
-    
-    // Add file data to request
+
     if (req.file) {
-      req.avatarUrl = `/${req.file.path.replace(/\\/g, '/')}`;
+      // ✅ Store clean path only — no domain prefix
+      req.avatarUrl = `/uploads/avatars/${req.file.filename}`;
       req.avatarData = {
         filename: req.file.filename,
         originalname: req.file.originalname,
@@ -183,7 +151,7 @@ exports.uploadAvatar = (req, res, next) => {
         path: req.file.path
       };
     }
-    
+
     next();
   });
 };
@@ -191,38 +159,22 @@ exports.uploadAvatar = (req, res, next) => {
 // Upload multiple files
 exports.uploadMultiple = (fieldName = 'files', maxCount = 10) => {
   return (req, res, next) => {
-    const uploadMultiple = upload.array(fieldName, maxCount);
-    
-    uploadMultiple(req, res, (err) => {
+    upload.array(fieldName, maxCount)(req, res, (err) => {
       if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({
-            success: false,
-            message: 'One or more files are too large. Maximum size is 25MB per file'
-          });
+          return res.status(400).json({ success: false, message: 'One or more files are too large. Maximum size is 25MB per file' });
         }
         if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-          return res.status(400).json({
-            success: false,
-            message: `Too many files. Maximum ${maxCount} files allowed`
-          });
+          return res.status(400).json({ success: false, message: `Too many files. Maximum ${maxCount} files allowed` });
         }
-        return res.status(400).json({
-          success: false,
-          message: 'File upload error',
-          error: err.message
-        });
+        return res.status(400).json({ success: false, message: 'File upload error', error: err.message });
       } else if (err) {
-        return res.status(400).json({
-          success: false,
-          message: err.message
-        });
+        return res.status(400).json({ success: false, message: err.message });
       }
-      
-      // Add file URLs to request
+
       if (req.files && req.files.length > 0) {
-        req.fileUrls = req.files.map(file => 
-          `${process.env.BACKEND_URL || 'http://localhost:5000'}/${file.path}`
+        req.fileUrls = req.files.map(file =>
+          `${process.env.BACKEND_URL || 'http://localhost:5000'}/${file.path.replace(/\\/g, '/')}`
         );
         req.filesData = req.files.map(file => ({
           filename: file.filename,
@@ -232,37 +184,24 @@ exports.uploadMultiple = (fieldName = 'files', maxCount = 10) => {
           path: file.path
         }));
       }
-      
+
       next();
     });
   };
 };
 
-// Upload for escrow attachments specifically
+// Upload escrow attachments
 exports.uploadEscrowAttachments = (req, res, next) => {
-  const uploadMultiple = upload.array('attachments', 10);
-  
-  uploadMultiple(req, res, (err) => {
+  upload.array('attachments', 10)(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({
-          success: false,
-          message: 'File too large. Maximum size is 25MB per file'
-        });
+        return res.status(400).json({ success: false, message: 'File too large. Maximum size is 25MB per file' });
       }
-      return res.status(400).json({
-        success: false,
-        message: 'File upload error',
-        error: err.message
-      });
+      return res.status(400).json({ success: false, message: 'File upload error', error: err.message });
     } else if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message
-      });
+      return res.status(400).json({ success: false, message: err.message });
     }
-    
-    // Add file data to request for escrow creation
+
     if (req.files && req.files.length > 0) {
       req.attachments = req.files.map(file => ({
         filename: file.filename,
@@ -270,57 +209,51 @@ exports.uploadEscrowAttachments = (req, res, next) => {
         size: file.size,
         mimetype: file.mimetype,
         path: file.path,
-        url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/${file.path}`
+        url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/${file.path.replace(/\\/g, '/')}`
       }));
     }
-    
+
     next();
   });
 };
 
-// Middleware to handle file deletion on failed operations
+// Cleanup files on failed operations
 exports.cleanupFiles = (files) => {
   return (req, res, next) => {
-    // Store original send function
     const originalSend = res.send;
-    
-    // Override send function
-    res.send = function(data) {
-      // If response indicates error, clean up uploaded files
+    res.send = function (data) {
       try {
         const responseData = JSON.parse(data);
         if (!responseData.success && req.files) {
           req.files.forEach(file => {
             try {
-              if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-              }
+              if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
             } catch (cleanupErr) {
               console.error('Error cleaning up file:', cleanupErr);
             }
           });
         }
       } catch (e) {
-        // Not JSON response, continue
+        // Not JSON, continue
       }
-      
-      // Call original send function
       originalSend.call(this, data);
     };
-    
     next();
   };
 };
 
-// ✅ Helper function to delete old avatar
+// ✅ Helper: delete old avatar from disk
 exports.deleteOldAvatar = (avatarPath) => {
   if (!avatarPath) return;
-  
-  const fullPath = path.join(__dirname, '..', avatarPath);
+  // Handle both /uploads/avatars/file.jpg and full URLs
+  const cleanPath = avatarPath.startsWith('http')
+    ? new URL(avatarPath).pathname
+    : avatarPath;
+  const fullPath = path.join(__dirname, '..', cleanPath);
   if (fs.existsSync(fullPath)) {
     try {
       fs.unlinkSync(fullPath);
-      console.log('✅ Deleted old avatar:', avatarPath);
+      console.log('✅ Deleted old avatar:', cleanPath);
     } catch (error) {
       console.error('❌ Error deleting old avatar:', error);
     }

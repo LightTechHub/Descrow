@@ -5,18 +5,14 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.o
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  },
+  headers: { 'Content-Type': 'application/json' },
   timeout: 30000
 });
 
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('adminToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => Promise.reject(error)
@@ -35,28 +31,17 @@ api.interceptors.response.use(
 );
 
 const adminService = {
+  // ── Auth ────────────────────────────────────────────────────────────────────
   login: async (credentials) => {
-    try {
-      console.log('📡 Admin login request:', credentials.email);
-      
-      const response = await api.post('/admin/login', {
-        email: credentials.email.trim(),
-        password: credentials.password
-      });
-      
-      console.log('📦 Response:', response.data);
-      
-      if (response.data.success && response.data.token) {
-        localStorage.setItem('adminToken', response.data.token);
-        localStorage.setItem('admin', JSON.stringify(response.data.admin));
-        console.log('✅ Admin logged in');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      throw error;
+    const response = await api.post('/admin/login', {
+      email: credentials.email.trim(),
+      password: credentials.password
+    });
+    if (response.data.success && response.data.token) {
+      localStorage.setItem('adminToken', response.data.token);
+      localStorage.setItem('admin', JSON.stringify(response.data.admin));
     }
+    return response.data;
   },
 
   logout: () => {
@@ -64,18 +49,31 @@ const adminService = {
     localStorage.removeItem('admin');
   },
 
+  // ── Dashboard ────────────────────────────────────────────────────────────────
   getDashboardStats: async () => {
     const response = await api.get('/admin/dashboard');
     return response.data;
   },
 
+  // ── Transactions ─────────────────────────────────────────────────────────────
   getTransactions: async (params = {}) => {
     const response = await api.get('/admin/transactions', { params });
     return response.data;
   },
 
+  getTransactionDetails: async (transactionId) => {
+    const response = await api.get(`/admin/transactions/${transactionId}`);
+    return response.data;
+  },
+
+  // ── Disputes ─────────────────────────────────────────────────────────────────
   getDisputes: async (params = {}) => {
     const response = await api.get('/admin/disputes', { params });
+    return response.data;
+  },
+
+  assignDispute: async (disputeId, adminId) => {
+    const response = await api.put(`/admin/disputes/${disputeId}/assign`, { adminId });
     return response.data;
   },
 
@@ -84,26 +82,35 @@ const adminService = {
     return response.data;
   },
 
+  // ── Users ────────────────────────────────────────────────────────────────────
   getUsers: async (params = {}) => {
     const response = await api.get('/admin/users', { params });
     return response.data;
   },
 
-  changeUserTier: async (userId, tierData) => {
-    const response = await api.put(`/admin/users/${userId}/tier`, tierData);
+  getUserDetails: async (userId) => {
+    const response = await api.get(`/admin/users/${userId}`);
     return response.data;
   },
 
-  toggleUserStatus: async (userId, statusData) => {
-    const response = await api.put(`/admin/users/${userId}/toggle-status`, statusData);
+  // FIX: must pass { action: 'suspend' | 'activate', reason }
+  toggleUserStatus: async (userId, action, reason = '') => {
+    const response = await api.put(`/admin/users/${userId}/toggle-status`, { action, reason });
     return response.data;
   },
 
-  reviewKYC: async (userId, kycData) => {
-    const response = await api.put(`/admin/users/${userId}/kyc`, kycData);
+  changeUserTier: async (userId, newTier, reason = '') => {
+    const response = await api.put(`/admin/users/${userId}/tier`, { newTier, reason });
     return response.data;
   },
 
+  // FIX: renamed from verifyUser — matches backend reviewKYC endpoint
+  reviewKYC: async (userId, action, reason = '') => {
+    const response = await api.put(`/admin/users/${userId}/kyc`, { action, reason });
+    return response.data;
+  },
+
+  // ── Analytics ────────────────────────────────────────────────────────────────
   getAnalytics: async (params = {}) => {
     const response = await api.get('/admin/analytics', { params });
     return response.data;
@@ -114,6 +121,7 @@ const adminService = {
     return response.data;
   },
 
+  // ── Admin Management ─────────────────────────────────────────────────────────
   getAdmins: async () => {
     const response = await api.get('/admin/admins');
     return response.data;
@@ -139,6 +147,7 @@ const adminService = {
     return response.data;
   },
 
+  // ── Fee Settings ─────────────────────────────────────────────────────────────
   getFeeSettings: async () => {
     const response = await api.get('/admin/fees');
     return response.data;

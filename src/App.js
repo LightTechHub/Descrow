@@ -1,16 +1,15 @@
-// File: src/App.jsx
-import React, { useEffect } from 'react';
+// src/App.jsx
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useAuth } from './contexts/AuthContext';
 
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import ThemeToggle from './components/ThemeToggle';
 
 // ==================== PUBLIC PAGES ====================
 import LandingPage from './pages/LandingPage';
-import Login from './pages/Auth/Login';  // ✅ FIXED: Updated import path
+import Login from './pages/Auth/Login';
 import UnifiedSignup from './pages/Auth/UnifiedSignup';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
@@ -58,7 +57,7 @@ import APIManagementPage from './pages/admin/APIManagementPage';
 import AdminManagementPage from './pages/admin/AdminManagementPage';
 import FeeManagementPage from './pages/admin/FeeManagementPage';
 
-// ==================== 404 COMPONENT ====================
+// ==================== 404 ====================
 const NotFound = () => {
   const location = useLocation();
   useEffect(() => { document.title = '404 - Page Not Found | Dealcross'; }, []);
@@ -78,190 +77,107 @@ const NotFound = () => {
   );
 };
 
+// ==================== LOADING SPINNER ====================
+const Spinner = ({ dark = false }) => (
+  <div className={`min-h-screen flex items-center justify-center ${dark ? 'bg-gray-900' : 'bg-gray-50 dark:bg-gray-950'}`}>
+    <div
+      className="rounded-full h-14 w-14 border-4 border-transparent"
+      style={{
+        borderBottomColor: dark ? '#dc2626' : '#3b82f6',
+        animation: 'spin 0.8s linear infinite'
+      }}
+    />
+  </div>
+);
+
 // ==================== APP ====================
 function App() {
   const { user, isAuthenticated, loading } = useAuth();
-  const [admin, setAdmin] = React.useState(null);
-  const [adminLoading, setAdminLoading] = React.useState(true);
+  const [admin, setAdmin] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(true);
 
-  // ==================== INIT ADMIN AUTH ====================
+  // FIX: use useLocation for reactive path checks
+  const location = useLocation();
+
+  // ── Admin auth init ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const initAdminAuth = () => {
-      const adminToken = localStorage.getItem('adminToken');
-      const adminData = localStorage.getItem('admin');
-      if (adminToken && adminData) {
-        try { 
-          setAdmin(JSON.parse(adminData)); 
-        } catch { 
-          localStorage.removeItem('adminToken'); 
-          localStorage.removeItem('admin'); 
-        }
+    const adminToken = localStorage.getItem('adminToken');
+    const adminData = localStorage.getItem('admin');
+    if (adminToken && adminData) {
+      try {
+        setAdmin(JSON.parse(adminData));
+      } catch {
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('admin');
       }
-      setAdminLoading(false);
-    };
-
-    initAdminAuth();
+    }
+    setAdminLoading(false);
   }, []);
 
-  // ==================== PROTECTED ROUTES ====================
-const ProtectedRoute = ({ children }) => {
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-        {/* ✅ FIXED: Added !important style to force animation */}
-        <div 
-          className="rounded-full h-12 w-12 border-b-2 border-blue-600"
-          style={{ 
-            animation: 'spin 1s linear infinite',
-            borderBottomColor: '#3b82f6',
-            borderRightColor: 'transparent',
-            borderTopColor: 'transparent',
-            borderLeftColor: 'transparent'
-          }}
-        ></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
-};
-
-const AdminProtectedRoute = ({ children, requiredPermission }) => {
-  if (adminLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        {/* ✅ FIXED: Added !important style to force animation */}
-        <div 
-          className="rounded-full h-12 w-12 border-b-2 border-red-600"
-          style={{ 
-            animation: 'spin 1s linear infinite',
-            borderBottomColor: '#dc2626',
-            borderRightColor: 'transparent',
-            borderTopColor: 'transparent',
-            borderLeftColor: 'transparent'
-          }}
-        ></div>
-      </div>
-    );
-  }
-
-  if (!admin) {
-    return <Navigate to="/admin/login" replace />;
-  }
-
-  if (requiredPermission && admin.role !== 'master' && !admin.permissions?.[requiredPermission]) {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
-
-  return children;
-};
-
-// Also update the main loading spinner (around line 185)
-if (loading || adminLoading) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-      {/* ✅ FIXED: Added !important style to force animation */}
-      <div 
-        className="rounded-full h-16 w-16 border-b-2 border-blue-600"
-        style={{ 
-          animation: 'spin 1s linear infinite',
-          borderBottomColor: '#3b82f6',
-          borderRightColor: 'transparent',
-          borderTopColor: 'transparent',
-          borderLeftColor: 'transparent'
-        }}
-      ></div>
-    </div>
-  );
-}
-
-  // ==================== NAVBAR & FOOTER LOGIC ====================
-  const showNavbar = () => {
-    const path = window.location.pathname;
-    const noNavbarRoutes = [
-      '/login',
-      '/signup',
-      '/verify-email',
-      '/forgot-password',
-      '/reset-password',
-      '/resend-verification',
-      '/complete-profile',
-      '/admin'
-    ];
-    return !noNavbarRoutes.some(route => path.startsWith(route));
-  };
-
-  const showFooter = () => {
-    const path = window.location.pathname;
-    const noFooterRoutes = [
-      '/login',
-      '/signup',
-      '/verify-email',
-      '/forgot-password',
-      '/reset-password',
-      '/resend-verification',
-      '/complete-profile',
-      '/admin',
-      '/dashboard',
-      '/escrow',
-      '/profile',
-      '/notifications',
-      '/payment',
-      '/upgrade'
-    ];
-    return !noFooterRoutes.some(route => path.startsWith(route));
-  };
-
+  // ── Single loading gate — wait for both auth systems ────────────────────────
+  // FIX: removed the duplicate loading check that appeared twice
   if (loading || adminLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <Spinner />;
   }
+
+  // ── Route guards ─────────────────────────────────────────────────────────────
+  const ProtectedRoute = ({ children }) => {
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return children;
+  };
+
+  const AdminProtectedRoute = ({ children, requiredPermission }) => {
+    if (!admin) return <Navigate to="/admin/login" replace />;
+    // FIX: master admin bypasses all permission checks
+    if (requiredPermission && admin.role !== 'master') {
+      // FIX: manageFees was missing from permissions — treat it as master-only
+      // For other permissions, check the permissions object
+      const masterOnlyPerms = ['manageFees', 'manageAdmins', 'manageAPI', 'managePayments'];
+      if (masterOnlyPerms.includes(requiredPermission)) {
+        return <Navigate to="/admin/dashboard" replace />;
+      }
+      if (!admin.permissions?.[requiredPermission]) {
+        return <Navigate to="/admin/dashboard" replace />;
+      }
+    }
+    return children;
+  };
+
+  // ── Navbar / Footer visibility ────────────────────────────────────────────────
+  // FIX: use location.pathname from useLocation() hook, not window.location.pathname
+  const path = location.pathname;
+
+  const noNavbarPrefixes = [
+    '/login', '/signup', '/verify-email', '/forgot-password',
+    '/reset-password', '/resend-verification', '/complete-profile', '/admin'
+  ];
+  const noFooterPrefixes = [
+    '/login', '/signup', '/verify-email', '/forgot-password',
+    '/reset-password', '/resend-verification', '/complete-profile', '/admin',
+    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade'
+  ];
+
+  const shouldShowNavbar = !noNavbarPrefixes.some(p => path.startsWith(p));
+  const shouldShowFooter = !noFooterPrefixes.some(p => path.startsWith(p));
 
   return (
     <GoogleOAuthProvider clientId={process.env.REACT_APP_GOOGLE_CLIENT_ID}>
       <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
-        {showNavbar() && <Navbar user={user} />}
+        {shouldShowNavbar && <Navbar user={user} />}
 
         <Routes>
-          {/* ==================== PUBLIC ROUTES ==================== */}
+          {/* ── Public ─────────────────────────────────────────────────────── */}
           <Route path="/" element={<LandingPage />} />
-          <Route 
-            path="/login" 
-            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
-          />
-          <Route 
-            path="/signup" 
-            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <UnifiedSignup />} 
-          />
+          <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+          <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <UnifiedSignup />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/resend-verification" element={<ResendVerification />} />
-          
-          {/* OAuth Complete Profile Route */}
-          <Route 
-            path="/complete-profile" 
-            element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <CompleteProfilePage />} 
-          />
+          <Route path="/complete-profile" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <CompleteProfilePage />} />
+          <Route path="/kyc-verification" element={<ProtectedRoute><KYCVerificationPage /></ProtectedRoute>} />
 
-          {/* KYC Verification Route */}
-          <Route 
-            path="/kyc-verification" 
-            element={
-              <ProtectedRoute>
-                <KYCVerificationPage />
-              </ProtectedRoute>
-            } 
-          />
-
-          {/* ==================== FOOTER PAGES ==================== */}
+          {/* ── Footer pages ────────────────────────────────────────────────── */}
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
@@ -275,170 +191,69 @@ if (loading || adminLoading) {
           <Route path="/api" element={<APIPage />} />
           <Route path="/cookies" element={<CookiesPage />} />
 
-          {/* ==================== USER ROUTES ==================== */}
-          <Route 
-            path="/dashboard" 
-            element={
-             <ProtectedRoute>
-               <UnifiedDashboard />
-              </ProtectedRoute>
-            } 
-           />
-          <Route 
-            path="/api-dashboard" 
-            element={
-              <ProtectedRoute>
-                <ApiDashboardPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/escrow/:id" 
-            element={
-              <ProtectedRoute>
-                <EscrowDetails />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/profile" 
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/notifications" 
-            element={
-              <ProtectedRoute>
-                <NotificationsPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/payment/:escrowId" 
-            element={
-              <ProtectedRoute>
-                <PaymentPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/payment/verify" 
-            element={
-              <ProtectedRoute>
-                <PaymentVerificationPage />
-              </ProtectedRoute>
-            } 
-          />
+          {/* ── User routes ─────────────────────────────────────────────────── */}
+          <Route path="/dashboard" element={<ProtectedRoute><UnifiedDashboard /></ProtectedRoute>} />
+          <Route path="/api-dashboard" element={<ProtectedRoute><ApiDashboardPage /></ProtectedRoute>} />
+          <Route path="/escrow/:id" element={<ProtectedRoute><EscrowDetails /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+          <Route path="/payment/:escrowId" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
+          <Route path="/payment/verify" element={<ProtectedRoute><PaymentVerificationPage /></ProtectedRoute>} />
+          <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
+          <Route path="/upgrade/callback" element={<ProtectedRoute><PaymentCallbackPage /></ProtectedRoute>} />
 
-          {/* ==================== SUBSCRIPTION ROUTES ==================== */}
-          <Route 
-            path="/upgrade" 
-            element={
-              <ProtectedRoute>
-                <UpgradePage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/upgrade/callback" 
-            element={
-              <ProtectedRoute>
-                <PaymentCallbackPage />
-              </ProtectedRoute>
-            } 
-          />
-
-          {/* Legacy redirects */}
+          {/* ── Legacy redirects ─────────────────────────────────────────────── */}
           <Route path="/buyer-dashboard" element={<Navigate to="/dashboard" replace />} />
           <Route path="/seller-dashboard" element={<Navigate to="/dashboard" replace />} />
           <Route path="/unified-dashboard" element={<Navigate to="/dashboard" replace />} />
 
-          {/* ==================== ADMIN ROUTES ==================== */}
-          <Route 
-            path="/admin/login" 
-            element={admin ? <Navigate to="/admin/dashboard" replace /> : <AdminLogin setAdmin={setAdmin} />} 
+          {/* ── Admin routes ─────────────────────────────────────────────────── */}
+          <Route
+            path="/admin/login"
+            element={admin ? <Navigate to="/admin/dashboard" replace /> : <AdminLogin setAdmin={setAdmin} />}
           />
-          <Route 
-            path="/admin/dashboard" 
-            element={
-              <AdminProtectedRoute>
-                <AdminDashboard admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/transactions" 
-            element={
-              <AdminProtectedRoute requiredPermission="viewTransactions">
-                <TransactionsPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/disputes" 
-            element={
-              <AdminProtectedRoute requiredPermission="manageDisputes">
-                <DisputesPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/users" 
-            element={
-              <AdminProtectedRoute requiredPermission="verifyUsers">
-                <UsersPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/analytics" 
-            element={
-              <AdminProtectedRoute requiredPermission="viewAnalytics">
-                <AnalyticsPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/payments" 
-            element={
-              <AdminProtectedRoute requiredPermission="managePayments">
-                <PaymentGatewaysPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/api" 
-            element={
-              <AdminProtectedRoute requiredPermission="manageAPI">
-                <APIManagementPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/admins" 
-            element={
-              <AdminProtectedRoute requiredPermission="manageAdmins">
-                <AdminManagementPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/fees" 
-            element={
-              <AdminProtectedRoute requiredPermission="manageFees">
-                <FeeManagementPage admin={admin} />
-              </AdminProtectedRoute>
-            } 
-          />
+          <Route path="/admin/dashboard" element={
+            <AdminProtectedRoute><AdminDashboard admin={admin} /></AdminProtectedRoute>
+          } />
+          <Route path="/admin/transactions" element={
+            <AdminProtectedRoute requiredPermission="viewTransactions">
+              <TransactionsPage admin={admin} />
+            </AdminProtectedRoute>
+          } />
+          <Route path="/admin/disputes" element={
+            <AdminProtectedRoute requiredPermission="manageDisputes">
+              <DisputesPage admin={admin} />
+            </AdminProtectedRoute>
+          } />
+          <Route path="/admin/users" element={
+            <AdminProtectedRoute requiredPermission="verifyUsers">
+              <UsersPage admin={admin} />
+            </AdminProtectedRoute>
+          } />
+          <Route path="/admin/analytics" element={
+            <AdminProtectedRoute requiredPermission="viewAnalytics">
+              <AnalyticsPage admin={admin} />
+            </AdminProtectedRoute>
+          } />
+          {/* FIX: master-only pages — no requiredPermission needed, guard is in component */}
+          <Route path="/admin/payments" element={
+            <AdminProtectedRoute><PaymentGatewaysPage admin={admin} /></AdminProtectedRoute>
+          } />
+          <Route path="/admin/api" element={
+            <AdminProtectedRoute><APIManagementPage admin={admin} /></AdminProtectedRoute>
+          } />
+          <Route path="/admin/admins" element={
+            <AdminProtectedRoute><AdminManagementPage admin={admin} /></AdminProtectedRoute>
+          } />
+          <Route path="/admin/fees" element={
+            <AdminProtectedRoute><FeeManagementPage admin={admin} /></AdminProtectedRoute>
+          } />
 
-          {/* ==================== 404 ==================== */}
+          {/* ── 404 ──────────────────────────────────────────────────────────── */}
           <Route path="*" element={<NotFound />} />
         </Routes>
 
-        {showFooter() && <Footer />}
+        {shouldShowFooter && <Footer />}
       </div>
     </GoogleOAuthProvider>
   );

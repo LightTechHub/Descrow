@@ -1,8 +1,9 @@
 // backend/controllers/kyc.controller.js
-// 2-step business verification:
-//   Step 1 — DiDIT automated identity check (all accounts, no country filtering)
-//   Step 2 — Business document upload (business accounts only, after DiDIT passes)
-// Individual accounts go straight to approved after DiDIT. No country detection.
+// Parallel verification flow:
+//   - DiDIT and document upload are INDEPENDENT — no blocking
+//   - Business user can upload documents regardless of DiDIT result
+//   - Admin reviews both together
+//   - Status reflects actual state honestly — no fake completions
 
 const User = require('../models/User.model');
 const diditService = require('../services/didit.service');
@@ -10,7 +11,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directory exists
 const uploadDir = 'uploads/kyc/';
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -47,31 +47,20 @@ const upload = multer({
 ]);
 
 // ==================== INITIATE KYC ====================
-// All account types go through DiDIT first. No country check.
 exports.initiateKYC = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    if (user.isKYCVerified) {
-      return res.status(400).json({ success: false, message: 'KYC already verified' });
-    }
-
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.isKYCVerified) return res.status(400).json({ success: false, message: 'KYC already verified' });
     if (!user.verified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please verify your email first',
-        action: 'verify_email'
-      });
+      return res.status(400).json({ success: false, message: 'Please verify your email first', action: 'verify_email' });
     }
 
     const accountType = user.accountType || 'individual';
     console.log(`📋 Initiating ${accountType} verification for user:`, user._id);
 
-    // ── Reuse existing valid DiDIT session if not expired ─────────────────────
+    // Reuse existing valid session
     if (user.kycStatus?.status === 'pending' || user.kycStatus?.status === 'in_progress') {
       const expiry = user.kycStatus.diditSessionExpiresAt;
       if (expiry && new Date() < new Date(expiry)) {
@@ -90,7 +79,7 @@ exports.initiateKYC = async (req, res) => {
       }
     }
 
-    // ── Create DiDIT session ──────────────────────────────────────────────────
+    // Create DiDIT session — no country check, all accounts
     const verification = await diditService.createVerificationSession(user._id, {
       email:        user.email,
       phone:        user.phone,
@@ -99,18 +88,21 @@ exports.initiateKYC = async (req, res) => {
       businessInfo: accountType === 'business' ? user.businessInfo : null
     });
 
-    // ── DiDIT call failed — fallback to manual upload for business only ────────
+    // DiDIT unavailable — for business, let them proceed to document upload only
     if (!verification.success) {
       console.warn('⚠️  DiDIT session creation failed:', verification.message);
 
       if (accountType === 'business') {
+        // Don't block document upload — just flag DiDIT as unavailable
         user.kycStatus = {
-          status:             'pending_documents',
-          submittedAt:        new Date(),
-          accountType:        'business',
-          verificationMethod: 'manual',
-          diditError:         verification.message
+          ...user.kycStatus,
+          diditError:  verification.message,
+          accountType: 'business'
         };
+        // Only set status if it hasn't been set to something meaningful yet
+        if (!user.kycStatus.status || user.kycStatus.status === 'unverified') {
+          user.kycStatus.status = 'pending_documents';
+        }
         await user.save();
 
         return res.json({
@@ -119,14 +111,7 @@ exports.initiateKYC = async (req, res) => {
           data: {
             verificationType: 'manual',
             accountType:      'business',
-            status:           'pending_documents',
-            requiredDocuments: [
-              { name: 'Business Registration', required: true,  field: 'businessRegistration' },
-              { name: 'Director/Owner ID',     required: true,  field: 'directorId' },
-              { name: 'Proof of Address',      required: true,  field: 'proofOfAddress' },
-              { name: 'Tax Document',          required: false, field: 'taxDocument' },
-              { name: 'Additional Document',   required: false, field: 'additionalDoc' }
-            ]
+            status:           user.kycStatus.status
           }
         });
       }
@@ -138,10 +123,11 @@ exports.initiateKYC = async (req, res) => {
       });
     }
 
-    // ── DiDIT session created successfully ────────────────────────────────────
+    // DiDIT session created — update status, preserve any existing document data
     user.kycStatus = {
+      ...user.kycStatus,             // preserve documents if already uploaded
       status:                'pending',
-      submittedAt:           new Date(),
+      submittedAt:           user.kycStatus?.submittedAt || new Date(),
       diditSessionId:        verification.data.sessionId,
       diditVerificationUrl:  verification.data.verificationUrl,
       diditSessionExpiresAt: verification.data.expiresAt,
@@ -166,16 +152,12 @@ exports.initiateKYC = async (req, res) => {
 
   } catch (error) {
     console.error('❌ KYC initiation error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to initiate KYC verification',
-      error:   error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to initiate KYC verification', error: error.message });
   }
 };
 
 // ==================== UPLOAD BUSINESS DOCUMENTS ====================
-// Called during Step 2 after DiDIT (Step 1) has passed.
+// Always available for business accounts regardless of DiDIT status
 exports.uploadBusinessDocuments = [
   (req, res, next) => {
     upload(req, res, (err) => {
@@ -192,9 +174,7 @@ exports.uploadBusinessDocuments = [
     try {
       const user = await User.findById(req.user._id);
 
-      if (!user) {
-        return res.status(404).json({ success: false, message: 'User not found' });
-      }
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
       if (user.accountType !== 'business') {
         return res.status(400).json({ success: false, message: 'This endpoint is only for business accounts' });
       }
@@ -233,14 +213,13 @@ exports.uploadBusinessDocuments = [
       addDoc(req.files.taxDocument,          'tax_document');
       addDoc(req.files.additionalDoc,        'additional_document');
 
+      // Preserve DiDIT session data — just add documents on top
       user.kycStatus = {
-        ...user.kycStatus,           // preserve diditSessionId, diditVerifiedAt, etc.
-        status:             'under_review',
-        submittedAt:        new Date(),
-        accountType:        'business',
-        verificationMethod: 'manual',
+        ...user.kycStatus,
+        status:         'under_review',
+        accountType:    'business',
         documents,
-        reviewDeadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
+        reviewDeadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
       };
 
       if (!user.businessInfo) user.businessInfo = {};
@@ -248,7 +227,7 @@ exports.uploadBusinessDocuments = [
       user.businessInfo.kycSubmittedAt = new Date();
 
       await user.save();
-      console.log('✅ Business documents uploaded for Step 2:', user.email, '| Count:', documents.length);
+      console.log('✅ Business documents uploaded:', user.email, '| Count:', documents.length);
 
       res.json({
         success: true,
@@ -275,9 +254,7 @@ exports.getKYCStatus = async (req, res) => {
     const user = await User.findById(req.user._id)
       .select('isKYCVerified kycStatus verified tier accountType businessInfo country');
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     let externalStatus = null;
     if (user.kycStatus?.diditSessionId) {
@@ -313,9 +290,6 @@ exports.getKYCStatus = async (req, res) => {
 };
 
 // ==================== DIDIT WEBHOOK ====================
-// Key difference from old version:
-//   - Business accounts: DiDIT 'completed' → status = 'pending_documents' (Step 2 still needed)
-//   - Individual accounts: DiDIT 'completed' → status = 'approved' (fully done)
 exports.handleDiditWebhook = async (req, res) => {
   try {
     console.log('📥 DiDIT Webhook received:', req.body);
@@ -333,36 +307,34 @@ exports.handleDiditWebhook = async (req, res) => {
 
     const event  = await diditService.processWebhookEvent(req.body);
     const userId = event.userId;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: 'Missing user ID' });
-    }
+    if (!userId) return res.status(400).json({ success: false, message: 'Missing user ID' });
 
     const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     const accountType = user.accountType || 'individual';
-    console.log(`📝 Processing DiDIT webhook for ${accountType} user ${userId}: ${event.type}`);
+    console.log(`📝 DiDIT webhook: ${accountType} user ${userId} — event: ${event.type}`);
 
     if (event.type === 'completed' && event.verified) {
 
       if (accountType === 'business') {
-        // ✅ Step 1 complete for business — prompt them to do Step 2 (document upload)
+        // Business: DiDIT passed but we still need document review.
+        // If documents already uploaded → keep under_review.
+        // If not yet → set pending_documents so they know to upload.
+        const hasDocuments = user.kycStatus?.documents?.length > 0;
         user.kycStatus = {
           ...user.kycStatus,
-          status:             'pending_documents',
+          status:             hasDocuments ? 'under_review' : 'pending_documents',
           diditVerifiedAt:    new Date(),
           verificationResult: event.verificationData,
           accountType:        'business',
           verificationMethod: 'didit'
         };
-        user.isKYCVerified = false; // Not fully verified until documents also reviewed
-        console.log('✅ Business DiDIT Step 1 complete — awaiting document upload:', userId);
+        user.isKYCVerified = false; // Admin must approve after reviewing documents
+        console.log(`✅ Business DiDIT passed. Documents uploaded: ${hasDocuments}. Status: ${user.kycStatus.status}`);
 
       } else {
-        // ✅ Individual — fully verified after DiDIT
+        // Individual: DiDIT passed = fully verified
         user.kycStatus = {
           ...user.kycStatus,
           status:             'approved',
@@ -373,32 +345,35 @@ exports.handleDiditWebhook = async (req, res) => {
           verificationMethod: 'didit'
         };
         user.isKYCVerified = true;
-        console.log('✅ Individual KYC fully approved:', userId);
+        console.log('✅ Individual KYC approved:', userId);
       }
 
     } else if (event.type === 'failed') {
+      // DiDIT failed — update status but DO NOT prevent document upload for business
+      const hasDocuments = user.kycStatus?.documents?.length > 0;
       user.kycStatus = {
         ...user.kycStatus,
-        status:             'rejected',
-        reviewedAt:         new Date(),
-        rejectionReason:    event.failureReason || 'Verification failed',
+        // If business already submitted docs, keep under_review despite DiDIT failure
+        status:             (accountType === 'business' && hasDocuments) ? 'under_review' : 'rejected',
+        diditRejectedAt:    new Date(),
+        rejectionReason:    event.failureReason || 'Identity verification failed',
         verificationResult: event.verificationData,
         accountType,
         verificationMethod: 'didit'
       };
       user.isKYCVerified = false;
-      console.log(`❌ ${accountType} KYC rejected:`, userId);
+      console.log(`❌ ${accountType} DiDIT failed. Has docs: ${hasDocuments}. Status: ${user.kycStatus.status}`);
 
     } else if (event.type === 'expired') {
       user.kycStatus = {
         ...user.kycStatus,
         status:          'expired',
-        reviewedAt:      new Date(),
+        diditExpiredAt:  new Date(),
         rejectionReason: 'Verification session expired',
         accountType,
         verificationMethod: 'didit'
       };
-      console.log(`⏰ ${accountType} KYC session expired:`, userId);
+      console.log(`⏰ ${accountType} session expired:`, userId);
 
     } else if (event.type === 'in_progress') {
       user.kycStatus = {
@@ -407,7 +382,7 @@ exports.handleDiditWebhook = async (req, res) => {
         accountType,
         verificationMethod: 'didit'
       };
-      console.log(`🔄 ${accountType} KYC in progress:`, userId);
+      console.log(`🔄 ${accountType} in progress:`, userId);
     }
 
     await user.save();
@@ -469,7 +444,6 @@ exports.serveDocument = async (req, res) => {
   try {
     const { filename } = req.params;
     const user = await User.findById(req.user._id);
-
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     const hasAccess = user.kycStatus?.documents?.some(d => d.filename === filename);
@@ -514,7 +488,6 @@ exports.adminGetBusinessKYCDetails = async (req, res) => {
   try {
     const user = await User.findById(req.params.userId)
       .select('name email accountType businessInfo kycStatus createdAt');
-
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     res.json({
@@ -548,7 +521,7 @@ exports.adminApproveKYC = async (req, res) => {
     user.isKYCVerified = true;
     await user.save();
 
-    console.log(`✅ Admin approved ${user.accountType} KYC for user:`, req.params.userId);
+    console.log(`✅ Admin approved ${user.accountType} KYC:`, req.params.userId);
 
     res.json({
       success: true,
@@ -563,9 +536,7 @@ exports.adminApproveKYC = async (req, res) => {
 // ==================== ADMIN: REJECT KYC ====================
 exports.adminRejectKYC = async (req, res) => {
   try {
-    if (!req.body.reason) {
-      return res.status(400).json({ success: false, message: 'Rejection reason is required' });
-    }
+    if (!req.body.reason) return res.status(400).json({ success: false, message: 'Rejection reason is required' });
 
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -581,7 +552,7 @@ exports.adminRejectKYC = async (req, res) => {
     user.isKYCVerified = false;
     await user.save();
 
-    console.log(`❌ Admin rejected ${user.accountType} KYC for user:`, req.params.userId);
+    console.log(`❌ Admin rejected ${user.accountType} KYC:`, req.params.userId);
 
     res.json({
       success: true,

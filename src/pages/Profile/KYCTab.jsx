@@ -2,83 +2,23 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircle, XCircle, Clock, Loader, AlertCircle,
   ExternalLink, RefreshCw, Shield, Award, Building,
-  FileText, Upload, X, ArrowRight, User,
+  FileText, Upload, X, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import profileService from '../../services/profileService';
 import toast from 'react-hot-toast';
 
-// ─── Step indicator shown at top for business accounts ───────────────────────
-const StepBar = ({ currentStep }) => (
-  <div className="flex items-center gap-3 mb-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-    {/* Step 1 */}
-    <div className="flex items-center gap-2 flex-1">
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-        currentStep > 1
-          ? 'bg-green-500 text-white'
-          : currentStep === 1
-          ? 'bg-blue-600 text-white'
-          : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-      }`}>
-        {currentStep > 1 ? <CheckCircle className="w-4 h-4" /> : '1'}
-      </div>
-      <div className="min-w-0">
-        <p className={`text-xs font-semibold ${currentStep >= 1 ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
-          Identity Check
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">DiDIT automated</p>
-      </div>
-    </div>
-
-    {/* Connector */}
-    <div className={`h-0.5 w-8 flex-shrink-0 ${currentStep > 1 ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
-
-    {/* Step 2 */}
-    <div className="flex items-center gap-2 flex-1">
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-        currentStep > 2
-          ? 'bg-green-500 text-white'
-          : currentStep === 2
-          ? 'bg-blue-600 text-white'
-          : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-      }`}>
-        {currentStep > 2 ? <CheckCircle className="w-4 h-4" /> : '2'}
-      </div>
-      <div className="min-w-0">
-        <p className={`text-xs font-semibold ${currentStep >= 2 ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
-          Business Documents
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">Manual review</p>
-      </div>
-    </div>
-
-    {/* Connector */}
-    <div className={`h-0.5 w-8 flex-shrink-0 ${currentStep > 2 ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
-
-    {/* Step 3 */}
-    <div className="flex items-center gap-2">
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-        currentStep === 3
-          ? 'bg-green-500 text-white'
-          : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-      }`}>
-        {currentStep === 3 ? <CheckCircle className="w-4 h-4" /> : '3'}
-      </div>
-      <div className="min-w-0">
-        <p className={`text-xs font-semibold ${currentStep === 3 ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
-          Fully Verified
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">Complete</p>
-      </div>
-    </div>
-  </div>
-);
-
 const KYCTab = ({ user, onUpdate }) => {
-  const [loading, setLoading]       = useState(false);
-  const [resetting, setResetting]   = useState(false);
-  const [uploading, setUploading]   = useState(false);
   const [kycStatus, setKycStatus]   = useState(null);
-  const [savedUrl, setSavedUrl]     = useState(null);
+  const [fetchingStatus, setFetchingStatus] = useState(true);
+
+  // DiDIT section state
+  const [startingDigit, setStartingDigit] = useState(false);
+  const [resetting, setResetting]         = useState(false);
+  const [digitOpen, setDigitOpen]         = useState(true);
+
+  // Document upload section state
+  const [uploading, setUploading]   = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(true);
   const [docs, setDocs] = useState({
     businessRegistration: null,
     directorId:           null,
@@ -93,64 +33,46 @@ const KYCTab = ({ user, onUpdate }) => {
 
   const fetchStatus = async () => {
     try {
+      setFetchingStatus(true);
       const res = await profileService.checkKYCStatus();
-      if (res.success) {
-        setKycStatus(res.data);
-        if (res.data?.verificationUrl) setSavedUrl(res.data.verificationUrl);
-      }
+      if (res.success) setKycStatus(res.data);
+      else setKycStatus({ status: 'unverified' });
     } catch {
       setKycStatus({ status: 'unverified' });
+    } finally {
+      setFetchingStatus(false);
     }
   };
 
-  // Work out which step the business user is on
-  const getBusinessStep = () => {
-    if (!isBusiness) return null;
-    const status = kycStatus?.status;
-    // Step 3 — fully done
-    if (status === 'approved') return 3;
-    // Step 2 — DiDIT done, now need documents OR documents already submitted
-    if (status === 'pending_documents' || status === 'under_review') return 2;
-    // Step 1 — not started or DiDIT in progress
-    return 1;
-  };
-
-  const businessStep = getBusinessStep();
-
-  // ── Start DiDIT ─────────────────────────────────────────────────────────────
+  // ── Start DiDIT ──────────────────────────────────────────────────────────────
   const startDigit = async () => {
     try {
-      setLoading(true);
+      setStartingDigit(true);
       const res = await profileService.startKYCVerification();
       if (res.success) {
         if (res.data?.verificationUrl) {
           window.location.href = res.data.verificationUrl;
-        } else if (res.data?.verificationType === 'manual' || res.data?.status === 'pending_documents') {
-          // DiDIT not available — skip straight to step 2 for business
-          setKycStatus(prev => ({ ...prev, status: 'pending_documents' }));
-          toast('DiDIT unavailable. Please upload your documents to complete verification.');
         } else {
-          toast.error('Could not start verification. Please try again.');
+          toast('Could not reach DiDIT right now. You can still upload your documents below.');
+          fetchStatus();
         }
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to start verification. Please try again.');
+      toast.error(err.response?.data?.message || 'Could not start verification. Try again or upload documents below.');
     } finally {
-      setLoading(false);
+      setStartingDigit(false);
     }
   };
 
-  // ── Reset ────────────────────────────────────────────────────────────────────
-  const reset = async () => {
-    if (!window.confirm('Reset verification and start over?')) return;
+  // ── Reset DiDIT session ──────────────────────────────────────────────────────
+  const resetDigit = async () => {
+    if (!window.confirm('Reset your DiDIT verification session and start over?')) return;
     try {
       setResetting(true);
       const res = await profileService.resetKYCVerification();
       if (res.success) {
-        toast.success('Reset. You can start fresh.');
-        setKycStatus({ status: 'unverified' });
-        setSavedUrl(null);
-        setDocs({ businessRegistration: null, directorId: null, proofOfAddress: null, taxDocument: null, additionalDoc: null });
+        toast.success('Reset successfully. You can start a new session.');
+        fetchStatus();
       }
     } catch { toast.error('Reset failed'); }
     finally { setResetting(false); }
@@ -174,18 +96,28 @@ const KYCTab = ({ user, onUpdate }) => {
 
       const res = await profileService.uploadBusinessDocuments(fd);
       if (res.success) {
-        toast.success('Documents submitted! We\'ll review within 1-3 business days.');
+        toast.success('Documents submitted! Our team will review within 1-3 business days.');
+        setDocs({ businessRegistration: null, directorId: null, proofOfAddress: null, taxDocument: null, additionalDoc: null });
         fetchStatus();
         onUpdate && onUpdate();
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Upload failed');
+      toast.error(err.response?.data?.message || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
-  // ─── EMAIL NOT VERIFIED ──────────────────────────────────────────────────────
+  // ─── Loading ─────────────────────────────────────────────────────────────────
+  if (fetchingStatus) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
+  // ─── Email not verified ───────────────────────────────────────────────────────
   if (!user?.verified) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-lg p-6">
@@ -195,307 +127,348 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  // ─── FULLY APPROVED ──────────────────────────────────────────────────────────
+  // ─── Fully approved ───────────────────────────────────────────────────────────
   if (kycStatus?.status === 'approved') {
     return (
-      <div className="space-y-6">
-        {isBusiness && <StepBar currentStep={3} />}
-        <div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-lg p-6">
-          <div className="flex items-center gap-4 mb-4">
-            <Award className="w-12 h-12 text-green-600 dark:text-green-400" />
-            <div>
-              <h3 className="text-2xl font-bold text-green-900 dark:text-green-200">✅ Fully Verified!</h3>
-              <p className="text-green-700 dark:text-green-300">
-                {isBusiness
-                  ? `${user.businessInfo?.companyName || 'Your business'} identity and documents have been verified.`
-                  : 'Your identity has been verified successfully.'}
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-            {['Unlimited Transactions', 'Priority Support', isBusiness ? 'API Access' : 'Verified Badge'].map(b => (
-              <div key={b} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-200 dark:border-green-800 text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-500" /> {b}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── BUSINESS STEP 2: DOCUMENTS UNDER REVIEW ─────────────────────────────────
-  if (isBusiness && kycStatus?.status === 'under_review') {
-    return (
-      <div className="space-y-6">
-        <StepBar currentStep={2} />
-        <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-lg p-6">
-          <div className="flex items-center gap-4 mb-4">
-            <FileText className="w-10 h-10 text-blue-600 dark:text-blue-400" />
-            <div>
-              <h3 className="text-xl font-bold text-blue-900 dark:text-blue-200">Business Documents Under Review</h3>
-              <p className="text-blue-700 dark:text-blue-300 text-sm">
-                Step 2 complete. Our team will finish review within 1-3 business days.
-                You'll be notified once approved.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
-            <Clock className="w-4 h-4" />
-            {kycStatus.reviewDeadline
-              ? `Expected by ${new Date(kycStatus.reviewDeadline).toLocaleDateString()}`
-              : 'Expected within 1-3 business days'}
-          </div>
-        </div>
-        <button onClick={reset} disabled={resetting}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition">
-          {resetting ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Start Over
-        </button>
-      </div>
-    );
-  }
-
-  // ─── BUSINESS STEP 2: UPLOAD DOCUMENTS FORM ──────────────────────────────────
-  if (isBusiness && kycStatus?.status === 'pending_documents') {
-    return (
-      <div className="space-y-6">
-        <StepBar currentStep={2} />
-
-        {/* Step 1 complete banner */}
-        <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
-          <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+      <div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-xl p-6">
+        <div className="flex items-center gap-4 mb-4">
+          <Award className="w-12 h-12 text-green-600 dark:text-green-400 flex-shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-green-800 dark:text-green-300">Step 1 Complete — Identity Verified</p>
-            <p className="text-xs text-green-600 dark:text-green-400">
-              Your identity has been confirmed via DiDIT. Now upload your business documents to finish.
+            <h3 className="text-2xl font-bold text-green-900 dark:text-green-200">✅ Fully Verified!</h3>
+            <p className="text-green-700 dark:text-green-300 text-sm">
+              {isBusiness
+                ? `${user.businessInfo?.companyName || 'Your business'} has been verified.`
+                : 'Your identity has been verified successfully.'}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {['Unlimited Transactions', 'Priority Support', isBusiness ? 'API Access' : 'Verified Badge'].map(b => (
+            <div key={b} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-200 dark:border-green-800 text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> {b}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Individual account — single DiDIT flow ───────────────────────────────────
+  if (!isBusiness) {
+    return (
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8">
+        <div className="text-center mb-8">
+          <div className="inline-flex p-5 bg-blue-100 dark:bg-blue-900/30 rounded-2xl mb-4">
+            <Shield className="w-14 h-14 text-blue-600 dark:text-blue-400" />
+          </div>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Identity Verification</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Quick automated check — takes about 5 minutes.</p>
+        </div>
+
+        <IndividualDigitStatus kycStatus={kycStatus} onReset={resetDigit} resetting={resetting} />
+
+        {/* Show start/continue button only if not approved/under review */}
+        {!['approved', 'under_review'].includes(kycStatus?.status) && (
+          <button onClick={startDigit} disabled={startingDigit}
+            className="w-full mt-6 px-6 py-4 bg-blue-600 text-white rounded-xl font-bold text-base hover:bg-blue-700 transition flex items-center justify-center gap-3 disabled:opacity-50">
+            {startingDigit
+              ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Starting...</>
+              : <><Shield className="w-5 h-5" />
+                  {kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress'
+                    ? 'Continue Verification'
+                    : 'Start Identity Verification'}
+                </>}
+          </button>
+        )}
+
+        <SecurityNote />
+      </div>
+    );
+  }
+
+  // ─── BUSINESS ACCOUNT — parallel sections ────────────────────────────────────
+  // Documents already submitted and under review
+  const docsSubmitted = ['under_review'].includes(kycStatus?.status) ||
+    (kycStatus?.documents && kycStatus.documents.length > 0);
+
+  return (
+    <div className="space-y-4">
+
+      {/* Page header */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+        <div className="flex items-center gap-3">
+          <Building className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+              Business Verification — {user.businessInfo?.companyName || 'Your Company'}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Complete both sections below. Our team reviews everything together.
+              You do not need to wait for one to finish before doing the other.
             </p>
           </div>
         </div>
 
-        {/* Upload form */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Building className="w-7 h-7 text-blue-600 dark:text-blue-400" />
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Step 2 — Upload Business Documents</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                We need to verify your business exists and you are authorised to represent it.
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={submitDocs} className="space-y-4">
-            <DocField label="Business Registration Certificate *" field="businessRegistration"
-              file={docs.businessRegistration} setDocs={setDocs}
-              hint="CAC Certificate, Articles of Incorporation, or equivalent" />
-            <DocField label="Director / Owner ID *" field="directorId"
-              file={docs.directorId} setDocs={setDocs}
-              hint="Valid government-issued ID of business representative" />
-            <DocField label="Proof of Business Address *" field="proofOfAddress"
-              file={docs.proofOfAddress} setDocs={setDocs}
-              hint="Utility bill or bank statement within the last 3 months" />
-            <DocField label="Tax Document (optional)" field="taxDocument"
-              file={docs.taxDocument} setDocs={setDocs}
-              hint="TIN certificate or tax clearance" />
-            <DocField label="Additional Document (optional)" field="additionalDoc"
-              file={docs.additionalDoc} setDocs={setDocs}
-              hint="Any other supporting document" />
-
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-300">
-              JPEG, PNG, or PDF only · Max 10MB per file · All corners visible, text legible
-            </div>
-
-            <button type="submit"
-              disabled={uploading || !docs.businessRegistration || !docs.directorId || !docs.proofOfAddress}
-              className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2 text-base">
-              {uploading
-                ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Uploading...</>
-                : <><Upload className="w-5 h-5" /> Submit Business Documents</>}
-            </button>
-          </form>
-        </div>
-
-        <button onClick={reset} disabled={resetting}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
-          {resetting ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Start Over
-        </button>
-      </div>
-    );
-  }
-
-  // ─── DIDIT IN PROGRESS (session active, waiting) ─────────────────────────────
-  if (kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress') {
-    return (
-      <div className="space-y-6">
-        {isBusiness && <StepBar currentStep={1} />}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-lg p-6">
-          <div className="flex items-center gap-4 mb-6">
-            <Clock className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-pulse" />
-            <div>
-              <h3 className="text-xl font-bold text-blue-900 dark:text-blue-200">
-                {isBusiness ? 'Step 1 — Identity Check In Progress' : 'Verification In Progress'}
-              </h3>
-              <p className="text-blue-700 dark:text-blue-300 text-sm">
-                {isBusiness
-                  ? 'Complete the DiDIT check. Once done, return here to upload your business documents.'
-                  : 'Your verification is being reviewed. Usually takes 24-48 hours.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-3 flex-wrap">
-            {savedUrl && (
-              <button onClick={() => window.location.href = savedUrl}
-                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm">
-                <ExternalLink className="w-4 h-4" /> Continue DiDIT Verification
-              </button>
-            )}
-            <button onClick={reset} disabled={resetting}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-medium text-sm disabled:opacity-50">
-              {resetting ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Start Over
-            </button>
-          </div>
+        {/* Overall status pill */}
+        <div className="mt-4">
+          <OverallStatusPill kycStatus={kycStatus} />
         </div>
       </div>
-    );
-  }
 
-  // ─── REJECTED / EXPIRED ──────────────────────────────────────────────────────
-  if (kycStatus?.status === 'rejected' || kycStatus?.status === 'expired') {
-    return (
-      <div className="space-y-4">
-        {isBusiness && <StepBar currentStep={1} />}
-        <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-lg p-6 flex items-center gap-4">
-          <XCircle className="w-10 h-10 text-red-600 dark:text-red-400 flex-shrink-0" />
-          <div>
-            <h3 className="text-xl font-bold text-red-900 dark:text-red-200">Verification Failed</h3>
-            <p className="text-red-700 dark:text-red-300 text-sm">{kycStatus.rejectionReason || 'Could not complete verification'}</p>
-          </div>
-        </div>
-        <button onClick={() => setKycStatus({ status: 'unverified' })}
-          className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
-          Try Again
-        </button>
-      </div>
-    );
-  }
+      {/* ── Section 1: DiDIT identity check ─────────────────────────────── */}
+      <CollapsibleSection
+        title="Section 1 — Automated Identity Check (DiDIT)"
+        subtitle="Verify that you are a real person. Takes 3-5 minutes."
+        isOpen={digitOpen}
+        onToggle={() => setDigitOpen(v => !v)}
+        statusBadge={<DiditBadge status={kycStatus?.status} />}
+      >
+        <div className="p-5 space-y-4">
+          {/* Current DiDIT status */}
+          <IndividualDigitStatus kycStatus={kycStatus} onReset={resetDigit} resetting={resetting} />
 
-  // ─── START SCREEN ─────────────────────────────────────────────────────────────
-  return (
-    <div className="space-y-6">
-      {isBusiness && <StepBar currentStep={1} />}
-
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8">
-        <div className="text-center mb-8">
-          <div className="inline-flex p-6 bg-blue-100 dark:bg-blue-900/30 rounded-2xl mb-4">
-            {isBusiness
-              ? <Building className="w-16 h-16 text-blue-600 dark:text-blue-400" />
-              : <Shield   className="w-16 h-16 text-blue-600 dark:text-blue-400" />}
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            {isBusiness ? 'Business Verification' : 'Identity Verification'}
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400 text-sm max-w-sm mx-auto">
-            {isBusiness
-              ? `Verify ${user.businessInfo?.companyName || 'your company'} in 2 steps — automated identity check followed by business document upload.`
-              : 'Quick identity check — takes about 5 minutes.'}
-          </p>
-        </div>
-
-        {/* What to expect — business gets the 2-step explanation, individual gets simple list */}
-        {isBusiness ? (
-          <div className="space-y-3 mb-8">
-            {/* Step 1 */}
-            <div className="flex items-start gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</div>
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white text-sm">Identity Check via DiDIT</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Quick automated verification — confirm you are who you say you are. Takes 3-5 minutes.
-                  You'll need a valid government-issued ID and camera access.
-                </p>
-              </div>
-            </div>
-            {/* Arrow */}
-            <div className="flex justify-center">
-              <ArrowRight className="w-5 h-5 text-gray-400 rotate-90" />
-            </div>
-            {/* Step 2 */}
-            <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white text-sm">Business Document Upload</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  After DiDIT, return here to upload your business registration, director ID, and proof of address.
-                  Our team reviews within 1-3 business days.
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {['Registration cert', 'Director ID', 'Proof of address'].map(d => (
-                    <span key={d} className="text-xs px-2 py-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-gray-600 dark:text-gray-300">
-                      {d}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-5 mb-8 border border-blue-200 dark:border-blue-800">
-            <p className="font-semibold text-blue-900 dark:text-blue-200 mb-3 text-sm">What you'll need:</p>
-            <ul className="space-y-2">
+          {/* What you need */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">What you need:</p>
+            <ul className="space-y-1">
               {[
-                ['Valid government ID', 'Passport, driver\'s licence, or national ID'],
-                ['Device with camera',  'For document photo and selfie'],
-                ['5-10 minutes',        'Quick, guided process'],
-              ].map(([title, sub]) => (
-                <li key={title} className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-blue-800 dark:text-blue-200"><strong>{title}</strong> — {sub}</span>
+                'Valid government-issued ID (passport, driver\'s licence, or national ID)',
+                'Device with a working camera',
+                '3-5 minutes'
+              ].map(item => (
+                <li key={item} className="flex items-start gap-2 text-sm text-blue-800 dark:text-blue-300">
+                  <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" /> {item}
                 </li>
               ))}
             </ul>
           </div>
-        )}
 
-        {/* Benefits */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
-          {['Unlimited Transactions', 'Priority Support', isBusiness ? 'API Access' : 'Verified Badge'].map(b => (
-            <div key={b} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center border border-gray-200 dark:border-gray-700">
-              <CheckCircle className="w-5 h-5 text-green-500 mx-auto mb-1" />
-              <p className="text-xs font-semibold text-gray-900 dark:text-white">{b}</p>
+          {/* Action button */}
+          {kycStatus?.status === 'approved' ? (
+            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-semibold">
+              <CheckCircle className="w-5 h-5" /> Identity verified
             </div>
-          ))}
+          ) : (
+            <button onClick={startDigit} disabled={startingDigit}
+              className="w-full px-5 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
+              {startingDigit
+                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Starting...</>
+                : <><ExternalLink className="w-4 h-4" />
+                    {kycStatus?.status === 'pending' || kycStatus?.status === 'in_progress'
+                      ? 'Continue DiDIT Verification'
+                      : 'Start DiDIT Identity Check'}
+                  </>}
+            </button>
+          )}
         </div>
+      </CollapsibleSection>
 
-        {/* CTA */}
-        <button onClick={startDigit} disabled={loading}
-          className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-bold text-base hover:bg-blue-700 transition shadow flex items-center justify-center gap-3 disabled:opacity-50">
-          {loading
-            ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Starting...</>
-            : isBusiness
-            ? <><ExternalLink className="w-5 h-5" /> Start Step 1 — Identity Check</>
-            : <><Shield className="w-5 h-5" /> Start Identity Verification</>}
-        </button>
+      {/* ── Section 2: Business document upload ─────────────────────────── */}
+      <CollapsibleSection
+        title="Section 2 — Business Document Upload"
+        subtitle="Upload documents proving your business is real and registered."
+        isOpen={uploadOpen}
+        onToggle={() => setUploadOpen(v => !v)}
+        statusBadge={<DocsBadge docsSubmitted={docsSubmitted} kycStatus={kycStatus} />}
+      >
+        <div className="p-5 space-y-4">
+          {docsSubmitted ? (
+            /* Docs already submitted */
+            <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">Documents submitted</p>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Our team is reviewing your documents.
+                  {kycStatus?.reviewDeadline && ` Expected by ${new Date(kycStatus.reviewDeadline).toLocaleDateString()}.`}
+                </p>
+                {kycStatus?.documents?.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {kycStatus.documents.map((d, i) => (
+                      <li key={i} className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> {d.originalName || d.type}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Upload form — always available regardless of DiDIT status */
+            <form onSubmit={submitDocs} className="space-y-4">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
+                You can upload your documents now — you do not need to wait for the identity check above to complete first.
+              </div>
 
-        {isBusiness && (
-          <p className="text-xs text-center text-gray-400 mt-3">
-            After completing Step 1 you will be brought back here to upload your business documents.
-          </p>
-        )}
+              <DocField label="Business Registration Certificate *" field="businessRegistration"
+                file={docs.businessRegistration} setDocs={setDocs}
+                hint="CAC Certificate, Articles of Incorporation, or equivalent" />
+              <DocField label="Director / Owner ID *" field="directorId"
+                file={docs.directorId} setDocs={setDocs}
+                hint="Valid government-issued ID of business representative" />
+              <DocField label="Proof of Business Address *" field="proofOfAddress"
+                file={docs.proofOfAddress} setDocs={setDocs}
+                hint="Utility bill or bank statement within the last 3 months" />
+              <DocField label="Tax Document (optional)" field="taxDocument"
+                file={docs.taxDocument} setDocs={setDocs}
+                hint="TIN certificate or tax clearance" />
+              <DocField label="Additional Document (optional)" field="additionalDoc"
+                file={docs.additionalDoc} setDocs={setDocs}
+                hint="Any other supporting document" />
 
-        <div className="mt-6 flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <AlertCircle className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-semibold">Your data is secure.</span> Bank-level encryption. Never shared without your consent.
-          </p>
+              <div className="text-xs text-gray-500 dark:text-gray-400 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                JPEG, PNG, or PDF only · Max 10MB per file · All corners visible, text clearly legible
+              </div>
+
+              <button type="submit"
+                disabled={uploading || !docs.businessRegistration || !docs.directorId || !docs.proofOfAddress}
+                className="w-full px-5 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2 text-sm">
+                {uploading
+                  ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Uploading...</>
+                  : <><Upload className="w-4 h-4" /> Submit Business Documents</>}
+              </button>
+            </form>
+          )}
         </div>
-      </div>
+      </CollapsibleSection>
+
+      <SecurityNote />
     </div>
   );
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Status helpers ─────────────────────────────────────────────────────────────
+
+// Shows the overall account verification status in plain English
+const OverallStatusPill = ({ kycStatus }) => {
+  const status = kycStatus?.status || 'unverified';
+  const configs = {
+    unverified:        { label: 'Not started',           cls: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+    pending:           { label: 'Identity check started', cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+    in_progress:       { label: 'Identity check in progress', cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+    pending_documents: { label: 'Awaiting documents',    cls: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' },
+    under_review:      { label: 'Under review',          cls: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
+    approved:          { label: 'Verified ✅',            cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
+    rejected:          { label: 'Rejected',              cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
+    expired:           { label: 'Session expired',       cls: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' },
+  };
+  const { label, cls } = configs[status] || configs.unverified;
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${cls}`}>
+      {label}
+    </span>
+  );
+};
+
+// Small badge shown on the DiDIT section header
+const DiditBadge = ({ status }) => {
+  if (!status || status === 'unverified') return <span className="text-xs text-gray-400">Not started</span>;
+  if (status === 'pending' || status === 'in_progress') return <span className="text-xs font-semibold text-blue-500 flex items-center gap-1"><Clock className="w-3 h-3" /> In progress</span>;
+  if (status === 'approved') return <span className="text-xs font-semibold text-green-500 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Complete</span>;
+  if (status === 'rejected') return <span className="text-xs font-semibold text-red-500 flex items-center gap-1"><XCircle className="w-3 h-3" /> Failed</span>;
+  if (status === 'expired')  return <span className="text-xs font-semibold text-orange-500">Expired</span>;
+  return null;
+};
+
+// Small badge shown on the documents section header
+const DocsBadge = ({ docsSubmitted, kycStatus }) => {
+  if (kycStatus?.status === 'under_review' || docsSubmitted)
+    return <span className="text-xs font-semibold text-purple-500 flex items-center gap-1"><FileText className="w-3 h-3" /> Submitted</span>;
+  return <span className="text-xs text-gray-400">Not submitted</span>;
+};
+
+// Displays DiDIT status inline — no fake "step complete" messages
+const IndividualDigitStatus = ({ kycStatus, onReset, resetting }) => {
+  const status = kycStatus?.status;
+
+  if (!status || status === 'unverified' || status === 'pending_documents') return null;
+
+  if (status === 'pending' || status === 'in_progress') {
+    return (
+      <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5 animate-pulse" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Identity check in progress</p>
+          <p className="text-xs text-blue-700 dark:text-blue-300">
+            Your DiDIT session is active. Continue or start over below.
+          </p>
+        </div>
+        <button onClick={onReset} disabled={resetting}
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition flex-shrink-0 disabled:opacity-50">
+          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'rejected') {
+    return (
+      <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+        <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-red-900 dark:text-red-200">Identity check failed</p>
+          <p className="text-xs text-red-700 dark:text-red-300">{kycStatus.rejectionReason || 'Verification was not successful. You can try again.'}</p>
+        </div>
+        <button onClick={onReset} disabled={resetting}
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition flex-shrink-0 disabled:opacity-50">
+          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'expired') {
+    return (
+      <div className="flex items-start gap-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+        <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-orange-900 dark:text-orange-200">Session expired</p>
+          <p className="text-xs text-orange-700 dark:text-orange-300">Your previous DiDIT session expired. Start a new one below.</p>
+        </div>
+        <button onClick={onReset} disabled={resetting}
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition flex-shrink-0 disabled:opacity-50">
+          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'under_review') {
+    return (
+      <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 text-sm text-purple-800 dark:text-purple-300">
+        <Clock className="w-4 h-4 flex-shrink-0" />
+        Your submission is being reviewed by our team.
+      </div>
+    );
+  }
+
+  return null;
+};
+
+// ── Small reusable components ──────────────────────────────────────────────────
+
+const CollapsibleSection = ({ title, subtitle, isOpen, onToggle, statusBadge, children }) => (
+  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+    <button type="button" onClick={onToggle}
+      className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+      <div className="flex-1 min-w-0 mr-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <p className="font-semibold text-gray-900 dark:text-white text-sm">{title}</p>
+          {statusBadge}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
+      </div>
+      {isOpen
+        ? <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" />
+        : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+    </button>
+    {isOpen && <div className="border-t border-gray-200 dark:border-gray-800">{children}</div>}
+  </div>
+);
+
 const DocField = ({ label, field, file, setDocs, hint }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
@@ -516,6 +489,15 @@ const DocField = ({ label, field, file, setDocs, hint }) => (
       )}
     </div>
     {hint && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>}
+  </div>
+);
+
+const SecurityNote = () => (
+  <div className="flex items-start gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mt-2">
+    <AlertCircle className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+    <p className="text-sm text-gray-600 dark:text-gray-400">
+      <span className="font-semibold">Your data is secure.</span> Bank-level encryption. Never shared without your consent.
+    </p>
   </div>
 );
 

@@ -146,9 +146,33 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ==================== DATABASE CONNECTION ====================
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log(`✅ MongoDB Connected`);
     startSubscriptionCron();
+    if (process.env.RESET_ADMIN === 'true') {
+      const Admin = require('./models/Admin.model');
+      await Admin.deleteMany({});
+      await Admin.create({
+        name: 'Master Admin',
+        email: 'admin@dealcross.net',
+        password: 'MasterAdmin123!',
+        role: 'master',
+        status: 'active',
+        isActive: true,
+        permissions: {
+          viewTransactions: true,
+          manageDisputes: true,
+          verifyUsers: true,
+          viewAnalytics: true,
+          managePayments: true,
+          manageAPI: true,
+          manageAdmins: true,
+          manageFees: true,
+          manageSettings: true
+        }
+      });
+      console.log('✅ ADMIN RESET COMPLETE — email: admin@dealcross.net');
+    }
   })
   .catch(err => {
     console.error('❌ MongoDB Connection Error:', err);
@@ -328,5 +352,4 @@ server.keepAliveTimeout = 65000;
 // Headers timeout
 server.headersTimeout = 66000;
 
-if (process.env.RESET_ADMIN === 'true') require('./scripts/resetAdmin');
 module.exports = app;

@@ -188,7 +188,6 @@ mongoose.connect(process.env.MONGODB_URI)
     console.error('❌ MongoDB Connection Error:', err);
     process.exit(1);
   });
-```
 
 **No async/await at all** — pure `.then()` chains so Node has zero confusion about module format.
 

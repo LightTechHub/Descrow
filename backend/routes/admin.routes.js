@@ -7,6 +7,33 @@ const { body } = require('express-validator');
 
 // ======================================================
 
+router.get('/debug-check', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const Admin = require('../models/Admin.model');
+    const admin = await Admin.findOne({ email: 'admin@dealcross.net' }).select('+password');
+    if (!admin) return res.json({ found: false });
+    
+    const test1 = await bcrypt.compare('Admin1234!', admin.password);
+    const test2 = await bcrypt.compare('MasterAdmin123!', admin.password);
+    
+    res.json({
+      found: true,
+      passwordHash: admin.password,
+      hashLength: admin.password.length,
+      startsWithDollar2: admin.password.startsWith('$2'),
+      test_Admin1234: test1,
+      test_MasterAdmin123: test2,
+      status: admin.status,
+      role: admin.role
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 // TEMPORARY DEBUG - DELETE AFTER USE
 router.post('/debug-reset', async (req, res) => {
   try {

@@ -187,13 +187,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .catch(function(err) {
     console.error('❌ MongoDB Connection Error:', err);
     process.exit(1);
-  });
-
-**No async/await at all** — pure `.then()` chains so Node has zero confusion about module format.
-
-Push to GitHub, wait for deploy, watch for:
-
-✅ ADMIN RESET COMPLETE — email: admin@dealcross.net
+  }); 
 
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {

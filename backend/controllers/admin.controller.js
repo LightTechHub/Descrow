@@ -44,8 +44,10 @@ const login = async (req, res) => {
     if (!isPasswordValid)
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    admin.lastActive = new Date();
-    await admin.save();
+    await Admin.updateOne(
+  { _id: admin._id },
+  { $set: { lastActive: new Date() } }
+);
 
     const token = generateToken(admin._id);
 

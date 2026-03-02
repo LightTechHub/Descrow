@@ -9,7 +9,7 @@ const createMasterAdmin = async () => {
 
     const masterAdmin = await Admin.create({
       name: 'Master Admin',
-      email: 'admin@dealcross..net',
+      email: 'admin@dealcross.net',
       password: 'MasterAdmin123!',
       role: 'master',
       status: 'active',

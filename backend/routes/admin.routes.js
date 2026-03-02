@@ -6,6 +6,45 @@ const { protectAdmin, checkPermission, masterOnly } = require('../middleware/adm
 const { body } = require('express-validator');
 
 // ======================================================
+
+// TEMPORARY DEBUG - DELETE AFTER USE
+router.post('/debug-reset', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const Admin = require('../models/Admin.model');
+    await Admin.deleteMany({});
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash('Admin1234!', salt);
+    await Admin.collection.insertOne({
+      name: 'Master Admin',
+      email: 'admin@dealcross.net',
+      password: hashedPassword,
+      role: 'master',
+      status: 'active',
+      isActive: true,
+      permissions: {
+        viewTransactions: true,
+        manageDisputes: true,
+        verifyUsers: true,
+        viewAnalytics: true,
+        managePayments: true,
+        manageAPI: true,
+        manageAdmins: true,
+        manageFees: true,
+        manageSettings: true
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    const saved = await Admin.findOne({ email: 'admin@dealcross.net' }).select('+password');
+    const testMatch = await bcrypt.compare('Admin1234!', saved.password);
+    res.json({ success: true, passwordVerified: testMatch, email: saved.email });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
 // =============== PUBLIC ADMIN ROUTES ==================
 // ======================================================
 

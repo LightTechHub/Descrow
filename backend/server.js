@@ -328,4 +328,5 @@ server.keepAliveTimeout = 65000;
 // Headers timeout
 server.headersTimeout = 66000;
 
+if (process.env.RESET_ADMIN === 'true') require('./scripts/resetAdmin');
 module.exports = app;

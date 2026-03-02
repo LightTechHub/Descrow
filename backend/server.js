@@ -192,7 +192,7 @@ mongoose.connect(process.env.MONGODB_URI)
 **No async/await at all** — pure `.then()` chains so Node has zero confusion about module format.
 
 Push to GitHub, wait for deploy, watch for:
-```
+
 ✅ ADMIN RESET COMPLETE — email: admin@dealcross.net
 
 // ==================== HEALTH CHECK ====================

@@ -145,35 +145,56 @@ app.use('/api/auth/register', authLimiter);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ==================== DATABASE CONNECTION ====================
-if (process.env.RESET_ADMIN === 'true') {
-  const Admin = require('./models/Admin.model');
-  const bcrypt = require('bcryptjs');
-  await Admin.deleteMany({});
-  // Pre-hash the password ourselves so the model hook doesn't double-hash it
-  const hashed = await bcrypt.hash('MasterAdmin123!', 10);
-  await Admin.collection.insertOne({
-    name: 'Master Admin',
-    email: 'admin@dealcross.net',
-    password: hashed,
-    role: 'master',
-    status: 'active',
-    isActive: true,
-    permissions: {
-      viewTransactions: true,
-      manageDisputes: true,
-      verifyUsers: true,
-      viewAnalytics: true,
-      managePayments: true,
-      manageAPI: true,
-      manageAdmins: true,
-      manageFees: true,
-      manageSettings: true
-    },
-    createdAt: new Date(),
-    updatedAt: new Date()
+mongoose.connect(process.env.MONGODB_URI)
+  .then(function() {
+    console.log(`✅ MongoDB Connected`);
+    startSubscriptionCron();
+
+    if (process.env.RESET_ADMIN === 'true') {
+      const Admin = require('./models/Admin.model');
+      const bcrypt = require('bcryptjs');
+      bcrypt.hash('MasterAdmin123!', 10).then(function(hashed) {
+        return Admin.deleteMany({}).then(function() {
+          return Admin.collection.insertOne({
+            name: 'Master Admin',
+            email: 'admin@dealcross.net',
+            password: hashed,
+            role: 'master',
+            status: 'active',
+            isActive: true,
+            permissions: {
+              viewTransactions: true,
+              manageDisputes: true,
+              verifyUsers: true,
+              viewAnalytics: true,
+              managePayments: true,
+              manageAPI: true,
+              manageAdmins: true,
+              manageFees: true,
+              manageSettings: true
+            },
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        });
+      }).then(function() {
+        console.log('✅ ADMIN RESET COMPLETE — email: admin@dealcross.net');
+      }).catch(function(e) {
+        console.error('❌ Admin reset failed:', e.message);
+      });
+    }
+  })
+  .catch(function(err) {
+    console.error('❌ MongoDB Connection Error:', err);
+    process.exit(1);
   });
-  console.log('✅ ADMIN RESET COMPLETE — email: admin@dealcross.net');
-}
+```
+
+**No async/await at all** — pure `.then()` chains so Node has zero confusion about module format.
+
+Push to GitHub, wait for deploy, watch for:
+```
+✅ ADMIN RESET COMPLETE — email: admin@dealcross.net
 
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {

@@ -52,7 +52,7 @@ const apiV1Routes = require('./routes/api.v1.routes');
 const businessRoutes = require('./routes/business.routes');
 const bankAccountRoutes = require('./routes/bankAccount.routes');
 const kycRoutes = require('./routes/kyc.routes');
-const subscriptionRoutes = require('./routes/subscription.routes'); // ✅ ADDED
+const subscriptionRoutes = require('./routes/subscription.routes');
 
 const app = express();
 
@@ -147,22 +147,18 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // ==================== DATABASE CONNECTION ====================
 mongoose.connect(process.env.MONGODB_URI)
   .then(function() {
-    console.log(`✅ MongoDB Connected`);
-    startSubscriptionCron();
-mongoose.connect(process.env.MONGODB_URI)
-  .then(function() {
-    console.log(`✅ MongoDB Connected`);
+    console.log('✅ MongoDB Connected');
     startSubscriptionCron();
   })
   .catch(function(err) {
     console.error('❌ MongoDB Connection Error:', err);
     process.exit(1);
   });
-    
+
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    success: true, 
+  res.json({
+    success: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
@@ -181,7 +177,7 @@ app.use('/api/verify-email', verifyRoutes);
 // KYC
 app.use('/api/kyc', kycRoutes);
 
-// Subscription (✅ ADDED)
+// Subscription
 app.use('/api/subscription', subscriptionRoutes);
 
 // Escrow & Core
@@ -237,7 +233,6 @@ app.use((err, req, res, next) => {
     method: req.method
   });
 
-  // Handle specific error types
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       success: false,
@@ -247,27 +242,17 @@ app.use((err, req, res, next) => {
   }
 
   if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid token'
-    });
+    return res.status(401).json({ success: false, message: 'Invalid token' });
   }
 
   if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Token expired'
-    });
+    return res.status(401).json({ success: false, message: 'Token expired' });
   }
 
   if (err.name === 'CastError') {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid ID format'
-    });
+    return res.status(400).json({ success: false, message: 'Invalid ID format' });
   }
 
-  // Default error response
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
@@ -279,7 +264,6 @@ app.use((err, req, res, next) => {
 process.on('SIGTERM', () => {
   console.log('👋 SIGTERM received, shutting down gracefully...');
   server.close(() => {
-    console.log('✅ Process terminated');
     mongoose.connection.close(false, () => {
       console.log('✅ MongoDB connection closed');
       process.exit(0);
@@ -290,7 +274,6 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('👋 SIGINT received, shutting down gracefully...');
   server.close(() => {
-    console.log('✅ Process terminated');
     mongoose.connection.close(false, () => {
       console.log('✅ MongoDB connection closed');
       process.exit(0);
@@ -315,7 +298,7 @@ const server = app.listen(PORT, () => {
 ╔════════════════════════════════════════╗
 ║   🚀 SERVER STARTED SUCCESSFULLY       ║
 ╠════════════════════════════════════════╣
-║   Port: ${PORT}                        ║
+║   Port: ${PORT}
 ║   Environment: ${process.env.NODE_ENV || 'development'}
 ║   Frontend: ${process.env.FRONTEND_URL}
 ║   Backend: ${process.env.BACKEND_URL}
@@ -323,13 +306,8 @@ const server = app.listen(PORT, () => {
   `);
 });
 
-// Set server timeout
 server.timeout = 30000;
-
-// Keep alive timeout
 server.keepAliveTimeout = 65000;
-
-// Headers timeout
 server.headersTimeout = 66000;
 
 module.exports = app;

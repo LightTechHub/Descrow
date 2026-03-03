@@ -30,7 +30,6 @@ router.get('/debug-check', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-);
 
 
 // =============== PUBLIC ADMIN ROUTES ==================

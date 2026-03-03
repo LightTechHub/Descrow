@@ -30,48 +30,8 @@ router.get('/debug-check', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+);
 
-
-// TEMPORARY: Reset Master Admin Password
-router.post('/debug-reset-password', async (req, res) => {
-  try {
-    const Admin = require('../models/Admin.model');
-
-    // Delete old master admin (optional, only if you want a fresh start)
-    await Admin.deleteMany({ email: 'admin@dealcross.net' });
-
-    // Create new master admin
-    const newAdmin = await Admin.create({
-      name: 'Master Admin',
-      email: 'admin@dealcross.net',
-      password: 'Admin1234!', // <-- THIS IS THE NEW PASSWORD
-      role: 'master',
-      status: 'active',
-      isActive: true,
-      permissions: {
-        viewTransactions: true,
-        manageDisputes: true,
-        verifyUsers: true,
-        viewAnalytics: true,
-        managePayments: true,
-        manageAPI: true,
-        manageAdmins: true,
-        manageFees: true,
-        manageSettings: true
-      }
-    });
-
-    res.json({
-      success: true,
-      message: 'Master admin password reset successfully!',
-      email: newAdmin.email
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 // =============== PUBLIC ADMIN ROUTES ==================
 // ======================================================

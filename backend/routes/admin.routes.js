@@ -33,19 +33,19 @@ router.get('/debug-check', async (req, res) => {
 });
 
 
-
-// TEMPORARY DEBUG - DELETE AFTER USE
-router.post('/debug-reset', async (req, res) => {
+// TEMPORARY: Reset Master Admin Password
+router.post('/debug-reset-password', async (req, res) => {
   try {
-    const bcrypt = require('bcryptjs');
     const Admin = require('../models/Admin.model');
-    await Admin.deleteMany({});
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash('Admin1234!', salt);
-    await Admin.collection.insertOne({
+
+    // Delete old master admin (optional, only if you want a fresh start)
+    await Admin.deleteMany({ email: 'admin@dealcross.net' });
+
+    // Create new master admin
+    const newAdmin = await Admin.create({
       name: 'Master Admin',
       email: 'admin@dealcross.net',
-      password: hashedPassword,
+      password: 'Admin1234!', // <-- THIS IS THE NEW PASSWORD
       role: 'master',
       status: 'active',
       isActive: true,
@@ -59,18 +59,19 @@ router.post('/debug-reset', async (req, res) => {
         manageAdmins: true,
         manageFees: true,
         manageSettings: true
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
+      }
     });
-    const saved = await Admin.findOne({ email: 'admin@dealcross.net' }).select('+password');
-    const testMatch = await bcrypt.compare('Admin1234!', saved.password);
-    res.json({ success: true, passwordVerified: testMatch, email: saved.email });
+
+    res.json({
+      success: true,
+      message: 'Master admin password reset successfully!',
+      email: newAdmin.email
+    });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
 
 // =============== PUBLIC ADMIN ROUTES ==================
 // ======================================================

@@ -149,46 +149,16 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(function() {
     console.log(`✅ MongoDB Connected`);
     startSubscriptionCron();
-
-    if (process.env.RESET_ADMIN === 'true') {
-      const Admin = require('./models/Admin.model');
-      const bcrypt = require('bcryptjs');
-      bcrypt.hash('MasterAdmin123!', 10).then(function(hashed) {
-        return Admin.deleteMany({}).then(function() {
-          return Admin.collection.insertOne({
-            name: 'Master Admin',
-            email: 'admin@dealcross.net',
-            password: hashed,
-            role: 'master',
-            status: 'active',
-            isActive: true,
-            permissions: {
-              viewTransactions: true,
-              manageDisputes: true,
-              verifyUsers: true,
-              viewAnalytics: true,
-              managePayments: true,
-              manageAPI: true,
-              manageAdmins: true,
-              manageFees: true,
-              manageSettings: true
-            },
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-        });
-      }).then(function() {
-        console.log('✅ ADMIN RESET COMPLETE — email: admin@dealcross.net');
-      }).catch(function(e) {
-        console.error('❌ Admin reset failed:', e.message);
-      });
-    }
+mongoose.connect(process.env.MONGODB_URI)
+  .then(function() {
+    console.log(`✅ MongoDB Connected`);
+    startSubscriptionCron();
   })
   .catch(function(err) {
     console.error('❌ MongoDB Connection Error:', err);
     process.exit(1);
-  }); 
-
+  });
+    
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
   res.json({ 

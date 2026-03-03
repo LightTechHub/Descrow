@@ -21,11 +21,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('adminToken');
-      localStorage.removeItem('admin');
-      window.location.href = '/admin/login';
-    }
+    if (error.response?.status === 401 && !error.config.url.includes('/admin/login')) {
+  localStorage.removeItem('adminToken');
+  localStorage.removeItem('admin');
+  window.location.href = '/admin/login';
+}
     return Promise.reject(error);
   }
 );

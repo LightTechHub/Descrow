@@ -1,4 +1,4 @@
-// backend/routes/admin.routes.js - FIXED VERSION
+// backend/routes/admin.routes.js
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
@@ -6,32 +6,6 @@ const { protectAdmin, checkPermission, masterOnly } = require('../middleware/adm
 const { body } = require('express-validator');
 
 // ======================================================
-
-router.get('/debug-check', async (req, res) => {
-  try {
-    const bcrypt = require('bcryptjs');
-    const Admin = require('../models/Admin.model');
-    const admin = await Admin.findOne({ email: 'admin@dealcross.net' }).select('+password');
-    if (!admin) return res.json({ found: false });
-    
-    const test1 = await bcrypt.compare('Admin1234!', admin.password);
-    const test2 = await bcrypt.compare('MasterAdmin123!', admin.password);
-    
-    res.json({
-      found: true,
-      passwordHash: admin.password,
-      hashLength: admin.password.length,
-      startsWithDollar2: admin.password.startsWith('$2'),
-      test_Admin1234: test1,
-      test_MasterAdmin123: test2,
-      status: admin.status,
-      role: admin.role
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-
-
 // =============== PUBLIC ADMIN ROUTES ==================
 // ======================================================
 
@@ -57,7 +31,6 @@ router.get(
 );
 
 // ----------------- Transactions -----------------
-// Get all transactions/escrows
 router.get(
   '/transactions',
   protectAdmin,
@@ -65,7 +38,6 @@ router.get(
   adminController.getTransactions
 );
 
-// Get transaction details
 router.get(
   '/transactions/:transactionId',
   protectAdmin,
@@ -74,7 +46,6 @@ router.get(
 );
 
 // ----------------- Disputes -----------------
-// Get all disputes
 router.get(
   '/disputes',
   protectAdmin,
@@ -82,7 +53,6 @@ router.get(
   adminController.getDisputes
 );
 
-// Assign dispute to admin
 router.put(
   '/disputes/:disputeId/assign',
   protectAdmin,
@@ -90,7 +60,6 @@ router.put(
   adminController.assignDispute
 );
 
-// Resolve dispute
 router.put(
   '/disputes/:disputeId/resolve',
   protectAdmin,
@@ -99,7 +68,6 @@ router.put(
 );
 
 // ----------------- Users -----------------
-// Get all users
 router.get(
   '/users',
   protectAdmin,
@@ -107,7 +75,6 @@ router.get(
   adminController.getUsers
 );
 
-// Get user details
 router.get(
   '/users/:userId',
   protectAdmin,
@@ -115,7 +82,6 @@ router.get(
   adminController.getUserDetails
 );
 
-// Change user tier
 router.put(
   '/users/:userId/tier',
   protectAdmin,
@@ -123,7 +89,6 @@ router.put(
   adminController.changeUserTier
 );
 
-// Review KYC
 router.put(
   '/users/:userId/kyc',
   protectAdmin,
@@ -131,7 +96,6 @@ router.put(
   adminController.reviewKYC
 );
 
-// Toggle user status (activate/suspend)
 router.put(
   '/users/:userId/toggle-status',
   protectAdmin,
@@ -140,7 +104,6 @@ router.put(
 );
 
 // ----------------- Analytics & Stats -----------------
-// Get analytics data
 router.get(
   '/analytics',
   protectAdmin,
@@ -148,7 +111,6 @@ router.get(
   adminController.getAnalytics
 );
 
-// Get platform statistics
 router.get(
   '/platform-stats',
   protectAdmin,
@@ -160,7 +122,6 @@ router.get(
 // ========== ADMIN MANAGEMENT (MASTER ONLY) ============
 // ======================================================
 
-// Get all admins
 router.get(
   '/admins',
   protectAdmin,
@@ -168,7 +129,6 @@ router.get(
   adminController.getAdmins
 );
 
-// Create new sub-admin
 router.post(
   '/admins',
   protectAdmin,
@@ -182,7 +142,6 @@ router.post(
   adminController.createSubAdmin
 );
 
-// Update sub-admin permissions
 router.put(
   '/admins/:adminId/permissions',
   protectAdmin,
@@ -193,7 +152,6 @@ router.put(
   adminController.updateSubAdminPermissions
 );
 
-// Toggle sub-admin active/suspended state
 router.put(
   '/admins/:adminId/toggle-status',
   protectAdmin,
@@ -201,7 +159,6 @@ router.put(
   adminController.toggleAdminStatus
 );
 
-// Delete sub-admin
 router.delete(
   '/admins/:adminId',
   protectAdmin,
@@ -213,7 +170,6 @@ router.delete(
 // =========== FEE MANAGEMENT (MASTER ONLY) =============
 // ======================================================
 
-// Get current fee settings
 router.get(
   '/fees',
   protectAdmin,
@@ -221,7 +177,6 @@ router.get(
   adminController.getFeeSettings
 );
 
-// Update individual fee setting
 router.put(
   '/fees/update',
   protectAdmin,
@@ -236,7 +191,6 @@ router.put(
   adminController.updateFeeSettings
 );
 
-// Bulk update tier fees
 router.put(
   '/fees/bulk-update',
   protectAdmin,
@@ -248,7 +202,6 @@ router.put(
   adminController.bulkUpdateTierFees
 );
 
-// Update gateway costs
 router.put(
   '/fees/gateway-costs',
   protectAdmin,
@@ -262,7 +215,6 @@ router.put(
   adminController.updateGatewayCosts
 );
 
-// Get fee settings history
 router.get(
   '/fees/history',
   protectAdmin,
@@ -270,7 +222,6 @@ router.get(
   adminController.getFeeSettingsHistory
 );
 
-// Reset fees to default
 router.post(
   '/fees/reset',
   protectAdmin,

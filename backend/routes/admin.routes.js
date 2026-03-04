@@ -5,20 +5,22 @@ const adminController = require('../controllers/admin.controller');
 const { protectAdmin, checkPermission, masterOnly } = require('../middleware/admin.middleware');
 const { body } = require('express-validator');
 
-
-
+// ======================================================
+// =============== DEBUG ROUTE (DELETE AFTER USE) =======
+// ======================================================
 router.get('/debug-token', async (req, res) => {
   try {
     const jwt = require('jsonwebtoken');
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return res.json({ error: 'no token' });
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const Admin = require('../models/Admin.model');
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return res.json({ error: 'no token provided' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const admin = await Admin.findById(decoded.id);
     res.json({
       decoded,
       adminFound: !!admin,
       adminId: admin?._id,
+      adminStatus: admin?.status,
       jwtSecretSet: !!process.env.JWT_SECRET,
       jwtSecretLength: process.env.JWT_SECRET?.length
     });
@@ -26,19 +28,11 @@ router.get('/debug-token', async (req, res) => {
     res.json({ error: err.message, name: err.name });
   }
 });
-```
-
-Push, then in Postman:
-```
-GET https://descrow-backend-5ykg.onrender.com/api/admin/debug-token
-Authorization: Bearer YOUR_FRESH_TOKEN
-
 
 // ======================================================
 // =============== PUBLIC ADMIN ROUTES ==================
 // ======================================================
 
-// Admin Login
 router.post(
   '/login',
   [
@@ -52,116 +46,34 @@ router.post(
 // =============== PROTECTED ADMIN ROUTES ===============
 // ======================================================
 
-// Dashboard Overview
-router.get(
-  '/dashboard',
-  protectAdmin,
-  adminController.getDashboardStats
-);
+router.get('/dashboard', protectAdmin, adminController.getDashboardStats);
 
-// ----------------- Transactions -----------------
-router.get(
-  '/transactions',
-  protectAdmin,
-  checkPermission('viewTransactions'),
-  adminController.getTransactions
-);
+// Transactions
+router.get('/transactions', protectAdmin, checkPermission('viewTransactions'), adminController.getTransactions);
+router.get('/transactions/:transactionId', protectAdmin, checkPermission('viewTransactions'), adminController.getTransactionDetails);
 
-router.get(
-  '/transactions/:transactionId',
-  protectAdmin,
-  checkPermission('viewTransactions'),
-  adminController.getTransactionDetails
-);
+// Disputes
+router.get('/disputes', protectAdmin, checkPermission('manageDisputes'), adminController.getDisputes);
+router.put('/disputes/:disputeId/assign', protectAdmin, checkPermission('manageDisputes'), adminController.assignDispute);
+router.put('/disputes/:disputeId/resolve', protectAdmin, checkPermission('manageDisputes'), adminController.resolveDispute);
 
-// ----------------- Disputes -----------------
-router.get(
-  '/disputes',
-  protectAdmin,
-  checkPermission('manageDisputes'),
-  adminController.getDisputes
-);
+// Users
+router.get('/users', protectAdmin, checkPermission('verifyUsers'), adminController.getUsers);
+router.get('/users/:userId', protectAdmin, checkPermission('verifyUsers'), adminController.getUserDetails);
+router.put('/users/:userId/tier', protectAdmin, checkPermission('verifyUsers'), adminController.changeUserTier);
+router.put('/users/:userId/kyc', protectAdmin, checkPermission('verifyUsers'), adminController.reviewKYC);
+router.put('/users/:userId/toggle-status', protectAdmin, checkPermission('verifyUsers'), adminController.toggleUserStatus);
 
-router.put(
-  '/disputes/:disputeId/assign',
-  protectAdmin,
-  checkPermission('manageDisputes'),
-  adminController.assignDispute
-);
-
-router.put(
-  '/disputes/:disputeId/resolve',
-  protectAdmin,
-  checkPermission('manageDisputes'),
-  adminController.resolveDispute
-);
-
-// ----------------- Users -----------------
-router.get(
-  '/users',
-  protectAdmin,
-  checkPermission('verifyUsers'),
-  adminController.getUsers
-);
-
-router.get(
-  '/users/:userId',
-  protectAdmin,
-  checkPermission('verifyUsers'),
-  adminController.getUserDetails
-);
-
-router.put(
-  '/users/:userId/tier',
-  protectAdmin,
-  checkPermission('verifyUsers'),
-  adminController.changeUserTier
-);
-
-router.put(
-  '/users/:userId/kyc',
-  protectAdmin,
-  checkPermission('verifyUsers'),
-  adminController.reviewKYC
-);
-
-router.put(
-  '/users/:userId/toggle-status',
-  protectAdmin,
-  checkPermission('verifyUsers'),
-  adminController.toggleUserStatus
-);
-
-// ----------------- Analytics & Stats -----------------
-router.get(
-  '/analytics',
-  protectAdmin,
-  checkPermission('viewAnalytics'),
-  adminController.getAnalytics
-);
-
-router.get(
-  '/platform-stats',
-  protectAdmin,
-  checkPermission('viewAnalytics'),
-  adminController.getPlatformStats
-);
+// Analytics
+router.get('/analytics', protectAdmin, checkPermission('viewAnalytics'), adminController.getAnalytics);
+router.get('/platform-stats', protectAdmin, checkPermission('viewAnalytics'), adminController.getPlatformStats);
 
 // ======================================================
 // ========== ADMIN MANAGEMENT (MASTER ONLY) ============
 // ======================================================
 
-router.get(
-  '/admins',
-  protectAdmin,
-  masterOnly,
-  adminController.getAdmins
-);
-
-router.post(
-  '/admins',
-  protectAdmin,
-  masterOnly,
+router.get('/admins', protectAdmin, masterOnly, adminController.getAdmins);
+router.post('/admins', protectAdmin, masterOnly,
   [
     body('name').notEmpty().withMessage('Name required'),
     body('email').isEmail().withMessage('Valid email required'),
@@ -170,46 +82,19 @@ router.post(
   ],
   adminController.createSubAdmin
 );
-
-router.put(
-  '/admins/:adminId/permissions',
-  protectAdmin,
-  masterOnly,
-  [
-    body('permissions').isObject().withMessage('Permissions must be an object')
-  ],
+router.put('/admins/:adminId/permissions', protectAdmin, masterOnly,
+  [body('permissions').isObject().withMessage('Permissions must be an object')],
   adminController.updateSubAdminPermissions
 );
-
-router.put(
-  '/admins/:adminId/toggle-status',
-  protectAdmin,
-  masterOnly,
-  adminController.toggleAdminStatus
-);
-
-router.delete(
-  '/admins/:adminId',
-  protectAdmin,
-  masterOnly,
-  adminController.deleteSubAdmin
-);
+router.put('/admins/:adminId/toggle-status', protectAdmin, masterOnly, adminController.toggleAdminStatus);
+router.delete('/admins/:adminId', protectAdmin, masterOnly, adminController.deleteSubAdmin);
 
 // ======================================================
 // =========== FEE MANAGEMENT (MASTER ONLY) =============
 // ======================================================
 
-router.get(
-  '/fees',
-  protectAdmin,
-  masterOnly,
-  adminController.getFeeSettings
-);
-
-router.put(
-  '/fees/update',
-  protectAdmin,
-  masterOnly,
+router.get('/fees', protectAdmin, masterOnly, adminController.getFeeSettings);
+router.put('/fees/update', protectAdmin, masterOnly,
   [
     body('tier').isIn(['starter', 'growth', 'enterprise', 'api']).withMessage('Invalid tier'),
     body('feeType').isIn(['fees', 'monthlyCost', 'setupFee', 'maxTransactionAmount', 'maxTransactionsPerMonth']).withMessage('Invalid fee type'),
@@ -219,22 +104,14 @@ router.put(
   ],
   adminController.updateFeeSettings
 );
-
-router.put(
-  '/fees/bulk-update',
-  protectAdmin,
-  masterOnly,
+router.put('/fees/bulk-update', protectAdmin, masterOnly,
   [
     body('tier').isIn(['starter', 'growth', 'enterprise', 'api']).withMessage('Invalid tier'),
     body('updates').isObject().withMessage('Updates object required')
   ],
   adminController.bulkUpdateTierFees
 );
-
-router.put(
-  '/fees/gateway-costs',
-  protectAdmin,
-  masterOnly,
+router.put('/fees/gateway-costs', protectAdmin, masterOnly,
   [
     body('gateway').isIn(['paystack', 'flutterwave', 'crypto']).withMessage('Invalid gateway'),
     body('currency').optional().isIn(['NGN', 'USD']).withMessage('Invalid currency'),
@@ -243,21 +120,9 @@ router.put(
   ],
   adminController.updateGatewayCosts
 );
-
-router.get(
-  '/fees/history',
-  protectAdmin,
-  masterOnly,
-  adminController.getFeeSettingsHistory
-);
-
-router.post(
-  '/fees/reset',
-  protectAdmin,
-  masterOnly,
-  [
-    body('tier').isIn(['starter', 'growth', 'enterprise', 'api', 'all']).withMessage('Invalid tier')
-  ],
+router.get('/fees/history', protectAdmin, masterOnly, adminController.getFeeSettingsHistory);
+router.post('/fees/reset', protectAdmin, masterOnly,
+  [body('tier').isIn(['starter', 'growth', 'enterprise', 'api', 'all']).withMessage('Invalid tier')],
   adminController.resetFeesToDefault
 );
 

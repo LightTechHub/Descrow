@@ -564,4 +564,40 @@ exports.adminRejectKYC = async (req, res) => {
   }
 };
 
+exports.handleDiditWebhookRedirect = async (req, res) => {
+  try {
+    const { verificationSessionId, status } = req.query;
+    console.log('DiDit redirect received:', { verificationSessionId, status });
+
+    if (verificationSessionId) {
+      const User = require('../models/User.model');
+      const user = await User.findOne({
+        'kycStatus.diditSessionId': verificationSessionId
+      });
+
+      if (user) {
+        const newStatus = 
+          status === 'Approved' ? 'approved' :
+          (status === 'In Review' || status === 'In+Review') ? 'under_review' :
+          status === 'Declined' ? 'rejected' : 'in_progress';
+
+        user.kycStatus.status = newStatus;
+        if (newStatus === 'approved') {
+          user.isKYCVerified = true;
+          user.kycStatus.verifiedAt = new Date();
+        }
+        await user.save();
+        console.log(`✅ KYC updated to ${newStatus} for session ${verificationSessionId}`);
+      }
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://dealcross.net';
+    return res.redirect(`${frontendUrl}/kyc?status=${status || 'in_review'}&session=${verificationSessionId || ''}`);
+  } catch (error) {
+    console.error('DiDit redirect error:', error);
+    const frontendUrl = process.env.FRONTEND_URL || 'https://dealcross.net';
+    return res.redirect(`${frontendUrl}/kyc?status=error`);
+  }
+};
+
 module.exports = exports;

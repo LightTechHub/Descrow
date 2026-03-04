@@ -9,6 +9,31 @@ import {
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 
+//uer debug
+const fetchUsers = async () => {
+  try {
+    setLoading(true);
+    const response = await adminService.getUsers({
+      ...filters,
+      page: currentPage,
+      limit: 20,
+      search
+    });
+    console.log('RAW RESPONSE:', JSON.stringify(response));  // ← ADD THIS
+    const data = response.data || response;
+    const users = data.users || data.data?.users || [];
+    const pagination = data.pagination || data.data?.pagination || {};
+    setUsers(users);
+    setTotalPages(pagination.pages || data.totalPages || 1);
+    setTotalCount(pagination.total || data.totalCount || 0);
+  } catch (error) {
+    console.error('Failed to fetch users:', error);
+    toast.error('Failed to load users');
+  } finally {
+    setLoading(false);
+  }
+};
+
 // ── Inline User Details Modal ─────────────────────────────────────────────────
 const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   const [saving, setSaving] = useState(false);

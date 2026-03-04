@@ -106,7 +106,11 @@ const userSchema = new mongoose.Schema({
     documents: [{
       type: {
         type: String,
-        enum: ['registration_certificate', 'tax_id', 'utility_bill', 'bank_statement', 'other'],
+        enum: [
+  'registration_certificate', 'tax_id', 'utility_bill', 'bank_statement', 'other',
+  'business_registration', 'director_id', 'proof_of_address', 'tax_document', 'additional_document',
+  'cac_certificate', 'tin_certificate', 'articles_of_incorporation', 'certificate_of_incorporation',
+],
       },
       url: String,
       uploadedAt: { type: Date, default: Date.now },

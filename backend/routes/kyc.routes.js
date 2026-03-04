@@ -13,6 +13,7 @@ router.get('/documents/:filename', authenticate, kycController.serveDocument); /
 
 // ==================== WEBHOOK ROUTES (Public) ====================
 router.post('/webhooks/didit', kycController.handleDiditWebhook);
+router.get('/webhooks/didit', kycController.handleDiditWebhookRedirect);
 
 // ==================== ADMIN ROUTES (Protected) ====================
 // Get pending business KYC reviews

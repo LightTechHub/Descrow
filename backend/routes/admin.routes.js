@@ -5,6 +5,35 @@ const adminController = require('../controllers/admin.controller');
 const { protectAdmin, checkPermission, masterOnly } = require('../middleware/admin.middleware');
 const { body } = require('express-validator');
 
+
+
+router.get('/debug-token', async (req, res) => {
+  try {
+    const jwt = require('jsonwebtoken');
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return res.json({ error: 'no token' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const Admin = require('../models/Admin.model');
+    const admin = await Admin.findById(decoded.id);
+    res.json({
+      decoded,
+      adminFound: !!admin,
+      adminId: admin?._id,
+      jwtSecretSet: !!process.env.JWT_SECRET,
+      jwtSecretLength: process.env.JWT_SECRET?.length
+    });
+  } catch (err) {
+    res.json({ error: err.message, name: err.name });
+  }
+});
+```
+
+Push, then in Postman:
+```
+GET https://descrow-backend-5ykg.onrender.com/api/admin/debug-token
+Authorization: Bearer YOUR_FRESH_TOKEN
+
+
 // ======================================================
 // =============== PUBLIC ADMIN ROUTES ==================
 // ======================================================

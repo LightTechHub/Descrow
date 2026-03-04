@@ -280,10 +280,11 @@ const UsersPage = ({ admin }) => {
       });
       // FIX: backend returns response.data.users and response.data.pagination
       const data = response.data || response;
-      setUsers(data.users || []);
-      setTotalPages(data.pagination?.pages || data.totalPages || 1);
-      setTotalCount(data.pagination?.total || data.totalCount || 0);
-    } catch (error) {
+const users = data.users || data.data?.users || [];
+const pagination = data.pagination || data.data?.pagination || {};
+setUsers(users);
+setTotalPages(pagination.pages || data.totalPages || 1);
+setTotalCount(pagination.total || data.totalCount || 0);    } catch (error) {
       console.error('Failed to fetch users:', error);
       toast.error('Failed to load users');
     } finally {

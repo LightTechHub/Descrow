@@ -3,38 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Loader, CheckCircle, XCircle,
-  Ban, UserCheck, Eye, ChevronLeft, ChevronRight,
+  Ban, Eye, ChevronLeft, ChevronRight,
   Shield, RefreshCw, X, User, TrendingUp, Building
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 
-//uer debug
-const fetchUsers = async () => {
-  try {
-    setLoading(true);
-    const response = await adminService.getUsers({
-      ...filters,
-      page: currentPage,
-      limit: 20,
-      search
-    });
-    console.log('RAW RESPONSE:', JSON.stringify(response));  // ← ADD THIS
-    const data = response.data || response;
-    const users = data.users || data.data?.users || [];
-    const pagination = data.pagination || data.data?.pagination || {};
-    setUsers(users);
-    setTotalPages(pagination.pages || data.totalPages || 1);
-    setTotalCount(pagination.total || data.totalCount || 0);
-  } catch (error) {
-    console.error('Failed to fetch users:', error);
-    toast.error('Failed to load users');
-  } finally {
-    setLoading(false);
-  }
-};
-
-// ── Inline User Details Modal ─────────────────────────────────────────────────
+// ── User Details Modal ─────────────────────────────────────────────────────────
 const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   const [saving, setSaving] = useState(false);
   const [newTier, setNewTier] = useState(user.tier || 'starter');
@@ -56,9 +31,7 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   }, [user._id]);
 
   const handleKYCAction = async (action) => {
-    const reason = action === 'reject'
-      ? window.prompt('Rejection reason (required):')
-      : '';
+    const reason = action === 'reject' ? window.prompt('Rejection reason (required):') : '';
     if (action === 'reject' && !reason) return;
     try {
       setSaving(true);
@@ -89,7 +62,7 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   };
 
   const handleToggleStatus = async () => {
-    const action = user.isActive ? 'suspend' : 'activate';
+    const action = user.isActive !== false ? 'suspend' : 'activate';
     if (!window.confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this user?`)) return;
     try {
       setSaving(true);
@@ -109,7 +82,6 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-gray-700">
-        {/* Header */}
         <div className="sticky top-0 bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
@@ -126,7 +98,6 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
               <div className="flex items-center gap-2 mb-3">
@@ -171,7 +142,6 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
             </div>
           </div>
 
-          {/* KYC Documents — show if business account has submitted docs */}
           {user.accountType === 'business' && user.kycStatus?.documents?.length > 0 && (
             <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
               <div className="flex items-center gap-2 mb-3">
@@ -191,15 +161,9 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
                   </a>
                 ))}
               </div>
-              {user.kycStatus?.diditVerifiedAt && (
-                <p className="text-xs text-green-400 mt-2">
-                  ✓ DiDIT identity verified on {new Date(user.kycStatus.diditVerifiedAt).toLocaleDateString()}
-                </p>
-              )}
             </div>
           )}
 
-          {/* Recent Escrows */}
           {!loadingDetails && userDetails?.escrows?.length > 0 && (
             <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
               <h3 className="font-semibold text-white mb-3">Recent Escrows</h3>
@@ -219,11 +183,9 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
             </div>
           )}
 
-          {/* Admin Actions */}
           <div className="border-t border-gray-700 pt-4 space-y-4">
             <h3 className="font-semibold text-white">Admin Actions</h3>
 
-            {/* KYC Review */}
             {(kycStatus === 'under_review' || kycStatus === 'pending' || kycStatus === 'pending_documents') && (
               <div className="flex gap-3">
                 <button onClick={() => handleKYCAction('approve')} disabled={saving}
@@ -237,11 +199,10 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
               </div>
             )}
 
-            {/* Tier Change */}
             <div className="flex gap-3 items-center">
               <select value={newTier} onChange={(e) => setNewTier(e.target.value)}
                 className="flex-1 px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-red-500">
-                <option value="starter">Starter (Free)</option>
+                <option value="starter">Starter</option>
                 <option value="growth">Growth</option>
                 <option value="enterprise">Enterprise</option>
                 <option value="api">API</option>
@@ -252,7 +213,6 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
               </button>
             </div>
 
-            {/* Suspend / Activate */}
             <button onClick={handleToggleStatus} disabled={saving}
               className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold transition disabled:opacity-50 ${
                 user.isActive !== false
@@ -281,19 +241,7 @@ const UsersPage = ({ admin }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedUser, setSelectedUser] = useState(null);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [filters, currentPage]);
-
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentPage(1);
-      fetchUsers();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [search]);
-
+  // ── fetchUsers is INSIDE the component so it has access to state ──
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -303,19 +251,32 @@ const UsersPage = ({ admin }) => {
         limit: 20,
         search
       });
-      // FIX: backend returns response.data.users and response.data.pagination
-      const data = response.data || response;
-const users = data.users || data.data?.users || [];
-const pagination = data.pagination || data.data?.pagination || {};
-setUsers(users);
-setTotalPages(pagination.pages || data.totalPages || 1);
-setTotalCount(pagination.total || data.totalCount || 0);    } catch (error) {
+      console.log('RAW RESPONSE:', JSON.stringify(response));
+      // Backend returns: { success, data: { users, pagination } }
+      const users = response?.data?.users || response?.users || [];
+      const pagination = response?.data?.pagination || response?.pagination || {};
+      setUsers(users);
+      setTotalPages(pagination.pages || 1);
+      setTotalCount(pagination.total || users.length || 0);
+    } catch (error) {
       console.error('Failed to fetch users:', error);
       toast.error('Failed to load users');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchUsers();
+  }, [filters, currentPage]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      fetchUsers();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const getKYCBadge = (user) => {
     const status = user.kycStatus?.status || user.kycStatus || 'unverified';
@@ -355,7 +316,6 @@ setTotalCount(pagination.total || data.totalCount || 0);    } catch (error) {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Filters */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div className="md:col-span-2 relative">
@@ -391,7 +351,6 @@ setTotalCount(pagination.total || data.totalCount || 0);    } catch (error) {
           </div>
         </div>
 
-        {/* Table */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">

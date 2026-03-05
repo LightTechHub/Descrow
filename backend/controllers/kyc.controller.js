@@ -46,6 +46,10 @@ const upload = multer({
   { name: 'additionalDoc',        maxCount: 1 }
 ]);
 
+// ── Helper: clean frontend URL ─────────────────────────────────────────────────
+const getFrontendUrl = () =>
+  (process.env.FRONTEND_URL || 'https://dealcross.net').replace(/\/$/, '');
+
 // ==================== INITIATE KYC ====================
 exports.initiateKYC = async (req, res) => {
   try {
@@ -79,7 +83,7 @@ exports.initiateKYC = async (req, res) => {
       }
     }
 
-    // Create DiDIT session — no country check, all accounts
+    // Create DiDIT session
     const verification = await diditService.createVerificationSession(user._id, {
       email:        user.email,
       phone:        user.phone,
@@ -93,13 +97,11 @@ exports.initiateKYC = async (req, res) => {
       console.warn('⚠️  DiDIT session creation failed:', verification.message);
 
       if (accountType === 'business') {
-        // Don't block document upload — just flag DiDIT as unavailable
         user.kycStatus = {
           ...user.kycStatus,
           diditError:  verification.message,
           accountType: 'business'
         };
-        // Only set status if it hasn't been set to something meaningful yet
         if (!user.kycStatus.status || user.kycStatus.status === 'unverified') {
           user.kycStatus.status = 'pending_documents';
         }
@@ -123,9 +125,9 @@ exports.initiateKYC = async (req, res) => {
       });
     }
 
-    // DiDIT session created — update status, preserve any existing document data
+    // DiDIT session created
     user.kycStatus = {
-      ...user.kycStatus,             // preserve documents if already uploaded
+      ...user.kycStatus,
       status:                'pending',
       submittedAt:           user.kycStatus?.submittedAt || new Date(),
       diditSessionId:        verification.data.sessionId,
@@ -157,7 +159,6 @@ exports.initiateKYC = async (req, res) => {
 };
 
 // ==================== UPLOAD BUSINESS DOCUMENTS ====================
-// Always available for business accounts regardless of DiDIT status
 exports.uploadBusinessDocuments = [
   (req, res, next) => {
     upload(req, res, (err) => {
@@ -188,7 +189,7 @@ exports.uploadBusinessDocuments = [
         });
       }
 
-      const baseUrl = process.env.BACKEND_URL || process.env.API_BASE_URL || 'https://descrow-backend-5ykg.onrender.com';
+      const baseUrl = (process.env.BACKEND_URL || process.env.API_BASE_URL || 'https://descrow-backend-5ykg.onrender.com').replace(/\/$/, '');
       const documents = [];
 
       const addDoc = (fileArr, type) => {
@@ -213,7 +214,6 @@ exports.uploadBusinessDocuments = [
       addDoc(req.files.taxDocument,          'tax_document');
       addDoc(req.files.additionalDoc,        'additional_document');
 
-      // Preserve DiDIT session data — just add documents on top
       user.kycStatus = {
         ...user.kycStatus,
         status:         'under_review',
@@ -289,7 +289,7 @@ exports.getKYCStatus = async (req, res) => {
   }
 };
 
-// ==================== DIDIT WEBHOOK ====================
+// ==================== DIDIT WEBHOOK (POST) ====================
 exports.handleDiditWebhook = async (req, res) => {
   try {
     console.log('📥 DiDIT Webhook received:', req.body);
@@ -316,11 +316,7 @@ exports.handleDiditWebhook = async (req, res) => {
     console.log(`📝 DiDIT webhook: ${accountType} user ${userId} — event: ${event.type}`);
 
     if (event.type === 'completed' && event.verified) {
-
       if (accountType === 'business') {
-        // Business: DiDIT passed but we still need document review.
-        // If documents already uploaded → keep under_review.
-        // If not yet → set pending_documents so they know to upload.
         const hasDocuments = user.kycStatus?.documents?.length > 0;
         user.kycStatus = {
           ...user.kycStatus,
@@ -330,11 +326,9 @@ exports.handleDiditWebhook = async (req, res) => {
           accountType:        'business',
           verificationMethod: 'didit'
         };
-        user.isKYCVerified = false; // Admin must approve after reviewing documents
-        console.log(`✅ Business DiDIT passed. Documents uploaded: ${hasDocuments}. Status: ${user.kycStatus.status}`);
-
+        user.isKYCVerified = false;
+        console.log(`✅ Business DiDIT passed. Documents: ${hasDocuments}. Status: ${user.kycStatus.status}`);
       } else {
-        // Individual: DiDIT passed = fully verified
         user.kycStatus = {
           ...user.kycStatus,
           status:             'approved',
@@ -349,11 +343,9 @@ exports.handleDiditWebhook = async (req, res) => {
       }
 
     } else if (event.type === 'failed') {
-      // DiDIT failed — update status but DO NOT prevent document upload for business
       const hasDocuments = user.kycStatus?.documents?.length > 0;
       user.kycStatus = {
         ...user.kycStatus,
-        // If business already submitted docs, keep under_review despite DiDIT failure
         status:             (accountType === 'business' && hasDocuments) ? 'under_review' : 'rejected',
         diditRejectedAt:    new Date(),
         rejectionReason:    event.failureReason || 'Identity verification failed',
@@ -367,9 +359,9 @@ exports.handleDiditWebhook = async (req, res) => {
     } else if (event.type === 'expired') {
       user.kycStatus = {
         ...user.kycStatus,
-        status:          'expired',
-        diditExpiredAt:  new Date(),
-        rejectionReason: 'Verification session expired',
+        status:             'expired',
+        diditExpiredAt:     new Date(),
+        rejectionReason:    'Verification session expired',
         accountType,
         verificationMethod: 'didit'
       };
@@ -391,6 +383,50 @@ exports.handleDiditWebhook = async (req, res) => {
   } catch (error) {
     console.error('❌ Webhook error:', error);
     res.status(500).json({ success: false, message: 'Webhook processing failed', error: error.message });
+  }
+};
+
+// ==================== DIDIT REDIRECT (GET) ====================
+exports.handleDiditWebhookRedirect = async (req, res) => {
+  const frontendUrl = getFrontendUrl();
+  try {
+    const { verificationSessionId, status } = req.query;
+    console.log('📲 DiDIT redirect received:', { verificationSessionId, status });
+
+    if (verificationSessionId) {
+      const user = await User.findOne({ 'kycStatus.diditSessionId': verificationSessionId });
+
+      if (user) {
+        const newStatus =
+          status === 'Approved'                             ? 'approved'     :
+          (status === 'In Review' || status === 'In+Review') ? 'under_review' :
+          status === 'Declined'                             ? 'rejected'     :
+          status === 'Not Started'                          ? 'pending'      :
+                                                              'in_progress';
+
+        user.kycStatus = {
+          ...user.kycStatus,
+          status: newStatus
+        };
+        if (newStatus === 'approved') {
+          user.isKYCVerified = true;
+          user.kycStatus.verifiedAt = new Date();
+        }
+        await user.save();
+        console.log(`✅ KYC redirect: updated to '${newStatus}' for session ${verificationSessionId}`);
+      } else {
+        console.warn('⚠️  No user found for session:', verificationSessionId);
+      }
+    }
+
+    // Always redirect back to frontend KYC page — never 404
+    const safeStatus = encodeURIComponent(status || 'in_review');
+    const safeSession = encodeURIComponent(verificationSessionId || '');
+    return res.redirect(`${frontendUrl}/kyc?status=${safeStatus}&session=${safeSession}`);
+
+  } catch (error) {
+    console.error('❌ DiDIT redirect error:', error);
+    return res.redirect(`${frontendUrl}/kyc?status=error`);
   }
 };
 
@@ -514,7 +550,7 @@ exports.adminApproveKYC = async (req, res) => {
       status:      'approved',
       verifiedAt:  new Date(),
       reviewedAt:  new Date(),
-      reviewedBy:  req.admin?._id || req.user._id,
+      reviewedBy:  req.admin?._id || req.user?._id,
       reviewNotes: req.body.notes || 'Manually approved by admin',
       accountType: user.accountType
     };
@@ -545,7 +581,7 @@ exports.adminRejectKYC = async (req, res) => {
       ...user.kycStatus,
       status:          'rejected',
       reviewedAt:      new Date(),
-      reviewedBy:      req.admin?._id || req.user._id,
+      reviewedBy:      req.admin?._id || req.user?._id,
       rejectionReason: req.body.reason,
       accountType:     user.accountType
     };
@@ -561,42 +597,6 @@ exports.adminRejectKYC = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to reject KYC' });
-  }
-};
-
-exports.handleDiditWebhookRedirect = async (req, res) => {
-  try {
-    const { verificationSessionId, status } = req.query;
-    console.log('DiDit redirect received:', { verificationSessionId, status });
-
-    if (verificationSessionId) {
-      const User = require('../models/User.model');
-      const user = await User.findOne({
-        'kycStatus.diditSessionId': verificationSessionId
-      });
-
-      if (user) {
-        const newStatus = 
-          status === 'Approved' ? 'approved' :
-          (status === 'In Review' || status === 'In+Review') ? 'under_review' :
-          status === 'Declined' ? 'rejected' : 'in_progress';
-
-        user.kycStatus.status = newStatus;
-        if (newStatus === 'approved') {
-          user.isKYCVerified = true;
-          user.kycStatus.verifiedAt = new Date();
-        }
-        await user.save();
-        console.log(`✅ KYC updated to ${newStatus} for session ${verificationSessionId}`);
-      }
-    }
-
-    const frontendUrl = (process.env.FRONTEND_URL || 'https://dealcross.net').replace(/\/$/, '');
-    return res.redirect(`${frontendUrl}/kyc?status=${status || 'in_review'}&session=${verificationSessionId || ''}`);
-    
-    console.error('DiDit redirect error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'https://dealcross.net';
-    return res.redirect(`${frontendUrl}/kyc?status=error`);
   }
 };
 

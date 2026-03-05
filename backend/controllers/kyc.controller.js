@@ -188,7 +188,7 @@ exports.uploadBusinessDocuments = [
         });
       }
 
-      const baseUrl = process.env.API_BASE_URL || 'http://localhost:5000';
+      const baseUrl = process.env.BACKEND_URL || process.env.API_BASE_URL || 'https://descrow-backend-5ykg.onrender.com';
       const documents = [];
 
       const addDoc = (fileArr, type) => {

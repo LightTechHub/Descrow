@@ -374,18 +374,30 @@ const reviewKYC = async (req, res) => {
     const { action, reason } = req.body;
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+   const currentStatus = user.kycStatus?.status || user.kycStatus;
+if (!['pending', 'under_review', 'pending_documents', 'in_progress'].includes(currentStatus)) {
+  return res.status(400).json({ success: false, message: `KYC is already ${currentStatus}` });
+}
 
-    if (user.kycStatus !== 'pending') {
-      return res.status(400).json({ success: false, message: `KYC is already ${user.kycStatus}` });
-    }
-
-    if (action === 'approve') {
-      user.kycStatus = 'approved';
-      user.isKYCVerified = true;
-    } else if (action === 'reject') {
-      user.kycStatus = 'rejected';
-      user.isKYCVerified = false;
+if (action === 'approve') {
+  user.kycStatus = {
+    ...user.kycStatus,
+    status: 'approved',
+    verifiedAt: new Date(),
+    reviewedAt: new Date(),
+    reviewedBy: req.admin._id
+  };
+  user.isKYCVerified = true;
+} else if (action === 'reject') {
+  user.kycStatus = {
+    ...user.kycStatus,
+    status: 'rejected',
+    reviewedAt: new Date(),
+    reviewedBy: req.admin._id,
+    rejectionReason: reason || 'Rejected by admin'
+  };
+  user.isKYCVerified = false;
+}
     } else {
       return res.status(400).json({ success: false, message: 'Invalid action' });
     }

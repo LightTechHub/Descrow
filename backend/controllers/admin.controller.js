@@ -3,7 +3,7 @@ const Admin = require('../models/Admin.model');
 const User = require('../models/User.model');
 const Escrow = require('../models/Escrow.model');
 const Dispute = require('../models/Dispute.model');
-const Transaction = require('../models/Transaction.model'); // Added this import
+const Transaction = require('../models/Transaction.model');
 const FeeSettings = require('../models/FeeSettings.model');
 const feeConfig = require('../config/fee.config');
 const jwt = require('jsonwebtoken');
@@ -35,19 +35,13 @@ const login = async (req, res) => {
     if (!admin) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
     if (admin.status !== 'active')
-      return res.status(403).json({
-        success: false,
-        message: 'Account is suspended. Contact master admin.'
-      });
+      return res.status(403).json({ success: false, message: 'Account is suspended. Contact master admin.' });
 
     const isPasswordValid = await admin.comparePassword(password);
     if (!isPasswordValid)
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    await Admin.updateOne(
-  { _id: admin._id },
-  { $set: { lastActive: new Date() } }
-);
+    await Admin.updateOne({ _id: admin._id }, { $set: { lastActive: new Date() } });
 
     const token = generateToken(admin._id);
 
@@ -91,7 +85,6 @@ const getDashboardStats = async (req, res) => {
       { $match: { status: 'completed' } },
       { $group: { _id: null, totalRevenue: { $sum: '$adminFee' } } }
     ]);
-
     stats.totalRevenue = revenueData[0]?.totalRevenue || 0;
 
     const recentEscrows = await Escrow.find()
@@ -206,7 +199,6 @@ const resolveDispute = async (req, res) => {
       escrow.status = 'cancelled';
     } else if (winner === 'seller') {
       escrow.status = 'completed';
-
       const seller = await User.findById(escrow.seller);
       seller.totalEarned += escrow.netAmount;
       await seller.save();
@@ -233,7 +225,7 @@ const getUsers = async (req, res) => {
 
     const query = {};
     if (verified === 'true' || verified === 'false') query.verified = verified === 'true';
-    if (kycStatus) query.kycStatus = kycStatus;
+    if (kycStatus) query['kycStatus.status'] = kycStatus;
     if (tier && tier !== 'all') query.tier = tier;
     if (status && status !== 'all') query.status = status;
     if (search) query.$or = [
@@ -248,7 +240,7 @@ const getUsers = async (req, res) => {
         .select('-password -twoFactorSecret')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(Number(limit)),
       User.countDocuments(query)
     ]);
 
@@ -272,6 +264,36 @@ const getUsers = async (req, res) => {
 };
 
 /* =========================================================
+   GET USER DETAILS
+========================================================= */
+const getUserDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId).select('-password -twoFactorSecret');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const escrows = await Escrow.find({ $or: [{ buyer: userId }, { seller: userId }] })
+      .populate('buyer', 'name email')
+      .populate('seller', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    const disputes = await Dispute.find({ $or: [{ initiatedBy: userId }, { reportedUser: userId }] })
+      .populate('escrow', 'escrowId title amount')
+      .populate('initiatedBy', 'name email')
+      .populate('resolvedBy', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    res.status(200).json({ success: true, data: { user, escrows, disputes } });
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch user details', error: error.message });
+  }
+};
+
+/* =========================================================
    CHANGE USER TIER
 ========================================================= */
 const changeUserTier = async (req, res) => {
@@ -280,9 +302,8 @@ const changeUserTier = async (req, res) => {
     const { newTier, reason } = req.body;
 
     const validTiers = ['starter', 'growth', 'enterprise', 'api'];
-    if (!validTiers.includes(newTier)) {
+    if (!validTiers.includes(newTier))
       return res.status(400).json({ success: false, message: 'Invalid tier' });
-    }
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -305,17 +326,8 @@ const changeUserTier = async (req, res) => {
     res.status(200).json({
       success: true,
       message: `User tier changed from ${oldTier} to ${newTier}`,
-      data: {
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          tier: user.tier,
-          subscription: user.subscription
-        }
-      }
+      data: { user: { id: user._id, name: user.name, email: user.email, tier: user.tier } }
     });
-
   } catch (error) {
     console.error('Change user tier error:', error);
     res.status(500).json({ success: false, message: 'Failed to change user tier', error: error.message });
@@ -348,17 +360,8 @@ const toggleUserStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       message: `User ${action}d successfully`,
-      data: {
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          status: user.status,
-          isActive: user.isActive
-        }
-      }
+      data: { user: { id: user._id, name: user.name, email: user.email, status: user.status, isActive: user.isActive } }
     });
-
   } catch (error) {
     console.error('Toggle user status error:', error);
     res.status(500).json({ success: false, message: 'Failed to change user status', error: error.message });
@@ -366,7 +369,7 @@ const toggleUserStatus = async (req, res) => {
 };
 
 /* =========================================================
-   REVIEW KYC
+   REVIEW KYC  ← FIXED
 ========================================================= */
 const reviewKYC = async (req, res) => {
   try {
@@ -374,32 +377,38 @@ const reviewKYC = async (req, res) => {
     const { action, reason } = req.body;
 
     const user = await User.findById(userId);
-   const currentStatus = user.kycStatus?.status || user.kycStatus;
-if (!['pending', 'under_review', 'pending_documents', 'in_progress'].includes(currentStatus)) {
-  return res.status(400).json({ success: false, message: `KYC is already ${currentStatus}` });
-}
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-if (action === 'approve') {
-  user.kycStatus = {
-    ...user.kycStatus,
-    status: 'approved',
-    verifiedAt: new Date(),
-    reviewedAt: new Date(),
-    reviewedBy: req.admin._id
-  };
-  user.isKYCVerified = true;
-} else if (action === 'reject') {
-  user.kycStatus = {
-    ...user.kycStatus,
-    status: 'rejected',
-    reviewedAt: new Date(),
-    reviewedBy: req.admin._id,
-    rejectionReason: reason || 'Rejected by admin'
-  };
-  user.isKYCVerified = false;
-}
-     
-      return res.status(400).json({ success: false, message: 'Invalid action' });
+    const currentStatus = user.kycStatus?.status || user.kycStatus;
+    const reviewableStatuses = ['pending', 'under_review', 'pending_documents', 'in_progress'];
+
+    if (!reviewableStatuses.includes(currentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `KYC cannot be reviewed in current status: ${currentStatus}`
+      });
+    }
+
+    if (action === 'approve') {
+      user.kycStatus = {
+        ...user.kycStatus,
+        status: 'approved',
+        verifiedAt: new Date(),
+        reviewedAt: new Date(),
+        reviewedBy: req.admin._id
+      };
+      user.isKYCVerified = true;
+    } else if (action === 'reject') {
+      user.kycStatus = {
+        ...user.kycStatus,
+        status: 'rejected',
+        reviewedAt: new Date(),
+        reviewedBy: req.admin._id,
+        rejectionReason: reason || 'Rejected by admin'
+      };
+      user.isKYCVerified = false;
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid action. Use approve or reject.' });
     }
 
     await user.save();
@@ -412,12 +421,11 @@ if (action === 'approve') {
           id: user._id,
           name: user.name,
           email: user.email,
-          kycStatus: user.kycStatus,
+          kycStatus: user.kycStatus.status,
           isKYCVerified: user.isKYCVerified
         }
       }
     });
-
   } catch (error) {
     console.error('Review KYC error:', error);
     res.status(500).json({ success: false, message: 'Failed to review KYC', error: error.message });
@@ -437,22 +445,11 @@ const getPlatformStats = async (req, res) => {
     const activeUsers = await User.countDocuments({ status: 'active' });
 
     const escrowStats = await Escrow.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          totalValue: { $sum: { $toDouble: '$amount' } }
-        }
-      }
+      { $group: { _id: '$status', count: { $sum: 1 }, totalValue: { $sum: { $toDouble: '$amount' } } } }
     ]);
 
     const subscriptionRevenue = await User.aggregate([
-      {
-        $match: {
-          tier: { $ne: 'starter' },
-          'subscription.status': 'active'
-        }
-      },
+      { $match: { tier: { $ne: 'starter' }, 'subscription.status': 'active' } },
       { $group: { _id: '$tier', count: { $sum: 1 } } }
     ]);
 
@@ -462,26 +459,17 @@ const getPlatformStats = async (req, res) => {
       return acc + (tier.count * cost);
     }, 0);
 
-    // Get transaction stats if Transaction model exists
     let transactionStats = { totalTransactions: 0, totalVolume: 0 };
     try {
       if (Transaction) {
         const txAggregation = await Transaction.aggregate([
           { $match: { status: 'completed' } },
-          { 
-            $group: {
-              _id: null,
-              totalTransactions: { $sum: 1 },
-              totalVolume: { $sum: '$amount' }
-            }
-          }
+          { $group: { _id: null, totalTransactions: { $sum: 1 }, totalVolume: { $sum: '$amount' } } }
         ]);
-        if (txAggregation.length > 0) {
-          transactionStats = txAggregation[0];
-        }
+        if (txAggregation.length > 0) transactionStats = txAggregation[0];
       }
     } catch (txError) {
-      console.log('Transaction model not available or error:', txError.message);
+      console.log('Transaction model error:', txError.message);
     }
 
     res.status(200).json({
@@ -494,7 +482,6 @@ const getPlatformStats = async (req, res) => {
         disputes: { pending: await Dispute.countDocuments({ status: 'open' }) }
       }
     });
-
   } catch (error) {
     console.error('Get platform stats error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch platform statistics', error: error.message });
@@ -514,7 +501,6 @@ const getAnalytics = async (req, res) => {
     if (period === '90d') startDate.setDate(startDate.getDate() - 90);
     if (period === '1y') startDate.setFullYear(startDate.getFullYear() - 1);
 
-    // Transactions over time
     const transactionsOverTime = await Escrow.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
       { $group: {
@@ -526,58 +512,29 @@ const getAnalytics = async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Revenue by tier
     const revenueByTier = await Escrow.aggregate([
       { $match: { status: 'completed', createdAt: { $gte: startDate } } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'buyer',
-          foreignField: '_id',
-          as: 'buyerData'
-        }
-      },
+      { $lookup: { from: 'users', localField: 'buyer', foreignField: '_id', as: 'buyerData' } },
       { $unwind: '$buyerData' },
-      {
-        $group: {
-          _id: '$buyerData.tier',
-          totalRevenue: { $sum: '$adminFee' },
-          count: { $sum: 1 }
-        }
-      }
+      { $group: { _id: '$buyerData.tier', totalRevenue: { $sum: '$adminFee' }, count: { $sum: 1 } } }
     ]);
 
-    // Payment methods
     const paymentMethods = await Escrow.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
-      {
-        $group: {
-          _id: '$paymentMethod',
-          count: { $sum: 1 },
-          totalAmount: { $sum: '$amount' }
-        }
-      }
+      { $group: { _id: '$paymentMethod', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
     ]);
 
-    // Dispute stats
     const disputeStats = await Dispute.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
-    // User growth
     const userGrowth = await User.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          count: { $sum: 1 }
-        }
-      },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } }
     ]);
 
-    // Get status distribution
     const statusDistribution = await Escrow.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
@@ -585,19 +542,8 @@ const getAnalytics = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        period,
-        startDate,
-        endDate: new Date(),
-        transactionsOverTime,
-        revenueByTier,
-        paymentMethods,
-        disputeStats,
-        userGrowth,
-        statusDistribution
-      }
+      data: { period, startDate, endDate: new Date(), transactionsOverTime, revenueByTier, paymentMethods, disputeStats, userGrowth, statusDistribution }
     });
-
   } catch (error) {
     console.error('Get analytics error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch analytics', error: error.message });
@@ -613,7 +559,6 @@ const getAdmins = async (req, res) => {
       .select('-password')
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
-
     res.status(200).json({ success: true, admins });
   } catch (error) {
     console.error('Get admins error:', error);
@@ -632,27 +577,14 @@ const createSubAdmin = async (req, res) => {
     if (existingAdmin) return res.status(400).json({ success: false, message: 'Email already registered' });
 
     const subAdmin = await Admin.create({
-      name,
-      email,
-      password,
-      role: 'sub_admin',
-      permissions,
-      createdBy: req.admin._id,
-      status: 'active'
+      name, email, password, role: 'sub_admin', permissions, createdBy: req.admin._id, status: 'active'
     });
 
     res.status(201).json({
       success: true,
       message: 'Sub-admin created successfully',
-      admin: {
-        id: subAdmin._id,
-        name: subAdmin.name,
-        email: subAdmin.email,
-        role: subAdmin.role,
-        permissions: subAdmin.permissions
-      }
+      admin: { id: subAdmin._id, name: subAdmin.name, email: subAdmin.email, role: subAdmin.role, permissions: subAdmin.permissions }
     });
-
   } catch (error) {
     console.error('Create sub-admin error:', error);
     res.status(500).json({ success: false, message: 'Failed to create sub-admin', error: error.message });
@@ -666,7 +598,6 @@ const updateSubAdminPermissions = async (req, res) => {
 
     const admin = await Admin.findById(adminId);
     if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
-
     if (admin.role === 'master')
       return res.status(400).json({ success: false, message: 'Cannot modify master admin permissions' });
 
@@ -683,21 +614,15 @@ const updateSubAdminPermissions = async (req, res) => {
 const toggleAdminStatus = async (req, res) => {
   try {
     const { adminId } = req.params;
-
     const admin = await Admin.findById(adminId);
     if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
-
     if (admin.role === 'master')
       return res.status(400).json({ success: false, message: 'Cannot suspend master admin' });
 
     admin.status = admin.status === 'active' ? 'suspended' : 'active';
     await admin.save();
 
-    res.status(200).json({
-      success: true,
-      message: `Admin ${admin.status === 'active' ? 'activated' : 'suspended'} successfully`,
-      admin
-    });
+    res.status(200).json({ success: true, message: `Admin ${admin.status === 'active' ? 'activated' : 'suspended'} successfully`, admin });
   } catch (error) {
     console.error('Toggle admin status error:', error);
     res.status(500).json({ success: false, message: 'Failed to update admin status', error: error.message });
@@ -707,15 +632,12 @@ const toggleAdminStatus = async (req, res) => {
 const deleteSubAdmin = async (req, res) => {
   try {
     const { adminId } = req.params;
-
     const admin = await Admin.findById(adminId);
     if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
-
     if (admin.role === 'master')
       return res.status(400).json({ success: false, message: 'Cannot delete master admin' });
 
     await Admin.findByIdAndDelete(adminId);
-
     res.status(200).json({ success: true, message: 'Sub-admin deleted successfully' });
   } catch (error) {
     console.error('Delete sub-admin error:', error);
@@ -726,98 +648,48 @@ const deleteSubAdmin = async (req, res) => {
 /* =========================================================
    FEE SETTINGS MANAGEMENT
 ========================================================= */
-
-// Get current fee settings
 const getFeeSettings = async (req, res) => {
   try {
     let feeSettings = await FeeSettings.findOne({ isActive: true });
-
     if (!feeSettings) {
-      // Create default fee settings
-      feeSettings = await FeeSettings.create({
-        lastUpdatedBy: req.admin._id,
-        isActive: true
-      });
+      feeSettings = await FeeSettings.create({ lastUpdatedBy: req.admin._id, isActive: true });
     }
-
-    res.status(200).json({
-      success: true,
-      data: feeSettings
-    });
-
+    res.status(200).json({ success: true, data: feeSettings });
   } catch (error) {
     console.error('Get fee settings error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch fee settings',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch fee settings', error: error.message });
   }
 };
 
-// Update fee settings
 const updateFeeSettings = async (req, res) => {
   try {
     const { tier, currency, feeType, field, value } = req.body;
 
     const validTiers = ['starter', 'growth', 'enterprise', 'api'];
-    if (!validTiers.includes(tier)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid tier'
-      });
-    }
-
-    const validCurrencies = ['NGN', 'USD', 'crypto'];
-    if (feeType === 'fees' && !validCurrencies.includes(currency)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid currency'
-      });
-    }
-
-    const validFields = ['buyer', 'seller'];
-    if (feeType === 'fees' && !validFields.includes(field)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid field. Use: buyer or seller'
-      });
-    }
+    if (!validTiers.includes(tier))
+      return res.status(400).json({ success: false, message: 'Invalid tier' });
 
     let feeSettings = await FeeSettings.findOne({ isActive: true });
-
     if (!feeSettings) {
-      feeSettings = await FeeSettings.create({
-        lastUpdatedBy: req.admin._id,
-        isActive: true
-      });
+      feeSettings = await FeeSettings.create({ lastUpdatedBy: req.admin._id, isActive: true });
     }
 
-    // Update the specific field
+    if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
+
     if (feeType === 'fees') {
-      if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
       if (!feeSettings.tiers[tier].fees) feeSettings.tiers[tier].fees = {};
       if (!feeSettings.tiers[tier].fees[currency]) feeSettings.tiers[tier].fees[currency] = {};
-      
       feeSettings.tiers[tier].fees[currency][field] = parseFloat(value);
     } else if (feeType === 'monthlyCost') {
-      if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
       if (!feeSettings.tiers[tier].monthlyCost) feeSettings.tiers[tier].monthlyCost = {};
-      
       feeSettings.tiers[tier].monthlyCost[currency] = parseFloat(value);
     } else if (feeType === 'setupFee') {
-      if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
       if (!feeSettings.tiers[tier].setupFee) feeSettings.tiers[tier].setupFee = {};
-      
       feeSettings.tiers[tier].setupFee[currency] = parseFloat(value);
     } else if (feeType === 'maxTransactionAmount') {
-      if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
       if (!feeSettings.tiers[tier].maxTransactionAmount) feeSettings.tiers[tier].maxTransactionAmount = {};
-      
       feeSettings.tiers[tier].maxTransactionAmount[currency] = parseFloat(value);
     } else if (feeType === 'maxTransactionsPerMonth') {
-      if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
-      
       feeSettings.tiers[tier].maxTransactionsPerMonth = parseInt(value);
     }
 
@@ -825,59 +697,31 @@ const updateFeeSettings = async (req, res) => {
     feeSettings.version = (feeSettings.version || 0) + 1;
     await feeSettings.save();
 
-    console.log(`✅ Admin ${req.admin.email} updated ${tier} ${feeType} ${currency} ${field} to ${value}`);
-
-    res.status(200).json({
-      success: true,
-      message: 'Fee settings updated successfully',
-      data: feeSettings
-    });
-
+    res.status(200).json({ success: true, message: 'Fee settings updated successfully', data: feeSettings });
   } catch (error) {
     console.error('Update fee settings error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update fee settings',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to update fee settings', error: error.message });
   }
 };
 
-// Bulk update tier fees
 const bulkUpdateTierFees = async (req, res) => {
   try {
     const { tier, updates } = req.body;
-
     const validTiers = ['starter', 'growth', 'enterprise', 'api'];
-    if (!validTiers.includes(tier)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid tier'
-      });
-    }
+    if (!validTiers.includes(tier))
+      return res.status(400).json({ success: false, message: 'Invalid tier' });
 
     let feeSettings = await FeeSettings.findOne({ isActive: true });
-
     if (!feeSettings) {
-      feeSettings = await FeeSettings.create({
-        lastUpdatedBy: req.admin._id,
-        isActive: true
-      });
+      feeSettings = await FeeSettings.create({ lastUpdatedBy: req.admin._id, isActive: true });
     }
 
-    // Initialize tier if it doesn't exist
-    if (!feeSettings.tiers[tier]) {
-      feeSettings.tiers[tier] = {};
-    }
+    if (!feeSettings.tiers[tier]) feeSettings.tiers[tier] = {};
 
-    // Update all provided fields
     if (updates.fees) {
       if (!feeSettings.tiers[tier].fees) feeSettings.tiers[tier].fees = {};
-      
       Object.keys(updates.fees).forEach(currency => {
-        if (!feeSettings.tiers[tier].fees[currency]) {
-          feeSettings.tiers[tier].fees[currency] = {};
-        }
+        if (!feeSettings.tiers[tier].fees[currency]) feeSettings.tiers[tier].fees[currency] = {};
         Object.keys(updates.fees[currency]).forEach(field => {
           feeSettings.tiers[tier].fees[currency][field] = parseFloat(updates.fees[currency][field]);
         });
@@ -886,25 +730,8 @@ const bulkUpdateTierFees = async (req, res) => {
 
     if (updates.monthlyCost) {
       if (!feeSettings.tiers[tier].monthlyCost) feeSettings.tiers[tier].monthlyCost = {};
-      
       Object.keys(updates.monthlyCost).forEach(currency => {
         feeSettings.tiers[tier].monthlyCost[currency] = parseFloat(updates.monthlyCost[currency]);
-      });
-    }
-
-    if (updates.setupFee) {
-      if (!feeSettings.tiers[tier].setupFee) feeSettings.tiers[tier].setupFee = {};
-      
-      Object.keys(updates.setupFee).forEach(currency => {
-        feeSettings.tiers[tier].setupFee[currency] = parseFloat(updates.setupFee[currency]);
-      });
-    }
-
-    if (updates.maxTransactionAmount) {
-      if (!feeSettings.tiers[tier].maxTransactionAmount) feeSettings.tiers[tier].maxTransactionAmount = {};
-      
-      Object.keys(updates.maxTransactionAmount).forEach(currency => {
-        feeSettings.tiers[tier].maxTransactionAmount[currency] = parseFloat(updates.maxTransactionAmount[currency]);
       });
     }
 
@@ -916,101 +743,49 @@ const bulkUpdateTierFees = async (req, res) => {
     feeSettings.version = (feeSettings.version || 0) + 1;
     await feeSettings.save();
 
-    console.log(`✅ Admin ${req.admin.email} bulk updated ${tier} tier settings`);
-
-    res.status(200).json({
-      success: true,
-      message: 'Tier fees updated successfully',
-      data: feeSettings.tiers[tier]
-    });
-
+    res.status(200).json({ success: true, message: 'Tier fees updated successfully', data: feeSettings.tiers[tier] });
   } catch (error) {
     console.error('Bulk update tier fees error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update tier fees',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to update tier fees', error: error.message });
   }
 };
 
-// Update gateway costs
 const updateGatewayCosts = async (req, res) => {
   try {
     const { gateway, currency, field, value } = req.body;
-
     const validGateways = ['paystack', 'flutterwave', 'crypto'];
-    if (!validGateways.includes(gateway)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid gateway'
-      });
-    }
+    if (!validGateways.includes(gateway))
+      return res.status(400).json({ success: false, message: 'Invalid gateway' });
 
     let feeSettings = await FeeSettings.findOne({ isActive: true });
-
     if (!feeSettings) {
-      feeSettings = await FeeSettings.create({
-        lastUpdatedBy: req.admin._id,
-        isActive: true
-      });
+      feeSettings = await FeeSettings.create({ lastUpdatedBy: req.admin._id, isActive: true });
     }
 
-    // Initialize gateway costs if they don't exist
-    if (!feeSettings.gatewayCosts) {
-      feeSettings.gatewayCosts = {};
-    }
-    if (!feeSettings.gatewayCosts[gateway]) {
-      feeSettings.gatewayCosts[gateway] = {};
-    }
+    if (!feeSettings.gatewayCosts) feeSettings.gatewayCosts = {};
+    if (!feeSettings.gatewayCosts[gateway]) feeSettings.gatewayCosts[gateway] = {};
 
-    // Update gateway cost
     if (gateway === 'crypto') {
       feeSettings.gatewayCosts[gateway][field] = parseFloat(value);
     } else {
-      if (!feeSettings.gatewayCosts[gateway][currency]) {
-        feeSettings.gatewayCosts[gateway][currency] = {};
-      }
-      
-      if (field === 'transferFee' && gateway === 'paystack') {
-        // Paystack has transfer fee tiers
-        if (!feeSettings.gatewayCosts.paystack.transferFee) {
-          feeSettings.gatewayCosts.paystack.transferFee = {};
-        }
-        const { tier, amount } = value;
-        feeSettings.gatewayCosts.paystack.transferFee[tier] = parseFloat(amount);
-      } else {
-        feeSettings.gatewayCosts[gateway][currency][field] = parseFloat(value);
-      }
+      if (!feeSettings.gatewayCosts[gateway][currency]) feeSettings.gatewayCosts[gateway][currency] = {};
+      feeSettings.gatewayCosts[gateway][currency][field] = parseFloat(value);
     }
 
     feeSettings.lastUpdatedBy = req.admin._id;
     feeSettings.version = (feeSettings.version || 0) + 1;
     await feeSettings.save();
 
-    console.log(`✅ Admin ${req.admin.email} updated ${gateway} gateway costs`);
-
-    res.status(200).json({
-      success: true,
-      message: 'Gateway costs updated successfully',
-      data: feeSettings.gatewayCosts
-    });
-
+    res.status(200).json({ success: true, message: 'Gateway costs updated successfully', data: feeSettings.gatewayCosts });
   } catch (error) {
     console.error('Update gateway costs error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update gateway costs',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to update gateway costs', error: error.message });
   }
 };
 
-// Get fee settings history
 const getFeeSettingsHistory = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
-
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [history, total] = await Promise.all([
@@ -1024,57 +799,30 @@ const getFeeSettingsHistory = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        history,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit))
-        }
-      }
+      data: { history, pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) } }
     });
-
   } catch (error) {
     console.error('Get fee settings history error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch fee settings history',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch fee settings history', error: error.message });
   }
 };
 
-// Reset fees to default
 const resetFeesToDefault = async (req, res) => {
   try {
     const { tier } = req.body;
-
     const validTiers = ['starter', 'growth', 'enterprise', 'api', 'all'];
-    if (!validTiers.includes(tier)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid tier. Use: starter, growth, enterprise, api, or all'
-      });
-    }
+    if (!validTiers.includes(tier))
+      return res.status(400).json({ success: false, message: 'Invalid tier' });
 
     let feeSettings = await FeeSettings.findOne({ isActive: true });
-
     if (!feeSettings) {
-      feeSettings = await FeeSettings.create({
-        lastUpdatedBy: req.admin._id,
-        isActive: true
-      });
+      feeSettings = await FeeSettings.create({ lastUpdatedBy: req.admin._id, isActive: true });
     }
 
-    // Create a new default settings instance to get default values
     const defaultSettings = new FeeSettings();
-
     if (tier === 'all') {
-      // Reset all tiers to default
       feeSettings.tiers = defaultSettings.tiers;
     } else {
-      // Reset specific tier to default
       feeSettings.tiers[tier] = defaultSettings.tiers[tier];
     }
 
@@ -1082,47 +830,34 @@ const resetFeesToDefault = async (req, res) => {
     feeSettings.version = (feeSettings.version || 0) + 1;
     await feeSettings.save();
 
-    console.log(`✅ Admin ${req.admin.email} reset ${tier} fees to default`);
-
     res.status(200).json({
       success: true,
       message: `${tier === 'all' ? 'All fees' : tier + ' tier'} reset to default values`,
       data: tier === 'all' ? feeSettings : feeSettings.tiers[tier]
     });
-
   } catch (error) {
     console.error('Reset fees error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reset fees',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to reset fees', error: error.message });
   }
 };
 
 /* =========================================================
-   GET TRANSACTION DETAILS (if needed)
+   TRANSACTION DETAILS
 ========================================================= */
 const getTransactionDetails = async (req, res) => {
   try {
     const { transactionId } = req.params;
-    
-    // Check if it's an Escrow or Transaction
+
     let transaction = await Escrow.findById(transactionId)
       .populate('buyer', 'name email phone')
       .populate('seller', 'name email phone');
-    
-    if (!transaction) {
-      // Try Transaction model if Escrow not found
-      if (Transaction) {
-        transaction = await Transaction.findById(transactionId)
-          .populate('user', 'name email phone');
-      }
+
+    if (!transaction && Transaction) {
+      transaction = await Transaction.findById(transactionId).populate('user', 'name email phone');
     }
-    
-    if (!transaction) {
+
+    if (!transaction)
       return res.status(404).json({ success: false, message: 'Transaction not found' });
-    }
 
     res.status(200).json({ success: true, data: transaction });
   } catch (error) {
@@ -1132,54 +867,7 @@ const getTransactionDetails = async (req, res) => {
 };
 
 /* =========================================================
-   GET USER DETAILS (if needed)
-========================================================= */
-const getUserDetails = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    const user = await User.findById(userId)
-      .select('-password -twoFactorSecret');
-    
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    // Get user's escrows
-    const escrows = await Escrow.find({
-      $or: [{ buyer: userId }, { seller: userId }]
-    })
-    .populate('buyer', 'name email')
-    .populate('seller', 'name email')
-    .sort({ createdAt: -1 })
-    .limit(10);
-
-    // Get user's disputes
-    const disputes = await Dispute.find({
-      $or: [{ initiatedBy: userId }, { reportedUser: userId }]
-    })
-    .populate('escrow', 'escrowId title amount')
-    .populate('initiatedBy', 'name email')
-    .populate('resolvedBy', 'name email')
-    .sort({ createdAt: -1 })
-    .limit(10);
-
-    res.status(200).json({ 
-      success: true, 
-      data: { 
-        user, 
-        escrows, 
-        disputes 
-      } 
-    });
-  } catch (error) {
-    console.error('Get user details error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch user details', error: error.message });
-  }
-};
-
-/* =========================================================
-   ASSIGN DISPUTE (if needed)
+   ASSIGN DISPUTE
 ========================================================= */
 const assignDispute = async (req, res) => {
   try {
@@ -1187,25 +875,17 @@ const assignDispute = async (req, res) => {
     const { adminId } = req.body;
 
     const dispute = await Dispute.findById(disputeId);
-    if (!dispute) {
-      return res.status(404).json({ success: false, message: 'Dispute not found' });
-    }
+    if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
 
     const admin = await Admin.findById(adminId);
-    if (!admin) {
-      return res.status(404).json({ success: false, message: 'Admin not found' });
-    }
+    if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
 
     dispute.assignedTo = adminId;
     dispute.status = 'under_review';
     dispute.assignedAt = new Date();
     await dispute.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'Dispute assigned successfully',
-      data: dispute
-    });
+    res.status(200).json({ success: true, message: 'Dispute assigned successfully', data: dispute });
   } catch (error) {
     console.error('Assign dispute error:', error);
     res.status(500).json({ success: false, message: 'Failed to assign dispute', error: error.message });
@@ -1216,40 +896,25 @@ const assignDispute = async (req, res) => {
    EXPORT ALL FUNCTIONS
 ========================================================= */
 module.exports = {
-  // Authentication
   login,
-  
-  // Dashboard
   getDashboardStats,
-  
-  // Transactions
   getTransactions,
   getTransactionDetails,
-  
-  // Disputes
   getDisputes,
   resolveDispute,
   assignDispute,
-  
-  // Users
   getUsers,
   getUserDetails,
   changeUserTier,
   toggleUserStatus,
   reviewKYC,
-  
-  // Analytics & Stats
   getPlatformStats,
   getAnalytics,
-  
-  // Admin Management
   getAdmins,
   createSubAdmin,
   updateSubAdminPermissions,
   toggleAdminStatus,
   deleteSubAdmin,
-  
-  // Fee Settings Management
   getFeeSettings,
   updateFeeSettings,
   bulkUpdateTierFees,

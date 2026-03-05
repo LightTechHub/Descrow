@@ -591,9 +591,9 @@ exports.handleDiditWebhookRedirect = async (req, res) => {
       }
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'https://dealcross.net';
+    const frontendUrl = (process.env.FRONTEND_URL || 'https://dealcross.net').replace(/\/$/, '');
     return res.redirect(`${frontendUrl}/kyc?status=${status || 'in_review'}&session=${verificationSessionId || ''}`);
-  } catch (error) {
+    
     console.error('DiDit redirect error:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'https://dealcross.net';
     return res.redirect(`${frontendUrl}/kyc?status=error`);

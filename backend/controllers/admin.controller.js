@@ -232,7 +232,7 @@ const getUsers = async (req, res) => {
     const { verified, kycStatus, tier, page = 1, limit = 20, search, status } = req.query;
 
     const query = {};
-    if (verified !== undefined) query.verified = verified === 'true';
+    if (verified === 'true' || verified === 'false') query.verified = verified === 'true';
     if (kycStatus) query.kycStatus = kycStatus;
     if (tier && tier !== 'all') query.tier = tier;
     if (status && status !== 'all') query.status = status;

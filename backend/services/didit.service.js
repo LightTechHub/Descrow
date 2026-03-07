@@ -90,8 +90,8 @@ class DiditService {
       // success_url → where DiDIT sends the USER BROWSER after completion
       // cancel_url  → where DiDIT sends the USER BROWSER if they cancel
       const callbackUrl = `${BACKEND}/api/kyc/webhooks/didit`;
-      const successUrl  = `${FRONTEND}/kyc?status=completed&session={session_id}`;
-      const cancelUrl   = `${FRONTEND}/kyc?status=cancelled`;
+      const successUrl  = `${FRONTEND}/kyc-verification?status=completed&session={session_id}`;
+      const cancelUrl   = `${FRONTEND}/kyc-verification?status=cancelled`;
 
       console.log('🔗 URLs being sent to DiDIT:');
       console.log('   callback (webhook):', callbackUrl);

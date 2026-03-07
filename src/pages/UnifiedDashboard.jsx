@@ -165,20 +165,20 @@ const UnifiedDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Left: Title & User Info */}
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
                 {user.accountType === 'business' && user.businessInfo?.companyName 
                   ? user.businessInfo.companyName 
                   : 'Dashboard'
                 }
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="hidden sm:block text-sm text-gray-600 dark:text-gray-400 truncate">
                 Welcome back, {user.name}
               </p>
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
               {/* Create Button */}
               <button
                 onClick={handleOpenCreateModal}
@@ -220,7 +220,7 @@ const UnifiedDashboard = () => {
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-2 -mb-px">
+          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-3 pt-2 -mb-px scrollbar-hide">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -229,7 +229,7 @@ const UnifiedDashboard = () => {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition ${
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -245,7 +245,7 @@ const UnifiedDashboard = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {activeTab === 'overview' && (
           user.accountType === 'business' ? (
             <BusinessOverviewTab user={user} />

@@ -34,7 +34,6 @@ import CookiesPage from './pages/CookiesPage';
 
 // ==================== USER PAGES ====================
 import UnifiedDashboard from './pages/UnifiedDashboard';
-import ApiDashboardPage from './pages/ApiDashboardPage';
 import EscrowDetails from './pages/EscrowDetails';
 import ProfilePage from './pages/Profile/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -154,7 +153,7 @@ function App() {
   const noFooterPrefixes = [
     '/login', '/signup', '/verify-email', '/forgot-password',
     '/reset-password', '/resend-verification', '/complete-profile', '/admin',
-    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade'
+    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade', '/api-dashboard'
   ];
 
   const shouldShowNavbar = !noNavbarPrefixes.some(p => path.startsWith(p));
@@ -193,7 +192,7 @@ function App() {
 
           {/* ── User routes ─────────────────────────────────────────────────── */}
           <Route path="/dashboard" element={<ProtectedRoute><UnifiedDashboard /></ProtectedRoute>} />
-          <Route path="/api-dashboard" element={<ProtectedRoute><ApiDashboardPage /></ProtectedRoute>} />
+          <Route path="/api-dashboard" element={<Navigate to="/dashboard?tab=api" replace />} />
           <Route path="/escrow/:id" element={<ProtectedRoute><EscrowDetails /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />

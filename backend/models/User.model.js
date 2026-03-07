@@ -389,7 +389,7 @@ userSchema.methods.getTierLimits = function () {
       apiAccess: false,
       multiPartyEscrow: true,
       milestonePayments: true,
-      monthlyCost: { USD: 29, NGN: 45000 },
+      monthlyCost: { USD: 5, NGN: 7750 },  // Source of truth: fee.config.js
     },
     enterprise: {
       name: 'Enterprise',
@@ -405,7 +405,7 @@ userSchema.methods.getTierLimits = function () {
       multiPartyEscrow: true,
       milestonePayments: true,
       customBranding: true,
-      monthlyCost: { USD: 99, NGN: 150000 },
+      monthlyCost: { USD: 15, NGN: 23250 },  // Source of truth: fee.config.js
     },
     api: {
       name: 'API',
@@ -418,8 +418,8 @@ userSchema.methods.getTierLimits = function () {
       multiPartyEscrow: true,
       milestonePayments: true,
       customBranding: true,
-      monthlyCost: { USD: 299, NGN: 450000 },
-      setupFee: { USD: 500, NGN: 750000 },
+      monthlyCost: { USD: 50, NGN: 77500 },   // Source of truth: fee.config.js
+      setupFee: { USD: 80, NGN: 124000 },        // Source of truth: fee.config.js
     },
   };
 

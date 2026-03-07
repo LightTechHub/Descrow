@@ -8,7 +8,8 @@ import {
   Bell,
   Settings,
   LogOut,
-  Plus
+  Plus,
+  Code
 } from 'lucide-react';
 
 import BusinessOverviewTab from '../components/Dashboard/BusinessOverviewTab';
@@ -16,6 +17,7 @@ import OverviewTab from '../components/Dashboard/OverviewTab';
 import BuyingTab from '../components/Dashboard/BuyingTab';
 import SellingTab from '../components/Dashboard/SellingTab';
 import CreateEscrowModal from '../components/CreateEscrowModal';
+import ApiDashboardPage from './API/ApiDashboardPage';
 
 import { authService } from '../services/authService';
 import profileService from '../services/profileService';
@@ -29,12 +31,12 @@ const UnifiedDashboard = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingUser, setLoadingUser] = useState(true);
-  
+
   useEffect(() => {
     fetchUserData();
-    
+
     const tab = searchParams.get('tab');
-    if (tab && ['overview', 'buying', 'selling', 'all'].includes(tab)) {
+    if (tab && ['overview', 'buying', 'selling', 'all', 'api'].includes(tab)) {
       setActiveTab(tab);
     }
 
@@ -51,7 +53,7 @@ const UnifiedDashboard = () => {
   const fetchUserData = async () => {
     try {
       setLoadingUser(true);
-      
+
       const currentUser = authService.getCurrentUser();
       if (!currentUser) {
         navigate('/login');
@@ -60,7 +62,7 @@ const UnifiedDashboard = () => {
 
       console.log('🔄 Fetching fresh user data from API...');
       const response = await profileService.getProfile();
-      
+
       if (response.success && response.data?.user) {
         const freshUser = response.data.user;
         console.log('✅ Fresh user data:', {
@@ -68,9 +70,10 @@ const UnifiedDashboard = () => {
           verified: freshUser.verified,
           isKYCVerified: freshUser.isKYCVerified,
           kycStatus: freshUser.kycStatus?.status,
-          accountType: freshUser.accountType
+          accountType: freshUser.accountType,
+          tier: freshUser.tier
         });
-        
+
         setUser(freshUser);
         localStorage.setItem('user', JSON.stringify(freshUser));
       } else {
@@ -79,7 +82,7 @@ const UnifiedDashboard = () => {
       }
     } catch (error) {
       console.error('❌ Failed to fetch user data:', error);
-      
+
       const currentUser = authService.getCurrentUser();
       if (currentUser) {
         setUser(currentUser);
@@ -113,7 +116,7 @@ const UnifiedDashboard = () => {
 
   const handleOpenCreateModal = async () => {
     console.log('🎯 Opening create modal - refreshing user data first...');
-    
+
     try {
       const response = await profileService.getProfile();
       if (response.success && response.data?.user) {
@@ -128,7 +131,7 @@ const UnifiedDashboard = () => {
     } catch (error) {
       console.error('⚠️ Failed to refresh user, using cached:', error);
     }
-    
+
     setShowCreateModal(true);
   };
 
@@ -150,9 +153,11 @@ const UnifiedDashboard = () => {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'buying', label: 'Buying', icon: ShoppingCart },
-    { id: 'selling', label: 'Selling', icon: Store },
-    { id: 'all', label: 'All Transactions', icon: List }
+    { id: 'buying',   label: 'Buying',   icon: ShoppingCart },
+    { id: 'selling',  label: 'Selling',  icon: Store },
+    { id: 'all',      label: 'All Transactions', icon: List },
+    // Only show API tab for api-tier users
+    ...(user?.tier === 'api' ? [{ id: 'api', label: 'API', icon: Code }] : [])
   ];
 
   return (
@@ -176,14 +181,16 @@ const UnifiedDashboard = () => {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-3">
-              {/* Create Button */}
-              <button
-                onClick={handleOpenCreateModal}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
-              >
-                <Plus className="w-5 h-5" />
-                Create Escrow
-              </button>
+              {/* Create Button — hide on API tab */}
+              {activeTab !== 'api' && (
+                <button
+                  onClick={handleOpenCreateModal}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Escrow
+                </button>
+              )}
 
               {/* Notifications */}
               <button
@@ -221,7 +228,7 @@ const UnifiedDashboard = () => {
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
-              
+
               return (
                 <button
                   key={tab.id}
@@ -267,15 +274,33 @@ const UnifiedDashboard = () => {
             <SellingTab user={user} />
           </div>
         )}
+        {activeTab === 'api' && user?.tier === 'api' && (
+          <ApiDashboardPage />
+        )}
+        {activeTab === 'api' && user?.tier !== 'api' && (
+          <div className="text-center py-20">
+            <Code className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">API Access Required</h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">Upgrade to the API tier to access the API dashboard.</p>
+            <button
+              onClick={() => navigate('/subscription')}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
+            >
+              Upgrade to API Tier
+            </button>
+          </div>
+        )}
       </main>
 
-      {/* Floating Create Button (Mobile) */}
-      <button
-        onClick={handleOpenCreateModal}
-        className="sm:hidden fixed bottom-6 right-6 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition z-50"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+      {/* Floating Create Button (Mobile) — hide on API tab */}
+      {activeTab !== 'api' && (
+        <button
+          onClick={handleOpenCreateModal}
+          className="sm:hidden fixed bottom-6 right-6 flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition z-50"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
 
       {/* Create Escrow Modal */}
       {showCreateModal && (

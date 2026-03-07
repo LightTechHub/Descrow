@@ -168,7 +168,7 @@ router.get('/escrows', checkPermission('viewEscrow'), async (req, res) => {
 });
 
 // ==================== UPDATE ESCROW STATUS ====================
-router.patch('/escrow/:id/status', checkPermission('deliverEscrow'), async (req, res) => {
+router.patch('/escrow/:id/status', checkPermission('updateEscrow'), async (req, res) => {
   try {
     const { status, trackingNumber, notes } = req.body;
 

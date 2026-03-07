@@ -19,7 +19,7 @@ router.get('/webhooks/*', (req, res) => {
     console.log('⚠️  Caught malformed DiDIT redirect:', path, req.query);
     const safeStatus  = encodeURIComponent(status  || 'in_review');
     const safeSession = encodeURIComponent(session || '');
-    return res.redirect(`${frontendUrl}/kyc?status=${safeStatus}&session=${safeSession}`);
+    return res.redirect(`${frontendUrl}/kyc-verification?status=${safeStatus}&session=${safeSession}`);
   }
 
   // Otherwise fall through to next matching route

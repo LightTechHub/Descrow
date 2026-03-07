@@ -24,7 +24,7 @@ const PaymentPage = () => {
   useEffect(() => {
     if (escrow) {
       const method = searchParams.get('method');
-      
+
       if (method && ['paystack', 'flutterwave', 'crypto'].includes(method)) {
         // Check if method is valid for this currency
         const gateway = allGateways.find(g => g.id === method);
@@ -49,17 +49,17 @@ const PaymentPage = () => {
       const response = await axios.get(`${API_URL}/escrow/${escrowId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       if (response.data.success) {
         const escrowData = response.data.data.escrow;
         setEscrow(escrowData);
-        
+
         // Check if already paid
         if (escrowData.status === 'funded' || escrowData.payment?.paidAt) {
           toast.success('This escrow has already been paid!');
           setTimeout(() => navigate(`/escrow/${escrowId}`), 2000);
         }
-        
+
         // Check if user can pay (must be buyer and status must be pending/accepted)
         if (!['pending', 'accepted'].includes(escrowData.status)) {
           toast.error('This escrow is not ready for payment');
@@ -86,7 +86,7 @@ const PaymentPage = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        `${API_URL}/payment/initialize`,
+        `${API_URL}/payments/initialize`,
         {
           escrowId: escrow.escrowId,
           paymentMethod: selectedGateway
@@ -96,11 +96,11 @@ const PaymentPage = () => {
 
       if (response.data.success) {
         const paymentData = response.data.paymentData;
-        
+
         // Store payment reference for verification
         localStorage.setItem('pendingPaymentReference', response.data.reference);
         localStorage.setItem('pendingPaymentEscrowId', escrow._id);
-        
+
         // Redirect to payment gateway
         if (paymentData.authorization_url) {
           window.location.href = paymentData.authorization_url;
@@ -221,8 +221,9 @@ const PaymentPage = () => {
   }
 
   const amount = parseFloat(escrow.payment?.amount?.toString() || escrow.amount.toString());
-  const buyerFee = parseFloat(escrow.payment?.buyerFee?.toString() || (amount * 0.02).toFixed(2));
-  const totalAmount = parseFloat(escrow.payment?.buyerPays?.toString() || (amount + buyerFee).toFixed(2));
+  const buyerFee = parseFloat(escrow.payment?.buyerFee?.toString() || '0');
+  const totalAmount = parseFloat(escrow.payment?.buyerPays?.toString() || amount.toFixed(2));
+  const buyerFeePercent = escrow.payment?.buyerFeePercentage || (buyerFee > 0 ? ((buyerFee / amount) * 100).toFixed(2) : null);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8">
@@ -289,7 +290,7 @@ const PaymentPage = () => {
                           </span>
                         </div>
                       )}
-                      
+
                       <div className="flex items-start gap-4">
                         <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
                           isSelected ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-gray-100 dark:bg-gray-800'
@@ -375,7 +376,7 @@ const PaymentPage = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600 dark:text-gray-400">
-                    Buyer Fee (2%)
+                    {buyerFeePercent ? `Buyer Fee (${buyerFeePercent}%)` : 'Escrow Fee'}
                     <span className="block text-xs text-gray-500">Covers escrow protection</span>
                   </span>
                   <span className="text-gray-900 dark:text-white">

@@ -34,6 +34,7 @@ import CookiesPage from './pages/CookiesPage';
 
 // ==================== USER PAGES ====================
 import UnifiedDashboard from './pages/UnifiedDashboard';
+import ApiDashboardPage from './pages/ApiDashboardPage';
 import EscrowDetails from './pages/EscrowDetails';
 import ProfilePage from './pages/Profile/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -153,7 +154,7 @@ function App() {
   const noFooterPrefixes = [
     '/login', '/signup', '/verify-email', '/forgot-password',
     '/reset-password', '/resend-verification', '/complete-profile', '/admin',
-    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade', '/api-dashboard'
+    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade'
   ];
 
   const shouldShowNavbar = !noNavbarPrefixes.some(p => path.startsWith(p));

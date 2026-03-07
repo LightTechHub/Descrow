@@ -17,7 +17,7 @@ import OverviewTab from '../components/Dashboard/OverviewTab';
 import BuyingTab from '../components/Dashboard/BuyingTab';
 import SellingTab from '../components/Dashboard/SellingTab';
 import CreateEscrowModal from '../components/CreateEscrowModal';
-import ApiDashboardPage from './API/ApiDashboardPage';
+import ApiDashboardPage from './ApiDashboardPage';
 
 import { authService } from '../services/authService';
 import profileService from '../services/profileService';

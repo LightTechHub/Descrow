@@ -404,14 +404,32 @@ exports.handleDiditWebhookRedirect = async (req, res) => {
           status === 'Not Started'                          ? 'pending'      :
                                                               'in_progress';
 
+        const accountType = user.accountType || 'individual';
+        const hasDocuments = user.kycStatus?.documents?.length > 0;
+
+        // Business accounts must NEVER be auto-approved via DiDIT redirect.
+        // DiDIT only verifies the director's identity — the business itself
+        // still needs document review by an admin.
+        let resolvedStatus = newStatus;
+        if (accountType === 'business') {
+          if (newStatus === 'approved') {
+            resolvedStatus = hasDocuments ? 'under_review' : 'pending_documents';
+          }
+        }
+
         user.kycStatus = {
           ...user.kycStatus,
-          status: newStatus
+          status: resolvedStatus
         };
-        if (newStatus === 'approved') {
+
+        // Only individuals get auto-approved
+        if (resolvedStatus === 'approved' && accountType !== 'business') {
           user.isKYCVerified = true;
           user.kycStatus.verifiedAt = new Date();
+        } else {
+          user.isKYCVerified = false;
         }
+
         await user.save();
         console.log(`✅ KYC redirect: updated to '${newStatus}' for session ${verificationSessionId}`);
       } else {
@@ -422,11 +440,11 @@ exports.handleDiditWebhookRedirect = async (req, res) => {
     // Always redirect back to frontend KYC page — never 404
     const safeStatus = encodeURIComponent(status || 'in_review');
     const safeSession = encodeURIComponent(verificationSessionId || '');
-    return res.redirect(`${frontendUrl}/kyc?status=${safeStatus}&session=${safeSession}`);
+    return res.redirect(`${frontendUrl}/kyc-verification?status=${safeStatus}&session=${safeSession}`);
 
   } catch (error) {
     console.error('❌ DiDIT redirect error:', error);
-    return res.redirect(`${frontendUrl}/kyc?status=error`);
+    return res.redirect(`${frontendUrl}/kyc-verification?status=error`);
   }
 };
 

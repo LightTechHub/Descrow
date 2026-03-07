@@ -43,17 +43,54 @@ const ApiDashboardPage = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.data.success) {
-        setApiData(response.data.data);
-        setWebhookUrl(response.data.data.webhookUrl || '');
-        setWebhookEvents(response.data.data.webhookEvents || []);
+        const raw = response.data.data;
+        // Backend returns { keys: [...], totalUsage: {...}, tier }
+        // Normalize to shape the UI expects
+        const primaryKey = raw.keys?.[0] || null;
+        const normalized = primaryKey ? {
+          apiKey:        primaryKey.apiKey,
+          status:        primaryKey.status,
+          environment:   primaryKey.environment,
+          permissions:   primaryKey.permissions,
+          rateLimit:     primaryKey.rateLimit,
+          webhookUrl:    primaryKey.webhookUrl    || '',
+          webhookEvents: primaryKey.webhookEvents || [],
+          usage: {
+            totalRequests:     raw.totalUsage?.totalRequests     || 0,
+            requestsToday:     raw.totalUsage?.requestsToday     || 0,
+            requestsThisMonth: raw.totalUsage?.requestsThisMonth || 0,
+            lastUsedAt:        primaryKey.lastUsedAt
+          }
+        } : null;
+        setApiData(normalized);
+        setWebhookUrl(normalized?.webhookUrl || '');
+        setWebhookEvents(normalized?.webhookEvents || []);
       }
     } catch (error) {
       console.error('Fetch API usage error:', error);
-      if (error.response?.status === 403) {
+      if (error.response?.status === 404) {
+        setApiData(null); // No keys yet — show generate button
+      } else if (error.response?.status === 403) {
         toast.error('API tier subscription required. Please upgrade!');
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateKeys = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API_URL}/api-keys/generate`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.success) {
+        setNewCredentials(response.data.data);
+        toast.success('API keys generated! Save them now.');
+        setTimeout(() => fetchApiUsage(), 1500);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to generate API keys');
     }
   };
 
@@ -253,8 +290,15 @@ const ApiDashboardPage = () => {
             ) : (
               <div className="text-center py-12">
                 <Lock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No API Keys</h3>
-                <p className="text-gray-600 dark:text-gray-400">API keys are auto-generated when you upgrade to API tier</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No API Keys Yet</h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">Generate your API credentials to start integrating with Dealcross.</p>
+                <button
+                  onClick={handleGenerateKeys}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition flex items-center gap-2 mx-auto"
+                >
+                  <Key className="w-5 h-5" />
+                  Generate API Keys
+                </button>
               </div>
             )}
           </div>

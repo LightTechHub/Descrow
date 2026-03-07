@@ -298,6 +298,7 @@ const getUserDetails = async (req, res) => {
 ========================================================= */
 const changeUserTier = async (req, res) => {
   try {
+    const crypto = require('crypto');
     const { userId } = req.params;
     const { newTier, reason } = req.body;
 
@@ -311,7 +312,8 @@ const changeUserTier = async (req, res) => {
     const oldTier = user.tier;
     user.tier = newTier;
 
-    if (newTier !== 'starter' && oldTier === 'starter') {
+    // Activate subscription for paid tiers
+    if (newTier !== 'starter') {
       user.subscription = {
         status: 'active',
         startDate: new Date(),
@@ -321,12 +323,55 @@ const changeUserTier = async (req, res) => {
       };
     }
 
+    // Auto-generate API keys when upgrading to api tier
+    if (newTier === 'api') {
+      // Only generate if not already generated
+      if (!user.apiAccess?.apiKey) {
+        const apiKey    = 'dc_live_' + crypto.randomBytes(24).toString('hex');
+        const apiSecret = 'dc_secret_' + crypto.randomBytes(32).toString('hex');
+
+        user.apiAccess = {
+          enabled:      true,
+          apiKey,
+          apiSecret,
+          createdAt:    new Date(),
+          requestCount: 0
+        };
+        console.log(`🔑 API keys generated for user ${user.email}`);
+      } else {
+        // Already has keys — just enable access
+        user.apiAccess.enabled = true;
+        console.log(`✅ API access re-enabled for user ${user.email}`);
+      }
+    }
+
+    // Disable API access if downgrading away from api tier
+    if (oldTier === 'api' && newTier !== 'api') {
+      if (user.apiAccess) {
+        user.apiAccess.enabled = false;
+      }
+    }
+
     await user.save();
+
+    console.log(`✅ Tier changed: ${user.email} — ${oldTier} → ${newTier}`);
 
     res.status(200).json({
       success: true,
       message: `User tier changed from ${oldTier} to ${newTier}`,
-      data: { user: { id: user._id, name: user.name, email: user.email, tier: user.tier } }
+      data: {
+        user: {
+          id:      user._id,
+          name:    user.name,
+          email:   user.email,
+          tier:    user.tier,
+          apiAccess: newTier === 'api' ? {
+            enabled:  user.apiAccess.enabled,
+            apiKey:   user.apiAccess.apiKey,
+            createdAt: user.apiAccess.createdAt
+          } : undefined
+        }
+      }
     });
   } catch (error) {
     console.error('Change user tier error:', error);

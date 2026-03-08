@@ -58,12 +58,14 @@ const PaymentPage = () => {
         if (escrowData.status === 'funded' || escrowData.payment?.paidAt) {
           toast.success('This escrow has already been paid!');
           setTimeout(() => navigate(`/escrow/${escrowId}`), 2000);
+          return; // FIX: stop processing, page is redirecting
         }
 
         // Check if user can pay (must be buyer and status must be pending/accepted)
         if (!['pending', 'accepted'].includes(escrowData.status)) {
           toast.error('This escrow is not ready for payment');
           setTimeout(() => navigate(`/escrow/${escrowId}`), 2000);
+          return; // FIX: stop processing, page is redirecting
         }
       }
       setLoading(false);
@@ -88,7 +90,7 @@ const PaymentPage = () => {
       const response = await axios.post(
         `${API_URL}/payments/initialize`,
         {
-          escrowId: escrow.escrowId,
+          escrowId: escrow.escrowId || escrow._id, // fallback to MongoDB _id
           paymentMethod: selectedGateway
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -221,9 +223,8 @@ const PaymentPage = () => {
   }
 
   const amount = parseFloat(escrow.payment?.amount?.toString() || escrow.amount.toString());
-  const buyerFee = parseFloat(escrow.payment?.buyerFee?.toString() || '0');
-  const totalAmount = parseFloat(escrow.payment?.buyerPays?.toString() || amount.toFixed(2));
-  const buyerFeePercent = escrow.payment?.buyerFeePercentage || (buyerFee > 0 ? ((buyerFee / amount) * 100).toFixed(2) : null);
+  const buyerFee = parseFloat(escrow.payment?.buyerFee?.toString() || (amount * 0.02).toFixed(2));
+  const totalAmount = parseFloat(escrow.payment?.buyerPays?.toString() || (amount + buyerFee).toFixed(2));
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8">
@@ -376,7 +377,7 @@ const PaymentPage = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600 dark:text-gray-400">
-                    {buyerFeePercent ? `Buyer Fee (${buyerFeePercent}%)` : 'Escrow Fee'}
+                    Buyer Fee (2%)
                     <span className="block text-xs text-gray-500">Covers escrow protection</span>
                   </span>
                   <span className="text-gray-900 dark:text-white">

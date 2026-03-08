@@ -210,13 +210,20 @@ const KYCVerificationPage = () => {
   const userCountry = getUserCountry();
   const isDiDITSupported = isDiDITSupportedForBusiness();
 
-  // ── Show upload form for: pending_documents, rejected, or manually triggered ──
-  if (showManualUpload || kycData?.status === 'pending_documents' || kycData?.status === 'rejected') {
+  // FIX: Only show the BusinessKYCUpload form for BUSINESS accounts.
+  // Previously the condition was:
+  //   if (showManualUpload || kycData?.status === 'pending_documents' || kycData?.status === 'rejected')
+  // This caused individual accounts whose KYC was rejected to land on the business upload form.
+  // Now gated by isBusinessAccount.
+  const shouldShowBusinessUpload =
+    isBusinessAccount &&
+    (showManualUpload || kycData?.status === 'pending_documents' || kycData?.status === 'rejected');
+
+  if (shouldShowBusinessUpload) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 py-8 px-4">
         <div className="max-w-6xl mx-auto">
 
-          {/* Rejection notice */}
           {kycData?.status === 'rejected' && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-4">
               <div className="flex items-start gap-3">
@@ -301,9 +308,8 @@ const KYCVerificationPage = () => {
           </div>
         </div>
 
-        {/* ── Status Banners ── */}
+        {/* Status Banners */}
 
-        {/* Approved */}
         {kycData?.status === 'approved' && (
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6 mb-6">
             <div className="flex items-start gap-3">
@@ -318,7 +324,6 @@ const KYCVerificationPage = () => {
           </div>
         )}
 
-        {/* Under Review */}
         {kycData?.status === 'under_review' && (
           <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-6 mb-6">
             <div className="flex items-start gap-3">
@@ -338,7 +343,6 @@ const KYCVerificationPage = () => {
           </div>
         )}
 
-        {/* Pending DiDIT */}
         {kycData?.status === 'pending' && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6 mb-6">
             <div className="flex items-start gap-3">
@@ -363,7 +367,6 @@ const KYCVerificationPage = () => {
           </div>
         )}
 
-        {/* In Progress */}
         {kycData?.status === 'in_progress' && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 mb-6">
             <div className="flex items-start gap-3">
@@ -378,7 +381,29 @@ const KYCVerificationPage = () => {
           </div>
         )}
 
-        {/* Expired */}
+        {/* Rejected - individual only: show retry with DiDIT, NOT business upload form */}
+        {kycData?.status === 'rejected' && !isBusinessAccount && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 mb-6">
+            <div className="flex items-start gap-3">
+              <XCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-bold text-red-900 dark:text-red-100 mb-2">Verification Rejected</h3>
+                <p className="text-sm text-red-800 dark:text-red-200 mb-3">
+                  {kycData?.rejectionReason || 'Your verification was rejected. Please try again with a clear photo ID.'}
+                </p>
+                <button
+                  onClick={handleRetry}
+                  disabled={initiating}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition disabled:opacity-50"
+                >
+                  {initiating ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  Try Again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {kycData?.status === 'expired' && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6 mb-6">
             <div className="flex items-start gap-3">
@@ -440,7 +465,6 @@ const KYCVerificationPage = () => {
             )}
           </div>
 
-          {/* Action Buttons */}
           <div className="space-y-3">
             {(kycData?.status === 'unverified' || !kycData?.status || kycData?.status === 'pending_documents') && (
               <>
@@ -470,7 +494,6 @@ const KYCVerificationPage = () => {
               </>
             )}
 
-            {/* Retry button for expired */}
             {kycData?.status === 'expired' && (
               <button
                 onClick={handleRetry}

@@ -7,7 +7,10 @@ class PaymentService {
     this.flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
     this.nowpaymentsApiKey = process.env.NOWPAYMENTS_API_KEY;
     
-    // Validate keys on startup
+    // FIX: Hardcode fallback URLs so payments never break if env var is missing
+    this.frontendUrl = (process.env.FRONTEND_URL || 'https://dealcross.net').replace(/\/$/, '');
+    this.backendUrl = (process.env.BACKEND_URL || 'https://descrow-backend-5ykg.onrender.com').replace(/\/$/, '');
+    
     this.validateKeys();
   }
 
@@ -16,24 +19,31 @@ class PaymentService {
     if (!this.paystackSecretKey) missing.push('PAYSTACK_SECRET_KEY');
     if (!this.flutterwaveSecretKey) missing.push('FLUTTERWAVE_SECRET_KEY');
     if (!this.nowpaymentsApiKey) missing.push('NOWPAYMENTS_API_KEY');
-    
     if (missing.length > 0) {
       console.warn(`⚠️ Missing payment keys: ${missing.join(', ')}`);
     }
   }
 
-  // ═════════════════════════════════════════════════════════════
+  // Safe amount parser - handles Decimal128, string, number, undefined
+  _parseAmount(amount) {
+    if (amount === null || amount === undefined) throw new Error('Amount is required');
+    // Mongoose Decimal128 objects have a toString() method
+    const num = parseFloat(amount.toString());
+    if (isNaN(num) || num <= 0) throw new Error(`Invalid amount: ${amount}`);
+    return num;
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // PAYSTACK
-  // ═════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
 
   async initializePaystack(email, amount, reference, metadata) {
     try {
-      if (!this.paystackSecretKey) {
-        throw new Error('Paystack not configured');
-      }
+      if (!this.paystackSecretKey) throw new Error('Paystack not configured');
 
-      // Ensure amount is integer (kobo for NGN)
-      const amountInKobo = Math.round(amount * 100);
+      // FIX: Use _parseAmount to safely handle Decimal128/string/number
+      // Paystack requires integer kobo (multiply by 100, no decimals)
+      const amountInKobo = Math.round(this._parseAmount(amount) * 100);
 
       const response = await axios.post(
         'https://api.paystack.co/transaction/initialize',
@@ -42,7 +52,8 @@ class PaymentService {
           amount: amountInKobo,
           reference,
           metadata,
-          callback_url: `${process.env.FRONTEND_URL}/payment/verify?reference=${reference}&method=paystack`,
+          // FIX: Use this.frontendUrl so callback_url is always a valid URI
+          callback_url: `${this.frontendUrl}/payment/verify?reference=${reference}&method=paystack`,
           channels: ['card', 'bank', 'ussd', 'mobile_money', 'bank_transfer']
         },
         {
@@ -50,12 +61,11 @@ class PaymentService {
             Authorization: `Bearer ${this.paystackSecretKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 30000 // 30 second timeout
+          timeout: 30000
         }
       );
 
       console.log('✅ Paystack initialized:', reference);
-
       return {
         success: true,
         authorization_url: response.data.data.authorization_url,
@@ -70,9 +80,7 @@ class PaymentService {
 
   async verifyPaystack(reference) {
     try {
-      if (!this.paystackSecretKey) {
-        throw new Error('Paystack not configured');
-      }
+      if (!this.paystackSecretKey) throw new Error('Paystack not configured');
 
       const response = await axios.get(
         `https://api.paystack.co/transaction/verify/${reference}`,
@@ -83,12 +91,7 @@ class PaymentService {
       );
 
       const data = response.data.data;
-      
-      console.log('✅ Paystack verification result:', {
-        reference: data.reference,
-        status: data.status,
-        amount: data.amount / 100
-      });
+      console.log('✅ Paystack verification result:', { reference: data.reference, status: data.status, amount: data.amount / 100 });
 
       return {
         success: data.status === 'success',
@@ -107,32 +110,34 @@ class PaymentService {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════
-  // FLUTTERWAVE (PRIORITY FOR INTERNATIONAL)
-  // ═════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // FLUTTERWAVE
+  // ═══════════════════════════════════════════════════════════
 
   async initializeFlutterwave(email, amount, currency, reference, metadata) {
     try {
-      if (!this.flutterwaveSecretKey) {
-        throw new Error('Flutterwave not configured');
-      }
+      if (!this.flutterwaveSecretKey) throw new Error('Flutterwave not configured');
+
+      // FIX: Use _parseAmount to safely handle Decimal128/string/number
+      const parsedAmount = this._parseAmount(amount);
 
       const response = await axios.post(
         'https://api.flutterwave.com/v3/payments',
         {
           tx_ref: reference,
-          amount: parseFloat(amount.toFixed(2)),
+          amount: parsedAmount,  // FIX: plain float, NOT .toFixed() which returns a string
           currency: currency || 'USD',
-          redirect_url: `${process.env.FRONTEND_URL}/payment/verify?reference=${reference}&method=flutterwave`,
+          // FIX: Use this.frontendUrl so redirect_url is always a valid URI
+          redirect_url: `${this.frontendUrl}/payment/verify?reference=${reference}&method=flutterwave`,
           payment_options: 'card,banktransfer,ussd,mobilemoney,mpesa,account',
-          customer: { 
-            email, 
-            name: metadata.buyerName || 'Customer' 
+          customer: {
+            email,
+            name: metadata.buyerName || 'Customer'
           },
           customizations: {
             title: 'Dealcross Escrow Payment',
             description: `Payment for ${metadata.itemTitle || 'escrow transaction'}`,
-            logo: `${process.env.FRONTEND_URL}/logo.png`
+            logo: `${this.frontendUrl}/logo.png`
           },
           meta: metadata
         },
@@ -146,7 +151,6 @@ class PaymentService {
       );
 
       console.log('✅ Flutterwave initialized:', reference);
-
       return {
         success: true,
         link: response.data.data.link,
@@ -160,9 +164,7 @@ class PaymentService {
 
   async verifyFlutterwave(transactionId) {
     try {
-      if (!this.flutterwaveSecretKey) {
-        throw new Error('Flutterwave not configured');
-      }
+      if (!this.flutterwaveSecretKey) throw new Error('Flutterwave not configured');
 
       const response = await axios.get(
         `https://api.flutterwave.com/v3/transactions/${transactionId}/verify`,
@@ -173,12 +175,7 @@ class PaymentService {
       );
 
       const data = response.data.data;
-      
-      console.log('✅ Flutterwave verification result:', {
-        reference: data.tx_ref,
-        status: data.status,
-        amount: data.amount
-      });
+      console.log('✅ Flutterwave verification result:', { reference: data.tx_ref, status: data.status, amount: data.amount });
 
       return {
         success: data.status === 'successful',
@@ -196,26 +193,27 @@ class PaymentService {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
   // NOWPAYMENTS (CRYPTO)
-  // ═════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
 
   async initializeNowpayments(amount, currency, orderId, orderDescription) {
     try {
-      if (!this.nowpaymentsApiKey) {
-        throw new Error('Nowpayments not configured');
-      }
+      if (!this.nowpaymentsApiKey) throw new Error('Nowpayments not configured');
+
+      const parsedAmount = this._parseAmount(amount);
 
       const response = await axios.post(
         'https://api.nowpayments.io/v1/invoice',
         {
-          price_amount: parseFloat(amount.toFixed(2)),
+          price_amount: parsedAmount,
           price_currency: currency || 'USD',
           order_id: orderId,
           order_description: orderDescription || 'Escrow payment',
-          ipn_callback_url: `${process.env.BACKEND_URL}/api/payments/webhook/nowpayments`,
-          success_url: `${process.env.FRONTEND_URL}/payment/verify?reference=${orderId}&method=crypto`,
-          cancel_url: `${process.env.FRONTEND_URL}/payment/cancel?reference=${orderId}`
+          // FIX: Use this.backendUrl / this.frontendUrl for valid URIs
+          ipn_callback_url: `${this.backendUrl}/api/payments/webhook/nowpayments`,
+          success_url: `${this.frontendUrl}/payment/verify?reference=${orderId}&method=crypto`,
+          cancel_url: `${this.frontendUrl}/payment/cancel?reference=${orderId}`
         },
         {
           headers: {
@@ -227,7 +225,6 @@ class PaymentService {
       );
 
       console.log('✅ Nowpayments initialized:', orderId);
-
       return {
         success: true,
         payment_id: response.data.id,
@@ -244,9 +241,7 @@ class PaymentService {
 
   async verifyNowpayments(paymentId) {
     try {
-      if (!this.nowpaymentsApiKey) {
-        throw new Error('Nowpayments not configured');
-      }
+      if (!this.nowpaymentsApiKey) throw new Error('Nowpayments not configured');
 
       const response = await axios.get(
         `https://api.nowpayments.io/v1/payment/${paymentId}`,
@@ -257,11 +252,7 @@ class PaymentService {
       );
 
       const data = response.data;
-      
-      console.log('✅ Nowpayments verification result:', {
-        paymentId: data.payment_id,
-        status: data.payment_status
-      });
+      console.log('✅ Nowpayments verification result:', { paymentId: data.payment_id, status: data.payment_status });
 
       return {
         success: data.payment_status === 'finished',
@@ -283,105 +274,52 @@ class PaymentService {
     }
   }
 
-  // Get available crypto currencies
   async getAvailableCurrencies() {
     try {
-      if (!this.nowpaymentsApiKey) {
-        return ['btc', 'eth', 'usdt', 'ltc', 'bnb'];
-      }
-
-      const response = await axios.get(
-        'https://api.nowpayments.io/v1/currencies',
-        {
-          headers: { 'x-api-key': this.nowpaymentsApiKey },
-          timeout: 10000
-        }
-      );
-      
+      if (!this.nowpaymentsApiKey) return ['btc', 'eth', 'usdt', 'ltc', 'bnb'];
+      const response = await axios.get('https://api.nowpayments.io/v1/currencies', {
+        headers: { 'x-api-key': this.nowpaymentsApiKey },
+        timeout: 10000
+      });
       return response.data.currencies;
     } catch (error) {
-      console.error('❌ Nowpayments currencies error:', error.response?.data || error.message);
       return ['btc', 'eth', 'usdt', 'ltc', 'bnb', 'trx', 'doge', 'sol'];
     }
   }
 
-  // Get estimated crypto price
   async getEstimatedPrice(amount, currency_from, currency_to = 'btc') {
     try {
-      if (!this.nowpaymentsApiKey) {
-        throw new Error('Nowpayments not configured');
-      }
-
+      if (!this.nowpaymentsApiKey) throw new Error('Nowpayments not configured');
       const response = await axios.get(
         `https://api.nowpayments.io/v1/estimate?amount=${amount}&currency_from=${currency_from}&currency_to=${currency_to}`,
-        {
-          headers: { 'x-api-key': this.nowpaymentsApiKey },
-          timeout: 10000
-        }
+        { headers: { 'x-api-key': this.nowpaymentsApiKey }, timeout: 10000 }
       );
-      
-      return {
-        success: true,
-        estimated_amount: response.data.estimated_amount,
-        currency_from: response.data.currency_from,
-        currency_to: response.data.currency_to
-      };
+      return { success: true, estimated_amount: response.data.estimated_amount, currency_from: response.data.currency_from, currency_to: response.data.currency_to };
     } catch (error) {
-      console.error('❌ Nowpayments estimate error:', error.response?.data || error.message);
       return { success: false, error: error.message };
     }
   }
 
-  // ═════════════════════════════════════════════════════════════
-  // HEALTH CHECK
-  // ═════════════════════════════════════════════════════════════
-
   async healthCheck() {
-    const status = {
-      paystack: false,
-      flutterwave: false,
-      nowpayments: false
-    };
-
-    // Check Paystack
+    const status = { paystack: false, flutterwave: false, nowpayments: false };
     if (this.paystackSecretKey) {
       try {
-        await axios.get('https://api.paystack.co/bank', {
-          headers: { Authorization: `Bearer ${this.paystackSecretKey}` },
-          timeout: 5000
-        });
+        await axios.get('https://api.paystack.co/bank', { headers: { Authorization: `Bearer ${this.paystackSecretKey}` }, timeout: 5000 });
         status.paystack = true;
-      } catch (error) {
-        console.error('❌ Paystack health check failed');
-      }
+      } catch {}
     }
-
-    // Check Flutterwave
     if (this.flutterwaveSecretKey) {
       try {
-        await axios.get('https://api.flutterwave.com/v3/banks/NG', {
-          headers: { Authorization: `Bearer ${this.flutterwaveSecretKey}` },
-          timeout: 5000
-        });
+        await axios.get('https://api.flutterwave.com/v3/banks/NG', { headers: { Authorization: `Bearer ${this.flutterwaveSecretKey}` }, timeout: 5000 });
         status.flutterwave = true;
-      } catch (error) {
-        console.error('❌ Flutterwave health check failed');
-      }
+      } catch {}
     }
-
-    // Check Nowpayments
     if (this.nowpaymentsApiKey) {
       try {
-        await axios.get('https://api.nowpayments.io/v1/status', {
-          headers: { 'x-api-key': this.nowpaymentsApiKey },
-          timeout: 5000
-        });
+        await axios.get('https://api.nowpayments.io/v1/status', { headers: { 'x-api-key': this.nowpaymentsApiKey }, timeout: 5000 });
         status.nowpayments = true;
-      } catch (error) {
-        console.error('❌ Nowpayments health check failed');
-      }
+      } catch {}
     }
-
     return status;
   }
 }

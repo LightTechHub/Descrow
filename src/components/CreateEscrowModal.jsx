@@ -139,22 +139,25 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
     );
   }, [deliveryMethod, transactionType]);
 
-  // FIX: also recalculate when returning to step 2
-  const fetchFeeBreakdown = useCallback(async () => {
-    const currentAmount = getValues('amount');
-    const currentCurrency = getValues('currency');
+  // FIX: fetchFeeBreakdown previously used getValues() inside useCallback, causing a stale
+  // closure — it always read the initial empty form values, never the current typed amount.
+  // Fix: accept amount/currency as direct arguments from the watched values instead.
+  const fetchFeeBreakdown = useCallback(async (currentAmount, currentCurrency) => {
     if (!currentAmount || parseFloat(currentAmount) <= 0) {
       setFeeBreakdown(null);
       return;
     }
+    const type = getValues('transactionType') || 'custom';
     try {
       setFeeLoading(true);
       const response = await escrowService.calculateFees(
-        currentAmount, currentCurrency, getValues('transactionType')
+        parseFloat(currentAmount), currentCurrency || 'USD', type
       );
       if (response.success) setFeeBreakdown(response.data.feeBreakdown);
+      else setFeeBreakdown(null);
     } catch (err) {
       console.error('Failed to calculate fees:', err);
+      setFeeBreakdown(null);
     } finally {
       setFeeLoading(false);
     }
@@ -162,8 +165,11 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (amount && parseFloat(amount) > 0) fetchFeeBreakdown();
-      else setFeeBreakdown(null);
+      if (amount && parseFloat(amount) > 0) {
+        fetchFeeBreakdown(amount, currency);
+      } else {
+        setFeeBreakdown(null);
+      }
     }, 500);
     return () => clearTimeout(timer);
   }, [amount, currency, fetchFeeBreakdown]);
@@ -176,7 +182,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       if (!valid) return;
     }
     // Recalculate fees when entering step 2
-    if (currentStep + 1 === 2) fetchFeeBreakdown();
+    if (currentStep + 1 === 2) fetchFeeBreakdown(getValues('amount'), getValues('currency'));
     setCurrentStep(s => s + 1);
   };
 

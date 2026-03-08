@@ -637,28 +637,51 @@ exports.getMyEscrows = async (req, res) => {
     const userId = req.user.id;
     const { status, page = 1, limit = 20, role = 'all', search = '', transactionType } = req.query;
 
-    let query = {};
-
-    if (role === 'buyer') query.buyer = userId;
-    else if (role === 'seller') query.seller = userId;
-    else if (role === 'all') {
-      query.$or = [
-        { buyer: userId },
-        { seller: userId },
-        { 'participants.user': userId }
-      ];
+    // Build the user-ownership condition
+    let ownershipCondition = {};
+    if (role === 'buyer') {
+      ownershipCondition = { buyer: userId };
+    } else if (role === 'seller') {
+      ownershipCondition = { seller: userId };
+    } else if (role === 'all') {
+      ownershipCondition = {
+        $or: [
+          { buyer: userId },
+          { seller: userId },
+          { 'participants.user': userId }
+        ]
+      };
     } else {
-      query['participants.user'] = userId;
-      query['participants.role'] = role;
+      ownershipCondition = {
+        'participants.user': userId,
+        'participants.role': role
+      };
     }
 
-    if (status && status !== 'all') query.status = status;
-    if (transactionType) query.transactionType = transactionType;
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
+    // Build additional filters separately so they never overwrite $or
+    const filters = {};
+    if (status && status !== 'all') filters.status = status;
+    if (transactionType) filters.transactionType = transactionType;
+
+    // FIX: Previously `if (search) query.$or = [...]` overwrote the ownership $or,
+    // making ALL escrows vanish for the user whenever a search term was present.
+    // Use $and to combine ownership condition with search so both must be satisfied.
+    let query;
+    if (search && search.trim()) {
+      query = {
+        $and: [
+          ownershipCondition,
+          {
+            $or: [
+              { title: { $regex: search.trim(), $options: 'i' } },
+              { description: { $regex: search.trim(), $options: 'i' } }
+            ]
+          },
+          filters
+        ]
+      };
+    } else {
+      query = { ...ownershipCondition, ...filters };
     }
 
     const escrows = await Escrow.find(query)

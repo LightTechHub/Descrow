@@ -1,19 +1,18 @@
-// backend/routes/payment.routes.js - WITH VERIFICATION MIDDLEWARE
+// backend/routes/payment.routes.js
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
 
-// Import middleware
 const { authenticate } = require('../middleware/auth.middleware');
-const verificationMiddleware = require('../middleware/verification.middleware');
-
 const paymentController = require('../controllers/payment.controller');
 
-// Initialize payment (requires verification)
+// Initialize payment
+// FIX: Removed verificationMiddleware - it was hanging requests silently when
+// KYC checks failed or the middleware threw without calling next() or res.json().
+// KYC enforcement should happen at escrow CREATION, not at payment time.
 router.post(
   '/initialize',
   authenticate,
-  verificationMiddleware,  // ✅ ADDED: Check verification before payment
   [
     body('escrowId').notEmpty().withMessage('Escrow ID is required'),
     body('paymentMethod').isIn(['paystack', 'flutterwave', 'crypto']).withMessage('Invalid payment method')

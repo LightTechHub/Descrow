@@ -50,8 +50,31 @@ const EscrowDetailsPage = () => {
 
       if (!res?.success) throw new Error(res?.message || 'Escrow not found');
 
-      setEscrow(res.data.escrow);
-      setUserRole(res.data.userRole);
+      const escrowData = res.data.escrow;
+      setEscrow(escrowData);
+
+      // FIX: Backend getUserRoles() only checks the participants[] array.
+      // But buyer and seller are stored in escrow.buyer / escrow.seller (top-level ObjectId fields),
+      // NOT as entries in participants[]. So getUserRoles() always returns [] for buyer/seller,
+      // causing ActionButtons to receive no role and render nothing.
+      // Fix: derive role on the frontend by comparing currentUser._id against escrow.buyer._id / seller._id.
+      const user = authService.getCurrentUser();
+      const userId = user?._id || user?.id;
+
+      const buyerId = escrowData.buyer?._id || escrowData.buyer;
+      const sellerId = escrowData.seller?._id || escrowData.seller;
+
+      let derivedRole = null;
+      if (userId && buyerId && userId.toString() === buyerId.toString()) {
+        derivedRole = 'buyer';
+      } else if (userId && sellerId && userId.toString() === sellerId.toString()) {
+        derivedRole = 'seller';
+      } else if (res.data.userRole && res.data.userRole.length > 0) {
+        // Fallback to backend role for agents/inspectors/arbitrators
+        derivedRole = Array.isArray(res.data.userRole) ? res.data.userRole[0] : res.data.userRole;
+      }
+
+      setUserRole(derivedRole);
     } catch (err) {
       setError(err.message);
       toast.error(err.message);
@@ -68,10 +91,67 @@ const EscrowDetailsPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleAction = (action) => {
-    if (action === 'deliver') setShowDeliveryModal(true);
-    if (action === 'dispute') setShowDisputeModal(true);
-    if (action === 'fund') navigate(`/payment/${escrow._id}`);
+  // FIX: handleAction was only handling 'deliver', 'dispute', 'fund'.
+  // 'accept', 'reject', 'confirm', 'cancel' were silently dropped.
+  // ActionButtons calls onAction('accept') for seller on pending status —
+  // with no handler, clicking Accept did nothing and the button appeared broken.
+  const handleAction = async (action) => {
+    try {
+      if (action === 'deliver') {
+        setShowDeliveryModal(true);
+        return;
+      }
+      if (action === 'dispute') {
+        setShowDisputeModal(true);
+        return;
+      }
+      if (action === 'fund') {
+        navigate(`/payment/${escrow._id}`);
+        return;
+      }
+      if (action === 'accept') {
+        const res = await escrowService.acceptEscrow(escrow._id);
+        if (res.success) {
+          toast.success('Deal accepted! Waiting for buyer payment.');
+          fetchEscrowDetails(true);
+        } else {
+          toast.error(res.message || 'Failed to accept deal');
+        }
+        return;
+      }
+      if (action === 'reject') {
+        const res = await escrowService.cancelEscrow(escrow._id, 'Declined by seller');
+        if (res.success) {
+          toast.success('Deal declined.');
+          fetchEscrowDetails(true);
+        } else {
+          toast.error(res.message || 'Failed to decline deal');
+        }
+        return;
+      }
+      if (action === 'confirm') {
+        const res = await escrowService.confirmDelivery(escrow._id);
+        if (res.success) {
+          toast.success('Delivery confirmed! Payment will be released to seller.');
+          fetchEscrowDetails(true);
+        } else {
+          toast.error(res.message || 'Failed to confirm delivery');
+        }
+        return;
+      }
+      if (action === 'cancel') {
+        const res = await escrowService.cancelEscrow(escrow._id, 'Cancelled by user');
+        if (res.success) {
+          toast.success('Escrow cancelled.');
+          fetchEscrowDetails(true);
+        } else {
+          toast.error(res.message || 'Failed to cancel escrow');
+        }
+        return;
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Action failed');
+    }
   };
 
   const getMilestoneStatusBadge = (status) => {
@@ -221,8 +301,8 @@ const EscrowDetailsPage = () => {
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                            isCompleted ? 'bg-green-600 text-white' : 
-                            isCurrent ? 'bg-blue-600 text-white' : 
+                            isCompleted ? 'bg-green-600 text-white' :
+                            isCurrent ? 'bg-blue-600 text-white' :
                             'bg-gray-300 text-gray-700'
                           }`}>
                             {index + 1}
@@ -314,7 +394,6 @@ const EscrowDetailsPage = () => {
                         <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${roleBadge.color}`}>
                           {roleBadge.text}
                         </span>
-                        
                         {participant.status === 'accepted' ? (
                           <CheckCircle className="w-5 h-5 text-green-600" />
                         ) : participant.status === 'invited' ? (
@@ -414,7 +493,7 @@ const EscrowDetailsPage = () => {
                         </div>
                         <div className="flex-1 pb-6">
                           <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                            {event.status.replace('_', ' ')}
+                            {event.status.replace(/_/g, ' ')}
                           </p>
                           {event.note && (
                             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{event.note}</p>
@@ -479,7 +558,6 @@ const EscrowDetailsPage = () => {
             <p className="text-4xl font-bold mb-4">
               {formatCurrency(escrow.amount, escrow.currency)}
             </p>
-            
             {escrow.currencyType && (
               <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-medium">
                 {escrow.currencyType === 'crypto' ? '₿ Cryptocurrency' : '💵 Fiat Currency'}
@@ -497,10 +575,16 @@ const EscrowDetailsPage = () => {
             />
           </div>
 
-          {/* Participants Summary */}
+          {/* Quick Info */}
           <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg">
             <h3 className="font-bold text-gray-900 dark:text-white mb-4">Quick Info</h3>
             <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Your Role:</span>
+                <span className="font-semibold text-gray-900 dark:text-white capitalize">
+                  {userRole || 'Participant'}
+                </span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-400">Buyer:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">
@@ -530,7 +614,6 @@ const EscrowDetailsPage = () => {
             </div>
           </div>
 
-          {/* Warning/Info Box */}
           {escrow.dispute?.isDisputed && (
             <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 p-4 rounded-xl">
               <div className="flex items-start gap-3">
@@ -547,7 +630,6 @@ const EscrowDetailsPage = () => {
         </div>
       </div>
 
-      {/* Modals */}
       {showDeliveryModal && (
         <DeliveryModal
           escrow={escrow}

@@ -46,9 +46,19 @@ exports.initializePayment = async (req, res) => {
 
     // Generate unique payment reference
     const reference = `PAY_${escrowId}_${Date.now()}`;
-    
+
     // Calculate amount buyer needs to pay
-    const buyerPays = parseFloat(escrow.payment.buyerPays.toString());
+    // FIX: escrow.payment.buyerPays may be undefined on escrows created before the fee fix.
+    // Fall back to escrow.amount (no fee) so payment can still proceed.
+    const rawAmount = parseFloat(escrow.amount.toString());
+    let buyerPays;
+    if (escrow.payment?.buyerPays) {
+      buyerPays = parseFloat(escrow.payment.buyerPays.toString());
+    }
+    if (!buyerPays || isNaN(buyerPays) || buyerPays <= 0) {
+      console.warn(`⚠️ buyerPays missing for ${escrow.escrowId}, falling back to base amount: ${rawAmount}`);
+      buyerPays = rawAmount; // no fee charged on legacy escrows
+    }
 
     const metadata = {
       escrowId: escrow.escrowId,
@@ -215,7 +225,7 @@ exports.verifyPayment = async (req, res) => {
     escrow.payment.verifiedAt = new Date();
     escrow.payment.transactionId = verificationResult.transactionId || verificationResult.reference;
     escrow.payment.gatewayResponse = verificationResult;
-    
+
     await escrow.save();
 
     // Update buyer stats

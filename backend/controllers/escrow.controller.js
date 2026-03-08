@@ -723,7 +723,15 @@ exports.getEscrowById = async (req, res) => {
       success: true,
       data: {
         escrow: formattedEscrow,
-        userRole: escrow.getUserRoles(userId),
+        // FIX: getUserRoles only checks participants[]. Derive role from top-level buyer/seller too.
+        const buyerIdStr = escrow.buyer?._id?.toString() || escrow.buyer?.toString();
+        const sellerIdStr = escrow.seller?._id?.toString() || escrow.seller?.toString();
+        let derivedUserRole = escrow.getUserRoles(userId);
+        if (!derivedUserRole.length) {
+          if (buyerIdStr === userId.toString()) derivedUserRole = ["buyer"];
+          else if (sellerIdStr === userId.toString()) derivedUserRole = ["seller"];
+        }
+        userRole: derivedUserRole,
         requiresAction: escrow.requiresUserAction(userId)
       }
     });

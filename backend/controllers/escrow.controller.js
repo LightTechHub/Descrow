@@ -87,6 +87,33 @@ exports.createEscrow = async (req, res) => {
     // Calculate fees
     const feeBreakdown = await feeConfig.calculateSimpleFees(parsedAmount, currency);
 
+    // FIX: Guard fee percentages against NaN/undefined.
+    // calculateSimpleFees can return undefined percentages if tier data is missing,
+    // and Mongoose's Number type will throw "Cast to Number failed for value NaN".
+    const safeBuyerFeePercentage = (feeBreakdown && !isNaN(feeBreakdown.buyerFeePercentage))
+      ? feeBreakdown.buyerFeePercentage : 0;
+    const safeSellerFeePercentage = (feeBreakdown && !isNaN(feeBreakdown.sellerFeePercentage))
+      ? feeBreakdown.sellerFeePercentage : 0;
+
+    // FIX: shippingAddress arrives as a JSON string when sent via FormData.
+    // Parse it back to an object before passing to Mongoose, which expects an object.
+    let parsedShippingAddress;
+    if (shippingAddress) {
+      if (typeof shippingAddress === 'string') {
+        try {
+          parsedShippingAddress = JSON.parse(shippingAddress);
+        } catch (e) {
+          parsedShippingAddress = undefined;
+        }
+      } else if (typeof shippingAddress === 'object') {
+        parsedShippingAddress = shippingAddress;
+      }
+      // If parsed result is empty object or has no street, treat as undefined
+      if (parsedShippingAddress && !parsedShippingAddress.street) {
+        parsedShippingAddress = undefined;
+      }
+    }
+
     // Handle attachments
     let attachments = [];
     if (req.files && req.files.length > 0) {
@@ -159,7 +186,8 @@ exports.createEscrow = async (req, res) => {
     // Process milestones
     let processedMilestones = [];
     if (milestones && milestones.length > 0) {
-      const totalMilestoneAmount = milestones.reduce((sum, m) => sum + parseFloat(m.amount), 0);
+      const parsedMilestones = typeof milestones === 'string' ? JSON.parse(milestones) : milestones;
+      const totalMilestoneAmount = parsedMilestones.reduce((sum, m) => sum + parseFloat(m.amount), 0);
       if (Math.abs(totalMilestoneAmount - parsedAmount) > 0.01) {
         return res.status(400).json({
           success: false,
@@ -167,7 +195,7 @@ exports.createEscrow = async (req, res) => {
         });
       }
 
-      processedMilestones = milestones.map((m, index) => ({
+      processedMilestones = parsedMilestones.map((m, index) => ({
         id: `MS${Date.now()}${index}`,
         title: m.title,
         description: m.description || '',
@@ -180,8 +208,14 @@ exports.createEscrow = async (req, res) => {
     }
 
     // Determine currency type
-    const determinedCurrencyType = currencyType || 
+    const determinedCurrencyType = currencyType ||
       (Escrow.SUPPORTED_CURRENCIES.CRYPTO.includes(currency) ? 'crypto' : 'fiat');
+
+    // Process tags
+    let parsedTags = tags;
+    if (typeof tags === 'string') {
+      try { parsedTags = JSON.parse(tags); } catch(e) { parsedTags = []; }
+    }
 
     // Create escrow
     const escrowData = {
@@ -201,19 +235,19 @@ exports.createEscrow = async (req, res) => {
       category: category || 'other',
       delivery: {
         method: deliveryMethod || 'physical',
-        shippingAddress: shippingAddress || undefined,
+        shippingAddress: parsedShippingAddress,
         autoReleaseEnabled: autoReleaseDays ? true : false,
         autoReleaseDays: autoReleaseDays || 7
       },
       payment: {
-        amount: feeBreakdown.amount,
-        buyerFee: feeBreakdown.buyerFee,
-        sellerFee: feeBreakdown.sellerFee,
-        platformFee: feeBreakdown.totalPlatformFee,
-        buyerPays: feeBreakdown.buyerPays,
-        sellerReceives: feeBreakdown.sellerReceives,
-        buyerFeePercentage: feeBreakdown.buyerFeePercentage,
-        sellerFeePercentage: feeBreakdown.sellerFeePercentage,
+        amount: feeBreakdown?.amount ?? parsedAmount,
+        buyerFee: feeBreakdown?.buyerFee ?? 0,
+        sellerFee: feeBreakdown?.sellerFee ?? 0,
+        platformFee: feeBreakdown?.totalPlatformFee ?? 0,
+        buyerPays: feeBreakdown?.buyerPays ?? parsedAmount,
+        sellerReceives: feeBreakdown?.sellerReceives ?? parsedAmount,
+        buyerFeePercentage: safeBuyerFeePercentage,
+        sellerFeePercentage: safeSellerFeePercentage,
         remainingAmount: parsedAmount
       },
       attachments,
@@ -224,7 +258,7 @@ exports.createEscrow = async (req, res) => {
         inspectionPeriodDays: inspectionPeriodDays || 3
       },
       metadata: metadata || {},
-      tags: tags || [],
+      tags: parsedTags || [],
       timeline: [{
         status: 'pending',
         timestamp: new Date(),
@@ -357,7 +391,7 @@ exports.submitMilestone = async (req, res) => {
     });
 
     await escrow.save();
-    await createNotification(escrow.buyer, 'milestone_submitted', 'Milestone Ready', 
+    await createNotification(escrow.buyer, 'milestone_submitted', 'Milestone Ready',
       `Seller submitted: "${milestone.title}"`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
 
     res.json({ success: true, message: 'Milestone submitted', data: { escrow, milestone } });
@@ -577,7 +611,7 @@ exports.completeInspection = async (req, res) => {
     const { summary, details, passed, issues, recommendations } = req.body;
 
     const escrow = await Escrow.findById(id);
-    if (!escrow || !escrow.inspection.inspector || 
+    if (!escrow || !escrow.inspection.inspector ||
         escrow.inspection.inspector.toString() !== userId) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
@@ -654,8 +688,8 @@ exports.getEscrowById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    let escrow = mongoose.Types.ObjectId.isValid(id) 
-      ? await Escrow.findById(id) 
+    let escrow = mongoose.Types.ObjectId.isValid(id)
+      ? await Escrow.findById(id)
       : await Escrow.findOne({ escrowId: id });
 
     if (!escrow) {
@@ -772,10 +806,10 @@ exports.acceptEscrow = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller participants.user', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Escrow accepted', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Escrow accepted',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {
@@ -807,13 +841,13 @@ exports.calculateFeePreview = async (req, res) => {
 
     res.json({
       success: true,
-      data: { 
-        feeBreakdown, 
-        userTier: user.tier, 
-        tierInfo, 
-        withinLimit, 
-        upgradeAvailable: !withinLimit, 
-        currency 
+      data: {
+        feeBreakdown,
+        userTier: user.tier,
+        tierInfo,
+        withinLimit,
+        upgradeAvailable: !withinLimit,
+        currency
       }
     });
 
@@ -920,10 +954,10 @@ exports.fundEscrow = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Escrow funded', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Escrow funded',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {
@@ -968,10 +1002,10 @@ exports.markDelivered = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Marked as delivered', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Marked as delivered',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {
@@ -1010,10 +1044,10 @@ exports.confirmDelivery = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Delivery confirmed', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Delivery confirmed',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {
@@ -1053,10 +1087,10 @@ exports.raiseDispute = async (req, res) => {
 
     await escrow.populate('buyer seller', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Dispute raised', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Dispute raised',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {
@@ -1102,10 +1136,10 @@ exports.cancelEscrow = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Escrow cancelled', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Escrow cancelled',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {
@@ -1168,10 +1202,10 @@ exports.uploadDeliveryProof = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
-    res.json({ 
-      success: true, 
-      message: 'Delivery proof uploaded', 
-      data: { escrow: escrow.toObject() } 
+    res.json({
+      success: true,
+      message: 'Delivery proof uploaded',
+      data: { escrow: escrow.toObject() }
     });
 
   } catch (error) {

@@ -93,7 +93,10 @@ const PaymentPage = () => {
           escrowId: escrow.escrowId || escrow._id, // fallback to MongoDB _id
           paymentMethod: selectedGateway
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 30000 // FIX: 30s timeout so button never hangs forever
+        }
       );
 
       if (response.data.success) {

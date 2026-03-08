@@ -139,27 +139,50 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
     );
   }, [deliveryMethod, transactionType]);
 
-  // FIX: fetchFeeBreakdown previously used getValues() inside useCallback, causing a stale
-  // closure — it always read the initial empty form values, never the current typed amount.
-  // Fix: accept amount/currency as direct arguments from the watched values instead.
+  // FIX: Use a ref to track the latest request and ignore stale responses (race condition fix).
+  // FIX: Accept amount/currency as direct args to avoid stale closure from useCallback.
+  const feeRequestRef = React.useRef(0);
+
   const fetchFeeBreakdown = useCallback(async (currentAmount, currentCurrency) => {
-    if (!currentAmount || parseFloat(currentAmount) <= 0) {
+    const parsedAmt = parseFloat(currentAmount);
+    if (!currentAmount || isNaN(parsedAmt) || parsedAmt <= 0) {
       setFeeBreakdown(null);
       return;
     }
     const type = getValues('transactionType') || 'custom';
+    const safeCurrency = currentCurrency || 'USD';
+
+    // Tag this request; if a newer one starts before this resolves, discard result
+    const requestId = ++feeRequestRef.current;
+    setFeeLoading(true);
+
     try {
-      setFeeLoading(true);
-      const response = await escrowService.calculateFees(
-        parseFloat(currentAmount), currentCurrency || 'USD', type
-      );
-      if (response.success) setFeeBreakdown(response.data.feeBreakdown);
-      else setFeeBreakdown(null);
+      const response = await escrowService.calculateFees(parsedAmt, safeCurrency, type);
+      // Only apply if this is still the latest request
+      if (requestId !== feeRequestRef.current) return;
+      if (response.success && response.data?.feeBreakdown) {
+        setFeeBreakdown(response.data.feeBreakdown);
+      } else {
+        // Backend returned success:false — show zeroed-out preview rather than hiding
+        setFeeBreakdown({
+          amount: parsedAmt,
+          buyerFee: 0, sellerFee: 0,
+          buyerPays: parsedAmt, sellerReceives: parsedAmt,
+          buyerFeePercentage: 0, sellerFeePercentage: 0
+        });
+      }
     } catch (err) {
+      if (requestId !== feeRequestRef.current) return;
       console.error('Failed to calculate fees:', err);
-      setFeeBreakdown(null);
+      // Show zeroed preview so UI doesn't just vanish on transient errors
+      setFeeBreakdown({
+        amount: parsedAmt,
+        buyerFee: 0, sellerFee: 0,
+        buyerPays: parsedAmt, sellerReceives: parsedAmt,
+        buyerFeePercentage: 0, sellerFeePercentage: 0
+      });
     } finally {
-      setFeeLoading(false);
+      if (requestId === feeRequestRef.current) setFeeLoading(false);
     }
   }, [getValues]);
 
@@ -170,7 +193,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       } else {
         setFeeBreakdown(null);
       }
-    }, 500);
+    }, 600);
     return () => clearTimeout(timer);
   }, [amount, currency, fetchFeeBreakdown]);
 

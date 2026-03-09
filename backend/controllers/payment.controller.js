@@ -48,16 +48,39 @@ exports.initializePayment = async (req, res) => {
     const reference = `PAY_${escrowId}_${Date.now()}`;
 
     // Calculate amount buyer needs to pay
-    // FIX: escrow.payment.buyerPays may be undefined on escrows created before the fee fix.
-    // Fall back to escrow.amount (no fee) so payment can still proceed.
+    // FIX: If buyerPays is missing (legacy escrow created before fee fix),
+    // recalculate fees from scratch and SAVE them to the escrow so this
+    // never needs manual DB intervention. Every escrow self-heals on first payment attempt.
     const rawAmount = parseFloat(escrow.amount.toString());
     let buyerPays;
+
     if (escrow.payment?.buyerPays) {
       buyerPays = parseFloat(escrow.payment.buyerPays.toString());
     }
+
     if (!buyerPays || isNaN(buyerPays) || buyerPays <= 0) {
-      console.warn(`⚠️ buyerPays missing for ${escrow.escrowId}, falling back to base amount: ${rawAmount}`);
-      buyerPays = rawAmount; // no fee charged on legacy escrows
+      console.warn(`⚠️ buyerPays missing for ${escrow.escrowId} — recalculating and saving fees now`);
+      try {
+        const feeConfig = require('../config/fee.config');
+        const feeBreakdown = await feeConfig.calculateSimpleFees(rawAmount, escrow.currency || 'USD');
+        buyerPays = feeBreakdown?.buyerPays || rawAmount * 1.02;
+
+        // Persist so next payment attempt (or UI display) has correct values
+        if (!escrow.payment) escrow.payment = {};
+        escrow.payment.amount = rawAmount;
+        escrow.payment.buyerFee = feeBreakdown?.buyerFee ?? (rawAmount * 0.02);
+        escrow.payment.sellerFee = feeBreakdown?.sellerFee ?? (rawAmount * 0.015);
+        escrow.payment.buyerPays = buyerPays;
+        escrow.payment.sellerReceives = feeBreakdown?.sellerReceives ?? (rawAmount * 0.985);
+        escrow.payment.buyerFeePercentage = feeBreakdown?.buyerFeePercentage ?? 2;
+        escrow.payment.sellerFeePercentage = feeBreakdown?.sellerFeePercentage ?? 1.5;
+        escrow.markModified('payment');
+        await escrow.save();
+        console.log(`✅ Fees recalculated and saved for ${escrow.escrowId}: buyerPays=${buyerPays}`);
+      } catch (feeErr) {
+        console.error('⚠️ Fee recalculation failed, using base amount:', feeErr.message);
+        buyerPays = rawAmount * 1.02; // safe fallback with default 2% fee
+      }
     }
 
     const metadata = {

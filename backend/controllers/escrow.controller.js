@@ -115,18 +115,25 @@ exports.createEscrow = async (req, res) => {
     }
 
     // Handle attachments
+    // FIX: file.path is a local filesystem path e.g. "uploads/escrow/file.jpg"
+    // Must build a full backend URL so partners can access the file from their browser.
+    const BACKEND_URL = (process.env.BACKEND_URL || 'https://descrow-backend-5ykg.onrender.com').replace(/\/$/, '');
     let attachments = [];
     if (req.files && req.files.length > 0) {
-      attachments = req.files.map(file => ({
-        filename: file.filename,
-        originalName: file.originalname,
-        url: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
-        uploadedBy: buyerId,
-        uploadedByRole: 'buyer',
-        uploadedAt: new Date()
-      }));
+      attachments = req.files.map(file => {
+        // Normalise path separators and strip leading slash
+        const cleanPath = file.path.replace(/\\/g, '/').replace(/^\//, '');
+        return {
+          filename: file.filename,
+          originalName: file.originalname,
+          url: `${BACKEND_URL}/${cleanPath}`,
+          mimetype: file.mimetype,
+          size: file.size,
+          uploadedBy: buyerId,
+          uploadedByRole: 'buyer',
+          uploadedAt: new Date()
+        };
+      });
     }
 
     // Build participants
@@ -373,10 +380,11 @@ exports.submitMilestone = async (req, res) => {
     milestone.submittedAt = new Date();
 
     if (req.files) {
+      const _BACKEND_URL = (process.env.BACKEND_URL || 'https://descrow-backend-5ykg.onrender.com').replace(/\/$/, '');
       milestone.attachments = req.files.map(f => ({
         filename: f.filename,
         originalName: f.originalname,
-        url: f.path,
+        url: `${_BACKEND_URL}/${f.path.replace(/\\/g, '/').replace(/^\//, '')}`,
         uploadedAt: new Date(),
         uploadedBy: userId
       }));

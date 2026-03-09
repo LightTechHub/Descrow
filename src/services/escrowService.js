@@ -85,6 +85,31 @@ const escrowService = {
       getAuthHeaders()
     );
     return response.data;
+  },
+
+  // Upload proof of delivery files (multipart)
+  uploadDeliveryProof: async (id, formData) => {
+    const token = localStorage.getItem('token');
+    const response = await axios.post(`${API_URL}/escrow/${id}/upload-proof`, formData, {
+      headers: { Authorization: `Bearer ${token}` }
+      // No Content-Type — let browser set multipart boundary
+    });
+    return response.data;
+  },
+
+  // Chat methods
+  getChatMessages: async (escrowId) => {
+    const response = await axios.get(`${API_URL}/chat/${escrowId}/messages`, getAuthHeaders());
+    return response.data;
+  },
+
+  sendChatMessage: async (escrowId, message) => {
+    const response = await axios.post(
+      `${API_URL}/chat/${escrowId}/send`,
+      { message },
+      getAuthHeaders()
+    );
+    return response.data;
   }
 };
 

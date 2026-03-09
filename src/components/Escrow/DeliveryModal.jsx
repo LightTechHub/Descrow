@@ -1,6 +1,7 @@
 // src/components/Escrow/DeliveryModal.jsx
 import React, { useState, useRef } from 'react';
 import { X, Package, Loader, Upload, Trash2, FileImage, Car, Phone, User, Hash, Truck, MapPin, AlertCircle } from 'lucide-react';
+import axios from 'axios';
 import escrowService from 'services/escrowService';
 import toast from 'react-hot-toast';
 
@@ -98,9 +99,8 @@ const DeliveryModal = ({ escrow, onClose, onSuccess }) => {
         if (val) fd.append(key, val);
       });
 
-      const { default: axios } = await import('axios');
       await axios.post(
-        `${API_URL}/escrow/${escrow._id}/upload-proof`,
+        `${API_URL}/escrow/${escrow._id}/upload-delivery-proof`,
         fd,
         { headers: { Authorization: `Bearer ${token}` } }
       );

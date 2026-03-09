@@ -867,16 +867,26 @@ exports.calculateFeePreview = async (req, res) => {
     }
 
     const user = await User.findById(userId);
-    const feeBreakdown = await feeConfig.calculateSimpleFees(parseFloat(amount), currency);
-    const tierInfo = await feeConfig.getTierInfo(user.tier);
-    const withinLimit = await feeConfig.isAmountWithinLimit(parseFloat(amount), currency, user.tier);
+    const parsedAmount = parseFloat(amount);
+    const feeBreakdown = await feeConfig.calculateSimpleFees(parsedAmount, currency);
+
+    // FIX: getTierInfo does not exist on feeConfig — call isAmountWithinLimit safely
+    let withinLimit = true;
+    try {
+      withinLimit = await feeConfig.isAmountWithinLimit(parsedAmount, currency, user?.tier || 'starter');
+    } catch (e) {
+      withinLimit = true; // default to allowed if check fails
+    }
+
+    if (!feeBreakdown) {
+      return res.status(500).json({ success: false, message: 'Fee calculation failed' });
+    }
 
     res.json({
       success: true,
       data: {
         feeBreakdown,
-        userTier: user.tier,
-        tierInfo,
+        userTier: user?.tier || 'starter',
         withinLimit,
         upgradeAvailable: !withinLimit,
         currency

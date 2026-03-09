@@ -317,7 +317,13 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
       const response = await escrowService.createEscrow(formData);
 
       if (response.success) {
-        const escrowId = response.data.escrow?.escrowId || response.data.escrowId;
+        // FIX: Use MongoDB _id for navigation — the route /escrow/:id uses findById()
+        // which needs _id. escrowId (the ESC... string) causes findById to fail and
+        // redirects back to dashboard. Fall back chain: _id → escrowId → escrow._id
+        const mongoId = response.data.escrow?._id
+          || response.data._id
+          || response.data.escrow?.escrowId  // last resort ESC string
+          || response.data.escrowId;
         toast.success(
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5" />
@@ -326,7 +332,7 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
           { duration: 3000 }
         );
         onSuccess?.();
-        setTimeout(() => { onClose(); navigate(`/escrow/${escrowId}`); }, 1000);
+        setTimeout(() => { onClose(); navigate(`/escrow/${mongoId}`); }, 1000);
       } else {
         toast.error(response.message || 'Failed to create escrow');
       }

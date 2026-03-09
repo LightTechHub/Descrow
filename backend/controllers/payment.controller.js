@@ -191,12 +191,41 @@ exports.verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Payment reference is required' });
     }
 
-    const escrow = await Escrow.findOne({ 'payment.reference': reference })
+    // DEBUG: log exactly what reference we received and what's in DB
+    console.log(`🔍 Verify attempt - reference received: "${reference}", method: "${paymentMethod}"`);
+    
+    // Try multiple lookup strategies
+    let escrow = await Escrow.findOne({ 'payment.reference': reference })
       .populate('buyer seller', 'name email');
 
     if (!escrow) {
+      // Fallback: try finding by escrowId extracted from reference (PAY_ESC123_timestamp)
+      const escrowIdMatch = reference.match(/PAY_(ESC[^_]+)_/);
+      if (escrowIdMatch) {
+        const extractedEscrowId = escrowIdMatch[1];
+        console.log(`🔍 Fallback lookup by escrowId: "${extractedEscrowId}"`);
+        escrow = await Escrow.findOne({ escrowId: extractedEscrowId })
+          .populate('buyer seller', 'name email');
+        if (escrow) {
+          console.log(`🔍 Found escrow by ID. Stored reference: "${escrow.payment?.reference}", payment object:`, JSON.stringify(escrow.payment));
+          // Update the reference in case it wasn't saved properly
+          if (!escrow.payment?.reference) {
+            escrow.payment = escrow.payment || {};
+            escrow.payment.reference = reference;
+            escrow.markModified('payment');
+            await escrow.save();
+            console.log(`✅ Reference patched onto escrow ${escrow.escrowId}`);
+          }
+        }
+      }
+    }
+
+    if (!escrow) {
+      console.log(`❌ Escrow not found for reference: "${reference}"`);
       return res.status(404).json({ success: false, message: 'Escrow not found for this payment reference' });
     }
+    
+    console.log(`✅ Escrow found: ${escrow.escrowId}, status: ${escrow.status}, payment.reference: "${escrow.payment?.reference}"`);
 
     // ✅ IDEMPOTENCY: If already funded, return success
     if (escrow.status === 'funded' && escrow.payment.paidAt) {

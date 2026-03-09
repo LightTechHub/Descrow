@@ -59,12 +59,12 @@ const TIERS_BASE_USD = {
     setupFeeUSD: 0,
     maxTransactionAmountUSD: 500,
     maxTransactionsPerMonth: 10,
-    
+
     fees: {
       buyer: 0.0175,   // 1.75%
       seller: 0.0175   // 1.75%
     },
-    
+
     features: [
       'Standard processing',
       'Basic email support',
@@ -81,12 +81,12 @@ const TIERS_BASE_USD = {
     setupFeeUSD: 0,
     maxTransactionAmountUSD: 5000,
     maxTransactionsPerMonth: 50,
-    
+
     fees: {
       buyer: 0.015,    // 1.5%
       seller: 0.015    // 1.5%
     },
-    
+
     features: [
       'Fast processing (24h)',
       'Priority support',
@@ -104,12 +104,12 @@ const TIERS_BASE_USD = {
     setupFeeUSD: 0,
     maxTransactionAmountUSD: -1,  // Unlimited
     maxTransactionsPerMonth: -1,  // Unlimited
-    
+
     fees: {
       buyer: 0.0125,   // 1.25%
       seller: 0.0125   // 1.25%
     },
-    
+
     features: [
       'Instant processing',
       'Premium 24/7 support',
@@ -129,12 +129,12 @@ const TIERS_BASE_USD = {
     setupFeeUSD: 80,         // $80 one-time
     maxTransactionAmountUSD: -1,
     maxTransactionsPerMonth: -1,
-    
+
     fees: {
       buyer: 0.01,     // 1%
       seller: 0.01     // 1%
     },
-    
+
     features: [
       'Full API access',
       'Webhook support',
@@ -204,27 +204,27 @@ const formatCurrency = (amount, currency) => {
 const getTierPricing = (tierName, userCurrency = 'USD') => {
   const tier = TIERS_BASE_USD[tierName];
   if (!tier) return null;
-  
+
   const monthlyCost = convertCurrency(tier.monthlyCostUSD, userCurrency);
   const setupFee = convertCurrency(tier.setupFeeUSD, userCurrency);
   const maxAmount = tier.maxTransactionAmountUSD === -1 
     ? -1 
     : convertCurrency(tier.maxTransactionAmountUSD, userCurrency);
-  
+
   return {
     ...tier,
     currency: userCurrency,
     monthlyCost,
     setupFee,
     maxTransactionAmount: maxAmount,
-    
+
     // Formatted strings
     monthlyCostFormatted: formatCurrency(monthlyCost, userCurrency),
     setupFeeFormatted: formatCurrency(setupFee, userCurrency),
     maxTransactionAmountFormatted: maxAmount === -1 
       ? 'Unlimited' 
       : formatCurrency(maxAmount, userCurrency),
-    
+
     // Fee percentages
     buyerFeePercentage: (tier.fees.buyer * 100).toFixed(2) + '%',
     sellerFeePercentage: (tier.fees.seller * 100).toFixed(2) + '%',
@@ -269,41 +269,55 @@ async function getActiveFeeSettings() {
 
 const calculateFees = async (amount, currency, userTier = 'starter', paymentMethod = 'flutterwave') => {
   const settings = await getActiveFeeSettings();
-  
+
   // Get tier data (database first, fallback to constants)
-  const tierData = settings && settings.tiers[userTier] 
-    ? settings.tiers[userTier] 
-    : TIERS_BASE_USD[userTier] || TIERS_BASE_USD.starter;
-  
+  // FIX: Even if settings.tiers[userTier] exists, validate it has fees.buyer/seller
+  // defined and are valid numbers. If the DB document has the tier but fees are
+  // missing/zero (schema mismatch on save), fall back to hardcoded constants.
+  let tierData = settings && settings.tiers && settings.tiers[userTier]
+    ? settings.tiers[userTier]
+    : null;
+
+  const hasFees = tierData &&
+    tierData.fees &&
+    typeof tierData.fees.buyer === 'number' && tierData.fees.buyer > 0 &&
+    typeof tierData.fees.seller === 'number' && tierData.fees.seller > 0;
+
+  if (!hasFees) {
+    // DB tier data is missing or corrupt — always use hardcoded constants
+    tierData = TIERS_BASE_USD[userTier] || TIERS_BASE_USD.starter;
+    console.warn(`⚠️ Fee config DB missing valid fees for tier '${userTier}', using hardcoded fallback`);
+  }
+
   const baseAmount = parseFloat(amount);
-  
+
   // Calculate fees
   const buyerFee = baseAmount * tierData.fees.buyer;
   const sellerFee = baseAmount * tierData.fees.seller;
   const buyerPays = baseAmount + buyerFee;
   const sellerReceives = baseAmount - sellerFee;
   const totalPlatformFee = buyerFee + sellerFee;
-  
+
   // Calculate gateway costs (convert from USD base)
   const gatewayCosts = settings ? settings.gatewayCosts : GATEWAY_COSTS_BASE;
   let gatewayCost = 0;
   let gatewayIncoming = 0;
   let gatewayOutgoing = 0;
-  
+
   if (paymentMethod === 'paystack') {
     const costs = gatewayCosts.paystack;
     const flatFee = convertCurrency(costs.flatFeeUSD, currency);
     const cap = convertCurrency(costs.capUSD, currency);
-    
+
     gatewayIncoming = (buyerPays * costs.percentage) + flatFee;
     if (cap && gatewayIncoming > cap) {
       gatewayIncoming = cap;
     }
-    
+
     // Transfer fees
     const smallLimit = convertCurrency(50, currency);
     const mediumLimit = convertCurrency(500, currency);
-    
+
     if (sellerReceives <= smallLimit) {
       gatewayOutgoing = convertCurrency(costs.transferFee.smallUSD, currency);
     } else if (sellerReceives <= mediumLimit) {
@@ -311,25 +325,25 @@ const calculateFees = async (amount, currency, userTier = 'starter', paymentMeth
     } else {
       gatewayOutgoing = convertCurrency(costs.transferFee.largeUSD, currency);
     }
-    
+
     gatewayCost = gatewayIncoming + gatewayOutgoing;
-    
+
   } else if (paymentMethod === 'flutterwave') {
     const costs = gatewayCosts.flutterwave;
     gatewayIncoming = buyerPays * costs.percentage;
     gatewayOutgoing = convertCurrency(costs.transferFeeUSD, currency);
     gatewayCost = gatewayIncoming + gatewayOutgoing;
-    
+
   } else if (paymentMethod === 'crypto') {
     const costs = gatewayCosts.crypto;
     gatewayIncoming = buyerPays * costs.percentage;
     gatewayOutgoing = 0;
     gatewayCost = gatewayIncoming;
   }
-  
+
   const platformProfit = totalPlatformFee - gatewayCost;
   const profitPercentage = (platformProfit / baseAmount) * 100;
-  
+
   return {
     amount: parseFloat(baseAmount.toFixed(2)),
     currency,
@@ -340,25 +354,25 @@ const calculateFees = async (amount, currency, userTier = 'starter', paymentMeth
     buyerFeePercentage: parseFloat((tierData.fees.buyer * 100).toFixed(2)),
     sellerFeePercentage: parseFloat((tierData.fees.seller * 100).toFixed(2)),
     totalFeePercentage: parseFloat(((tierData.fees.buyer + tierData.fees.seller) * 100).toFixed(2)),
-    
+
     // Formatted
     buyerPaysFormatted: formatCurrency(buyerPays, currency),
     sellerReceivesFormatted: formatCurrency(sellerReceives, currency),
     buyerFeeFormatted: formatCurrency(buyerFee, currency),
     sellerFeeFormatted: formatCurrency(sellerFee, currency),
-    
+
     // Gateway costs
     gatewayIncoming: parseFloat(gatewayIncoming.toFixed(2)),
     gatewayOutgoing: parseFloat(gatewayOutgoing.toFixed(2)),
     totalGatewayCost: parseFloat(gatewayCost.toFixed(2)),
-    
+
     // Platform profit
     platformProfit: parseFloat(platformProfit.toFixed(2)),
     profitPercentage: parseFloat(profitPercentage.toFixed(2)),
-    
+
     tier: userTier,
     paymentMethod,
-    
+
     breakdown: {
       buyerFeeDescription: `${(tierData.fees.buyer * 100).toFixed(2)}% escrow protection fee`,
       sellerFeeDescription: `${(tierData.fees.seller * 100).toFixed(2)}% platform service fee`,
@@ -380,7 +394,7 @@ const getUpgradeBenefits = async (currentTier, targetTier, userCurrency = 'USD')
 
   const monthlyCostDiff = target.monthlyCost - current.monthlyCost;
   const setupFeeDiff = target.setupFee - current.setupFee;
-  
+
   const buyerFeeReduction = ((current.fees.buyer - target.fees.buyer) * 100).toFixed(2);
   const sellerFeeReduction = ((current.fees.seller - target.fees.seller) * 100).toFixed(2);
 
@@ -388,7 +402,7 @@ const getUpgradeBenefits = async (currentTier, targetTier, userCurrency = 'USD')
     currentTier: current.name,
     targetTier: target.name,
     currency: userCurrency,
-    
+
     costs: {
       monthlyCostDifference: monthlyCostDiff,
       monthlyCostDifferenceFormatted: formatCurrency(monthlyCostDiff, userCurrency),
@@ -397,15 +411,15 @@ const getUpgradeBenefits = async (currentTier, targetTier, userCurrency = 'USD')
       totalFirstPayment: monthlyCostDiff + setupFeeDiff,
       totalFirstPaymentFormatted: formatCurrency(monthlyCostDiff + setupFeeDiff, userCurrency)
     },
-    
+
     savings: {
       buyerFeeReduction: `${buyerFeeReduction}%`,
       sellerFeeReduction: `${sellerFeeReduction}%`,
       combinedReduction: `${((parseFloat(buyerFeeReduction) + parseFloat(sellerFeeReduction)) / 2).toFixed(2)}%`
     },
-    
+
     newFeatures: target.features.filter(f => !current.features.includes(f)),
-    
+
     limits: {
       current: {
         transactionsPerMonth: current.maxTransactionsPerMonth === -1 ? 'Unlimited' : current.maxTransactionsPerMonth,
@@ -462,7 +476,7 @@ module.exports = {
   CURRENCY_SYMBOLS,
   TIERS_BASE_USD,
   GATEWAY_COSTS_BASE,
-  
+
   // Functions
   convertCurrency,
   formatCurrency,
@@ -472,12 +486,12 @@ module.exports = {
   getUpgradeBenefits,
   calculateMonthlySavings,
   getActiveFeeSettings,
-  
+
   // Simple calculator for frontend
   calculateSimpleFees: async (amount, currency) => {
     return await calculateFees(amount, currency, 'starter', 'flutterwave');
   },
-  
+
   // Check if amount within tier limit
   isAmountWithinLimit: async (amount, currency, tierName) => {
     const tierInfo = getTierPricing(tierName, currency);
@@ -485,19 +499,19 @@ module.exports = {
     if (tierInfo.maxTransactionAmount === -1) return true;
     return amount <= tierInfo.maxTransactionAmount;
   },
-  
+
   // Get fee explanation
   getFeeExplanation: (currency, tierName = 'starter') => {
     const tier = getTierPricing(tierName, currency);
     if (!tier) return null;
-    
+
     const symbol = CURRENCY_SYMBOLS[currency] || currency;
     const exampleAmount = currency === 'NGN' ? 10000 : 100;
     const buyerFee = (exampleAmount * tier.fees.buyer).toFixed(2);
     const sellerFee = (exampleAmount * tier.fees.seller).toFixed(2);
     const buyerPays = (exampleAmount * (1 + tier.fees.buyer)).toFixed(2);
     const sellerReceives = (exampleAmount * (1 - tier.fees.seller)).toFixed(2);
-    
+
     return {
       tier: tier.name,
       buyer: {

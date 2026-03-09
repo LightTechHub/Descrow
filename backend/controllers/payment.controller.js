@@ -150,11 +150,15 @@ exports.initializePayment = async (req, res) => {
     }
 
     // Save payment reference
+    // FIX: markModified() required because payment is likely a Mixed type in Mongoose.
+    // Without it, Mongoose doesn't detect nested field changes and save() is a no-op.
+    if (!escrow.payment) escrow.payment = {};
     escrow.payment.reference = reference;
     escrow.payment.method = paymentMethod;
     if (paymentMethod === 'crypto') {
       escrow.payment.paymentId = paymentData.payment_id;
     }
+    escrow.markModified('payment');
     await escrow.save();
 
     console.log(`✅ Payment initialized: ${reference} for escrow ${escrow.escrowId}`);
@@ -250,7 +254,7 @@ exports.verifyPayment = async (req, res) => {
     escrow.payment.verifiedAt = new Date();
     escrow.payment.transactionId = verificationResult.transactionId || verificationResult.reference;
     escrow.payment.gatewayResponse = verificationResult;
-
+    escrow.markModified('payment'); // FIX: Mixed type needs markModified
     await escrow.save();
 
     // Update buyer stats
@@ -354,6 +358,7 @@ exports.nowpaymentsWebhook = async (req, res) => {
       escrow.payment.verifiedAt = new Date();
       escrow.payment.paymentId = payload.payment_id;
       escrow.payment.gatewayResponse = payload;
+      escrow.markModified('payment'); // FIX: Mixed type
       await escrow.save();
 
       // Update buyer stats
@@ -438,6 +443,7 @@ exports.paystackWebhook = async (req, res) => {
       escrow.payment.verifiedAt = new Date();
       escrow.payment.transactionId = event.data.id;
       escrow.payment.gatewayResponse = event.data;
+      escrow.markModified('payment'); // FIX: Mixed type
       await escrow.save();
 
       // Update buyer stats
@@ -520,6 +526,7 @@ exports.flutterwaveWebhook = async (req, res) => {
       escrow.payment.verifiedAt = new Date();
       escrow.payment.transactionId = payload.data.id;
       escrow.payment.gatewayResponse = payload.data;
+      escrow.markModified('payment'); // FIX: Mixed type
       await escrow.save();
 
       // Update buyer stats

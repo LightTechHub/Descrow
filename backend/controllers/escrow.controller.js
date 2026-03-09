@@ -846,6 +846,18 @@ exports.acceptEscrow = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller participants.user', 'name email');
 
+    // FIX: Notify the buyer that the seller has accepted the deal
+    if (isSeller) {
+      await createNotification(
+        escrow.buyer,
+        'escrow_accepted',
+        'Deal Accepted!',
+        `${escrow.seller.name || 'Seller'} accepted your escrow: "${escrow.title}". You can now make payment.`,
+        `/escrow/${escrow._id}`,
+        { escrowId: escrow._id }
+      );
+    }
+
     res.json({
       success: true,
       message: 'Escrow accepted',
@@ -1292,4 +1304,4 @@ exports.getGPSTracking = async (req, res) => {
   }
 };
 
-module.exports = exports;
+module.exports = exports;6

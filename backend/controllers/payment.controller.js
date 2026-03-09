@@ -221,13 +221,15 @@ exports.verifyPayment = async (req, res) => {
         verificationResult = await paymentService.verifyFlutterwave(transactionId);
         break;
 
-      case 'crypto':
+      case 'crypto': {
+        // FIX: wrap in block {} so const declaration is valid inside switch
         const cryptoPaymentId = paymentId || escrow.payment.paymentId;
         if (!cryptoPaymentId) {
           return res.status(400).json({ success: false, message: 'Payment ID required for crypto' });
         }
         verificationResult = await paymentService.verifyNowpayments(cryptoPaymentId);
         break;
+      }
 
       default:
         return res.status(400).json({ success: false, message: 'Invalid payment method' });

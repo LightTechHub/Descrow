@@ -1,189 +1,254 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, Loader, Paperclip } from 'lucide-react';
-import chatService from 'services/chatService';
-import { formatRelativeTime } from 'utils/escrowHelpers';
+// src/components/Escrow/ChatBox.jsx
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import axios from 'axios';
+import { Send, Loader, RefreshCw, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-const ChatBox = ({ escrowId, currentUser }) => {
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+const getAuthHeaders = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+});
+
+export default function ChatBox({ escrowId, currentUser }) {
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
+  const [error, setError] = useState(null);
+  const bottomRef = useRef(null);
+  const pollRef = useRef(null);
 
-  useEffect(() => {
-    fetchMessages();
-    
-    // Start polling every 5 seconds
-    pollingIntervalRef.current = setInterval(() => {
-      fetchMessages(true); // Silent fetch
-    }, 5000);
+  // FIX: Resolve sender name correctly.
+  // The bug: msg.sender was a plain ObjectId string (not populated), so msg.sender?.name = undefined.
+  // Fix: chat route may return sender as ObjectId or as populated {_id, name, email}.
+  // We use currentUser._id to detect own messages, and fall back gracefully for partner name.
+  const getSenderName = (msg) => {
+    // If sender was populated (object with name field)
+    if (msg.sender && typeof msg.sender === 'object' && msg.sender.name) {
+      return msg.sender.name;
+    }
+    // If sender is just an ID string, check if it matches currentUser
+    const senderId = msg.sender?._id?.toString() || msg.sender?.toString();
+    const myId = currentUser?._id?.toString() || currentUser?.id?.toString();
+    if (senderId === myId) return 'You';
+    // Partner name from senderRole as fallback
+    return msg.senderRole
+      ? msg.senderRole.charAt(0).toUpperCase() + msg.senderRole.slice(1)
+      : 'Partner';
+  };
 
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, [escrowId]);
+  const isMyMessage = (msg) => {
+    const senderId = msg.sender?._id?.toString() || msg.sender?.toString();
+    const myId = currentUser?._id?.toString() || currentUser?.id?.toString();
+    return senderId === myId;
+  };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const fetchMessages = async (silent = false) => {
+  const fetchMessages = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
     try {
-      if (!silent) setLoading(true);
-
-      const response = await chatService.getMessages(escrowId);
-      
-      if (response.success) {
-        setMessages(response.data.messages);
-      }
-    } catch (error) {
-      console.error('Failed to fetch messages:', error);
+      const res = await axios.get(
+        `${API_URL}/chat/${escrowId}/messages`,
+        getAuthHeaders()
+      );
+      // Support both response shapes: { messages: [...] } or { data: { messages: [...] } }
+      const msgs = res.data?.messages || res.data?.data?.messages || res.data?.chat || [];
+      setMessages(Array.isArray(msgs) ? msgs : []);
+    } catch (err) {
       if (!silent) {
-        toast.error('Failed to load messages');
+        const msg = err.response?.data?.message || 'Failed to load messages';
+        setError(msg);
       }
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, [escrowId]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Initial load + poll every 5 seconds for new messages
+  useEffect(() => {
+    fetchMessages();
+    pollRef.current = setInterval(() => fetchMessages(true), 5000);
+    return () => clearInterval(pollRef.current);
+  }, [fetchMessages]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    if (!newMessage.trim()) return;
+  const handleSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+
+    setSending(true);
+    const optimisticId = `opt_${Date.now()}`;
+
+    // Optimistic UI: show message immediately
+    const optimistic = {
+      _id: optimisticId,
+      sender: { _id: currentUser?._id || currentUser?.id, name: 'You' },
+      senderRole: currentUser?.role || '',
+      message: trimmed,
+      timestamp: new Date().toISOString(),
+      pending: true
+    };
+    setMessages(prev => [...prev, optimistic]);
+    setText('');
 
     try {
-      setSending(true);
-
-      const response = await chatService.sendMessage(escrowId, newMessage.trim());
-
-      if (response.success) {
-        setMessages([...messages, response.data]);
-        setNewMessage('');
-      } else {
-        toast.error('Failed to send message');
-      }
-
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      toast.error('Failed to send message');
+      await axios.post(
+        `${API_URL}/chat/${escrowId}/send`,
+        { message: trimmed },
+        { headers: { ...getAuthHeaders().headers, 'Content-Type': 'application/json' } }
+      );
+      // Refresh to get server-confirmed message (removes optimistic)
+      await fetchMessages(true);
+    } catch (err) {
+      // Remove optimistic message on failure
+      setMessages(prev => prev.filter(m => m._id !== optimisticId));
+      const msg = err.response?.data?.message || 'Failed to send message';
+      toast.error(msg);
+      setText(trimmed); // restore text
     } finally {
       setSending(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 flex items-center justify-center">
-        <Loader className="w-6 h-6 text-blue-600 animate-spin" />
-      </div>
-    );
-  }
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
-  return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-      {/* Header */}
-      <div className="border-b border-gray-200 dark:border-gray-800 px-6 py-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Chat
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Communicate securely with the other party
-        </p>
-      </div>
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
-      {/* Messages */}
-      <div className="h-96 overflow-y-auto p-6 space-y-4">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-3">
-              <Send className="w-8 h-8 text-gray-400" />
-            </div>
-            <p className="text-gray-600 dark:text-gray-400">
-              No messages yet. Start the conversation!
-            </p>
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const isCurrentUser = msg.sender._id === currentUser.id;
+  const formatDate = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
 
-            return (
-              <div
-                key={msg._id}
-                className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`max-w-[70%] ${isCurrentUser ? 'order-2' : 'order-1'}`}>
-                  <div
-                    className={`rounded-lg px-4 py-2 ${
-                      isCurrentUser
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-                    }`}
-                  >
-                    {!isCurrentUser && (
-                      <p className="text-xs font-medium mb-1 opacity-70">
-                        {msg.sender.name}
-                      </p>
-                    )}
-                    <p className="text-sm break-words">{msg.message}</p>
-                  </div>
-                  <p
-                    className={`text-xs text-gray-500 dark:text-gray-400 mt-1 ${
-                      isCurrentUser ? 'text-right' : 'text-left'
-                    }`}
-                  >
-                    {formatRelativeTime(msg.createdAt)}
-                  </p>
-                </div>
-              </div>
-            );
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+  // Group messages by date
+  const groupedMessages = messages.reduce((groups, msg) => {
+    const date = formatDate(msg.timestamp);
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(msg);
+    return groups;
+  }, {});
 
-      {/* Input */}
-      <form onSubmit={handleSend} className="border-t border-gray-200 dark:border-gray-800 p-4">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
-            title="Attach file"
-          >
-            <Paperclip className="w-5 h-5" />
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type your message..."
-            disabled={sending}
-            className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-800 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-          />
-          <button
-            type="submit"
-            disabled={sending || !newMessage.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {sending ? (
-              <Loader className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <Send className="w-5 h-5" />
-                <span className="hidden sm:inline">Send</span>
-              </>
-            )}
-          </button>
-        </div>
-      </form>
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <Loader className="w-6 h-6 animate-spin text-blue-500" />
     </div>
   );
-};
 
-export default ChatBox;
+  if (error) return (
+    <div className="flex flex-col items-center justify-center h-64 gap-3">
+      <p className="text-red-500 text-sm">{error}</p>
+      <button onClick={() => fetchMessages()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold">
+        <RefreshCw className="w-4 h-4" /> Retry
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-[480px] bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-1">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center gap-3">
+            <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-full">
+              <MessageCircle className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-gray-500 dark:text-gray-400 font-medium">No messages yet</p>
+            <p className="text-sm text-gray-400">Start the conversation with your partner</p>
+          </div>
+        ) : (
+          Object.entries(groupedMessages).map(([date, dayMsgs]) => (
+            <div key={date}>
+              {/* Date separator */}
+              <div className="flex items-center gap-2 my-3">
+                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                <span className="text-xs text-gray-400 bg-white dark:bg-gray-900 px-2">{date}</span>
+                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+              </div>
+
+              {dayMsgs.map((msg) => {
+                const mine = isMyMessage(msg);
+                return (
+                  <div key={msg._id} className={`flex mb-2 ${mine ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] ${mine ? 'items-end' : 'items-start'} flex flex-col`}>
+                      {/* Sender name — only show for partner messages */}
+                      {!mine && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 px-1">
+                          {getSenderName(msg)}
+                        </span>
+                      )}
+                      <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words
+                        ${mine
+                          ? 'bg-blue-600 text-white rounded-br-sm'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm'
+                        }
+                        ${msg.pending ? 'opacity-60' : ''}
+                      `}>
+                        {/* FIX: render msg.message, not msg.text or msg.content */}
+                        {msg.message || msg.text || msg.content || ''}
+                      </div>
+                      <span className="text-xs text-gray-400 mt-1 px-1">
+                        {formatTime(msg.timestamp)}
+                        {msg.pending && ' · Sending...'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message... (Enter to send)"
+            rows={1}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-32 overflow-y-auto"
+            style={{ minHeight: '42px' }}
+            onInput={e => {
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={sending || !text.trim()}
+            className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+          >
+            {sending
+              ? <Loader className="w-5 h-5 animate-spin" />
+              : <Send className="w-5 h-5" />
+            }
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mt-1 px-1">Shift+Enter for new line</p>
+      </div>
+    </div>
+  );
+}

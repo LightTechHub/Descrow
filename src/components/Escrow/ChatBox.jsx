@@ -59,7 +59,7 @@ const ChatBox = ({ escrowId, currentUser }) => {
     setNewMessage('');
 
     try {
-      const response = await chatService.sendMessage(escrowId, text);
+      const response = await chatService.sendMessage(escrowId, { message: text });
       if (response.success) {
         // Replace optimistic with real message or just refresh
         await fetchMessages(true);

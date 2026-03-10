@@ -129,9 +129,23 @@ const getTransactions = async (req, res) => {
 
     const count = await Escrow.countDocuments(query);
 
+    // Normalize Decimal128 amount fields so frontend gets plain numbers
+    const normalizedEscrows = escrows.map(e => ({
+      ...e.toObject(),
+      amount: e.amount ? parseFloat(e.amount.toString()) : 0,
+      payment: e.payment ? {
+        ...e.payment,
+        amount: e.payment.amount ? parseFloat(e.payment.amount.toString()) : 0,
+        buyerPays: e.payment.buyerPays ? parseFloat(e.payment.buyerPays.toString()) : 0,
+        sellerReceives: e.payment.sellerReceives ? parseFloat(e.payment.sellerReceives.toString()) : 0,
+        buyerFee: e.payment.buyerFee ? parseFloat(e.payment.buyerFee.toString()) : 0,
+        sellerFee: e.payment.sellerFee ? parseFloat(e.payment.sellerFee.toString()) : 0,
+      } : {}
+    }));
+
     res.status(200).json({
       success: true,
-      escrows,
+      escrows: normalizedEscrows,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
       totalCount: count
@@ -938,6 +952,359 @@ const assignDispute = async (req, res) => {
 };
 
 /* =========================================================
+   FORCE-COMPLETE / FORCE-CANCEL ESCROW (Admin intervention)
+========================================================= */
+const forceCompleteEscrow = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const Escrow = require('../models/Escrow.model');
+
+    const escrow = await Escrow.findById(id).populate('buyer seller', 'name email');
+    if (!escrow) return res.status(404).json({ success: false, message: 'Escrow not found' });
+    if (escrow.status === 'completed') return res.status(400).json({ success: false, message: 'Already completed' });
+
+    escrow.status = 'completed';
+    escrow.delivery = escrow.delivery || {};
+    escrow.delivery.confirmedAt = new Date();
+    escrow.payment = escrow.payment || {};
+    escrow.payment.payoutAvailableAt = new Date(); // immediate — admin override
+    escrow.timeline.push({
+      status: 'completed',
+      timestamp: new Date(),
+      note: `Force-completed by admin: ${reason || 'Admin intervention'}`
+    });
+    await escrow.save();
+
+    // Credit wallet
+    try {
+      const { creditWalletOnCompletion } = require('./wallet.controller');
+      await creditWalletOnCompletion(escrow.seller._id, escrow);
+    } catch (e) { console.error('wallet credit failed:', e.message); }
+
+    // Notify both parties
+    try {
+      const { createNotification } = require('../utils/notificationHelper');
+      await createNotification(escrow.seller._id, 'escrow_completed', 'Escrow Completed by Admin', `"${escrow.title}" was completed by an admin. Funds added to your wallet.`, '/wallet', { escrowId: escrow._id });
+      await createNotification(escrow.buyer._id, 'escrow_completed', 'Escrow Completed by Admin', `"${escrow.title}" was completed by an admin.`, `/escrow/${escrow._id}`, { escrowId: escrow._id });
+    } catch (e) { /* non-fatal */ }
+
+    res.json({ success: true, message: 'Escrow force-completed', data: { escrowId: escrow._id, status: escrow.status } });
+  } catch (err) {
+    console.error('forceCompleteEscrow error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const forceCancelEscrow = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, refundBuyer = true } = req.body;
+    const Escrow = require('../models/Escrow.model');
+
+    const escrow = await Escrow.findById(id).populate('buyer seller', 'name email');
+    if (!escrow) return res.status(404).json({ success: false, message: 'Escrow not found' });
+    if (['completed', 'cancelled'].includes(escrow.status)) {
+      return res.status(400).json({ success: false, message: 'Escrow already finalised' });
+    }
+
+    escrow.status = 'cancelled';
+    escrow.cancelledAt = new Date();
+    escrow.cancellationReason = `Admin: ${reason || 'Admin intervention'}`;
+    escrow.timeline.push({ status: 'cancelled', timestamp: new Date(), note: `Force-cancelled by admin: ${reason || ''}` });
+    await escrow.save();
+
+    // Refund buyer wallet if funded and requested
+    if (refundBuyer && escrow.payment?.buyerPaid) {
+      try {
+        const Wallet = require('../models/Wallet.model');
+        let wallet = await Wallet.findOne({ user: escrow.buyer._id });
+        if (!wallet) wallet = await Wallet.create({ user: escrow.buyer._id });
+        const refundAmount = parseFloat((escrow.payment.buyerPaid || escrow.amount).toString());
+        const before = wallet.balance;
+        wallet.balance += refundAmount;
+        wallet.transactions.push({
+          type: 'refund', amount: refundAmount, currency: wallet.currency,
+          description: `Refund for cancelled escrow: ${escrow.title}`,
+          escrowId: escrow._id, status: 'completed',
+          balanceBefore: before, balanceAfter: wallet.balance,
+          reference: `REFUND_CANCEL_${escrow.escrowId}`
+        });
+        await wallet.save();
+      } catch (e) { console.error('refund wallet failed:', e.message); }
+    }
+
+    const { createNotification } = require('../utils/notificationHelper').catch ? {} : require('../utils/notificationHelper');
+    try {
+      await createNotification(escrow.buyer._id, 'escrow_cancelled', 'Escrow Cancelled by Admin', `"${escrow.title}" was cancelled by an admin. ${refundBuyer ? 'Refund added to your wallet.' : ''}`, '/wallet', { escrowId: escrow._id });
+      await createNotification(escrow.seller._id, 'escrow_cancelled', 'Escrow Cancelled by Admin', `"${escrow.title}" was cancelled by an admin.`, '/dashboard', { escrowId: escrow._id });
+    } catch (e) { /* non-fatal */ }
+
+    res.json({ success: true, message: 'Escrow force-cancelled', data: { escrowId: escrow._id, refundIssued: refundBuyer } });
+  } catch (err) {
+    console.error('forceCancelEscrow error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* =========================================================
+   BAN / SUSPEND USERS
+========================================================= */
+const banUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, duration } = req.body; // duration in days, null = permanent
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    user.status = 'suspended';
+    user.escrowAccess = user.escrowAccess || {};
+    user.escrowAccess.canCreateEscrow = false;
+    user.escrowAccess.canReceiveEscrow = false;
+    user.escrowAccess.suspensionReason = reason || 'Policy violation';
+    if (duration) {
+      user.escrowAccess.suspendedUntil = new Date(Date.now() + duration * 24 * 60 * 60 * 1000);
+    }
+
+    user.auditLog = user.auditLog || [];
+    user.auditLog.push({
+      action: 'ACCOUNT_BANNED',
+      description: `Banned by admin ${req.admin._id}: ${reason}`,
+      timestamp: new Date(),
+      metadata: { adminId: req.admin._id, reason, duration }
+    });
+
+    await user.save();
+
+    try {
+      const { createNotification } = require('../utils/notificationHelper');
+      await createNotification(user._id, 'account_suspended', 'Account Suspended',
+        `Your account has been suspended. Reason: ${reason || 'Policy violation'}. Contact support to appeal.`,
+        '/contact', { reason });
+    } catch (e) { /* non-fatal */ }
+
+    res.json({ success: true, message: `User ${duration ? `suspended for ${duration} days` : 'permanently banned'}`, data: { userId: user._id, status: user.status } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const unbanUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    user.status = 'active';
+    user.escrowAccess = user.escrowAccess || {};
+    user.escrowAccess.canCreateEscrow = true;
+    user.escrowAccess.canReceiveEscrow = true;
+    user.escrowAccess.suspensionReason = null;
+    user.escrowAccess.suspendedUntil = null;
+
+    user.auditLog = user.auditLog || [];
+    user.auditLog.push({ action: 'ACCOUNT_UNBANNED', description: `Unbanned by admin: ${reason || ''}`, timestamp: new Date() });
+    await user.save();
+
+    res.json({ success: true, message: 'User unbanned', data: { userId: user._id, status: user.status } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* =========================================================
+   BROADCAST NOTIFICATIONS
+========================================================= */
+const broadcastNotification = async (req, res) => {
+  try {
+    const { title, message, link, targetTier, targetAll = true } = req.body;
+    if (!title || !message) return res.status(400).json({ success: false, message: 'Title and message required' });
+
+    const query = { status: 'active' };
+    if (!targetAll && targetTier) query.tier = targetTier;
+
+    const users = await User.find(query).select('_id').lean();
+    const { createNotification } = require('../utils/notificationHelper');
+
+    let sent = 0;
+    const BATCH = 100;
+    for (let i = 0; i < users.length; i += BATCH) {
+      const batch = users.slice(i, i + BATCH);
+      await Promise.all(batch.map(u =>
+        createNotification(u._id, 'announcement', title, message, link || '/dashboard', { fromAdmin: true })
+          .catch(() => {})
+      ));
+      sent += batch.length;
+    }
+
+    res.json({ success: true, message: `Broadcast sent to ${sent} users`, data: { sent, total: users.length } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* =========================================================
+   ADMIN WALLET MANAGEMENT (view/credit/debit any user)
+========================================================= */
+const getUserWallet = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const Wallet = require('../models/Wallet.model');
+
+    const user = await User.findById(userId).select('name email');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    let wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) wallet = await Wallet.create({ user: userId });
+
+    const recentTx = [...wallet.transactions].reverse().slice(0, 20);
+
+    res.json({ success: true, data: { user, balance: wallet.balance, pendingBalance: wallet.pendingBalance, totalEarned: wallet.totalEarned, totalWithdrawn: wallet.totalWithdrawn, currency: wallet.currency, recentTransactions: recentTx } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const adminCreditWallet = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason } = req.body;
+    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' });
+    if (!reason) return res.status(400).json({ success: false, message: 'Reason required for audit' });
+
+    const Wallet = require('../models/Wallet.model');
+    let wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) wallet = await Wallet.create({ user: userId });
+
+    await wallet.credit(parseFloat(amount), `Admin credit: ${reason}`, null, null, `ADMIN_CREDIT_${Date.now()}`);
+
+    // Audit log on user
+    await User.findByIdAndUpdate(userId, { $push: { auditLog: { action: 'ADMIN_WALLET_CREDIT', description: `Admin ${req.admin._id} credited ₦${amount}: ${reason}`, timestamp: new Date() } } });
+
+    res.json({ success: true, message: `₦${amount} credited to user wallet`, data: { newBalance: wallet.balance + parseFloat(amount) } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const adminDebitWallet = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason } = req.body;
+    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' });
+    if (!reason) return res.status(400).json({ success: false, message: 'Reason required for audit' });
+
+    const Wallet = require('../models/Wallet.model');
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet || wallet.balance < parseFloat(amount)) {
+      return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
+    }
+
+    await wallet.debit(parseFloat(amount), `Admin debit: ${reason}`, null, `ADMIN_DEBIT_${Date.now()}`);
+    await User.findByIdAndUpdate(userId, { $push: { auditLog: { action: 'ADMIN_WALLET_DEBIT', description: `Admin ${req.admin._id} debited ₦${amount}: ${reason}`, timestamp: new Date() } } });
+
+    res.json({ success: true, message: `₦${amount} debited from user wallet`, data: { newBalance: wallet.balance - parseFloat(amount) } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* =========================================================
+   REVENUE DASHBOARD
+========================================================= */
+const getRevenueStats = async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    const Escrow = require('../models/Escrow.model');
+    const Withdrawal = require('../models/Withdrawal.model');
+
+    const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const [completedEscrows, withdrawalsTotal, totalUsers, activeEscrows] = await Promise.all([
+      Escrow.find({ status: 'completed', updatedAt: { $gte: since } })
+        .select('amount payment escrowId createdAt updatedAt'),
+      Withdrawal.aggregate([
+        { $match: { status: 'completed', createdAt: { $gte: since } } },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+      ]),
+      User.countDocuments({ createdAt: { $gte: since } }),
+      Escrow.countDocuments({ status: { $in: ['pending', 'accepted', 'funded', 'delivered'] } })
+    ]);
+
+    // Calculate fees earned (transaction volume × fee rate)
+    let totalVolume = 0;
+    let totalFees = 0;
+    for (const escrow of completedEscrows) {
+      const amount = parseFloat((escrow.amount || 0).toString());
+      totalVolume += amount;
+      const buyerPaid = escrow.payment?.buyerPaid ? parseFloat(escrow.payment.buyerPaid.toString()) : 0;
+      const sellerReceives = escrow.payment?.sellerReceives ? parseFloat(escrow.payment.sellerReceives.toString()) : 0;
+      if (buyerPaid && sellerReceives) totalFees += buyerPaid - sellerReceives;
+    }
+
+    // Daily breakdown for chart
+    const dailyMap = {};
+    for (const escrow of completedEscrows) {
+      const day = escrow.updatedAt.toISOString().slice(0, 10);
+      if (!dailyMap[day]) dailyMap[day] = { date: day, volume: 0, fees: 0, count: 0 };
+      const amount = parseFloat((escrow.amount || 0).toString());
+      dailyMap[day].volume += amount;
+      dailyMap[day].count += 1;
+      const bp = escrow.payment?.buyerPaid ? parseFloat(escrow.payment.buyerPaid.toString()) : 0;
+      const sr = escrow.payment?.sellerReceives ? parseFloat(escrow.payment.sellerReceives.toString()) : 0;
+      if (bp && sr) dailyMap[day].fees += (bp - sr);
+    }
+
+    const dailyStats = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        summary: {
+          totalVolume: Math.round(totalVolume),
+          totalFees: Math.round(totalFees),
+          completedTransactions: completedEscrows.length,
+          totalWithdrawals: withdrawalsTotal[0]?.total || 0,
+          withdrawalCount: withdrawalsTotal[0]?.count || 0,
+          newUsers: totalUsers,
+          activeEscrows
+        },
+        dailyStats
+      }
+    });
+  } catch (err) {
+    console.error('getRevenueStats error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/* =========================================================
+   WITHDRAWAL AUTO-APPROVAL THRESHOLD
+========================================================= */
+const getWithdrawalSettings = async (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      autoApprovalThreshold: parseInt(process.env.WITHDRAWAL_AUTO_APPROVE_THRESHOLD || '50000'),
+      currency: 'NGN',
+      minWithdrawal: 1000,
+      maxWithdrawal: parseInt(process.env.MAX_WITHDRAWAL_AMOUNT || '5000000')
+    }
+  });
+};
+
+const updateWithdrawalSettings = async (req, res) => {
+  // In production this would persist to DB / env management
+  // For now returns confirmation — set via Render env vars
+  res.json({ success: true, message: 'Update WITHDRAWAL_AUTO_APPROVE_THRESHOLD in Render environment variables', data: req.body });
+};
+
+/* =========================================================
    EXPORT ALL FUNCTIONS
 ========================================================= */
 module.exports = {
@@ -965,5 +1332,22 @@ module.exports = {
   bulkUpdateTierFees,
   updateGatewayCosts,
   getFeeSettingsHistory,
-  resetFeesToDefault
+  resetFeesToDefault,
+  // Admin escrow intervention
+  forceCompleteEscrow,
+  forceCancelEscrow,
+  // User management
+  banUser,
+  unbanUser,
+  // Broadcast
+  broadcastNotification,
+  // Wallet management
+  getUserWallet,
+  adminCreditWallet,
+  adminDebitWallet,
+  // Revenue
+  getRevenueStats,
+  // Withdrawal settings
+  getWithdrawalSettings,
+  updateWithdrawalSettings
 };

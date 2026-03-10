@@ -188,6 +188,7 @@ app.use('/api/disputes', disputeRoutes);
 
 // Payments
 app.use('/api/payments', paymentRoutes);
+app.use('/api/wallet', require('./routes/wallet.routes'));
 
 // Notifications
 app.use('/api/notifications', notificationRoutes);

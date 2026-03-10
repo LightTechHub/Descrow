@@ -1,243 +1,222 @@
-// backend/middleware/auth.middleware.js - REFINED & COMPLETE
+// backend/middleware/auth.middleware.js
+// ADDED: in-memory token blacklist (for logout invalidation)
+// For production scale, use Redis instead of the in-memory Set
 const jwt = require('jsonwebtoken');
 const User = require('../models/User.model');
-const Admin = require('../models/Admin.model');
 
-/**
- * Authenticate user via JWT token
- * Allows unverified users to access basic routes (profile, dashboard data)
- * but blocks them from creating escrows or sensitive actions
- */
-exports.authenticate = async (req, res, next) => {
+// ── In-memory token blacklist ─────────────────────────────────────────────────
+// Holds JTI or full tokens that have been explicitly logged out.
+// Auto-clears expired entries every hour to prevent unbounded growth.
+const tokenBlacklist = new Set();
+
+setInterval(() => {
+  // We can't easily decode without verifying, so we do a brute-force clear
+  // of tokens older than 7d (the max JWT_EXPIRE). In production use Redis TTL.
+  // Here we just prune the set if it gets large (simple heuristic).
+  if (tokenBlacklist.size > 10000) {
+    console.log('⚠️ Token blacklist pruned (exceeded 10k entries)');
+    tokenBlacklist.clear();
+  }
+}, 60 * 60 * 1000);
+
+// Export so auth.controller.js can call blacklistToken(token)
+const blacklistToken = (token) => {
+  if (token) tokenBlacklist.add(token);
+};
+
+// ── Paths that don't need a fully verified user ───────────────────────────────
+const PUBLIC_GET_PATHS = [
+  '/api/escrow/public',
+  '/api/platform',
+  '/api/health'
+];
+
+/* ============================================================
+   authenticate (alias: protect)
+   - Verifies JWT
+   - Checks token blacklist
+   - Allows unverified email on GET requests
+============================================================ */
+const authenticate = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required',
-        code: 'NO_TOKEN'
-      });
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'Authentication required. Please log in.' });
     }
 
-    // Verify JWT
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    // ── Blacklist check ────────────────────────────────────────────────────────
+    if (tokenBlacklist.has(token)) {
+      return res.status(401).json({ success: false, message: 'Token has been revoked. Please log in again.', code: 'TOKEN_REVOKED' });
+    }
+
+    // ── Verify JWT ────────────────────────────────────────────────────────────
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
-      if (jwtError.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Session expired. Please login again.',
-          code: 'TOKEN_EXPIRED'
-        });
+    } catch (jwtErr) {
+      if (jwtErr.name === 'TokenExpiredError') {
+        return res.status(401).json({ success: false, message: 'Session expired. Please log in again.', code: 'TOKEN_EXPIRED' });
       }
-      if (jwtError.name === 'JsonWebTokenError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid authentication token',
-          code: 'INVALID_TOKEN'
-        });
-      }
-      throw jwtError;
+      return res.status(401).json({ success: false, message: 'Invalid token', code: 'TOKEN_INVALID' });
     }
 
-    // Get user from database
-    const user = await User.findById(decoded.id).select('-password');
-
+    // ── Load user ─────────────────────────────────────────────────────────────
+    const user = await User.findById(decoded.id).select('-password -twoFactorSecret');
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User account not found',
-        code: 'USER_NOT_FOUND'
-      });
+      return res.status(401).json({ success: false, message: 'User not found' });
     }
 
-    // ✅ FIXED: Allow these routes even if email not verified
-    // Dashboard needs to load basic user info to show verification banner
-    const isAllowedUnverifiedRoute = 
-      req.path.includes('/users/me') ||
-      req.path.includes('/profile') ||
-      req.path.includes('/notifications') ||
-      req.path.includes('/kyc/status') ||           // Allow checking KYC status
-      req.path.includes('/verify-email') ||         // Allow email verification
-      req.path.includes('/resend-verification') ||  // Allow resending verification
-      req.method === 'GET';                         // Allow all GET requests (reading data)
-
-    // Block unverified users from creating/modifying data
-    if (!user.verified && !isAllowedUnverifiedRoute) {
-      return res.status(403).json({
-        success: false,
-        message: 'Please verify your email first',
-        code: 'EMAIL_NOT_VERIFIED',
-        requiresVerification: true
-      });
+    if (user.status === 'deleted') {
+      return res.status(401).json({ success: false, message: 'Account not found' });
     }
 
-    // Check account status
-    if (!user.isActive || user.status === 'suspended' || user.accountStatus === 'suspended') {
+    if (user.status === 'suspended') {
       return res.status(403).json({
         success: false,
-        message: 'Account is suspended or inactive',
+        message: 'Account suspended. Contact support.',
         code: 'ACCOUNT_SUSPENDED'
       });
     }
 
-    // Attach user to request
-    req.user = user;
-    next();
+    // ── Email verification gate ───────────────────────────────────────────────
+    // Allow unverified users on GET requests and specific exempt paths
+    const exemptPaths = [
+      '/api/auth/verify-email',
+      '/api/auth/resend-verification',
+      '/api/auth/logout',
+      '/api/auth/refresh-token',
+      '/api/profile',
+      '/api/auth/password-status',
+      '/api/auth/set-password'
+    ];
 
-  } catch (error) {
-    console.error('❌ Authentication error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Authentication failed',
-      code: 'AUTH_ERROR'
-    });
-  }
-};
+    const isExempt = exemptPaths.some(p => req.path.startsWith(p));
+    const isGetRequest = req.method === 'GET';
+    const isPublicGetPath = PUBLIC_GET_PATHS.some(p => req.path.startsWith(p));
 
-/**
- * Alias for authenticate (backward compatibility)
- */
-exports.protect = exports.authenticate;
-
-/**
- * Optional authentication (doesn't block if no token)
- * Used for public endpoints that can show different content for logged-in users
- */
-exports.optionalAuth = async (req, res, next) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('-password');
-
-        if (user && user.isActive) {
-          req.user = user;
-        }
-      } catch (error) {
-        // Silently ignore errors for optional auth
-      }
-    }
-
-    next();
-  } catch (error) {
-    next();
-  }
-};
-
-/**
- * Admin authentication
- * Verifies admin JWT token and checks admin status
- */
-exports.adminAuth = async (req, res, next) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin authentication required',
-        code: 'NO_TOKEN'
-      });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
-      if (jwtError.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Session expired',
-          code: 'TOKEN_EXPIRED'
-        });
-      }
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token',
-        code: 'INVALID_TOKEN'
-      });
-    }
-
-    const admin = await Admin.findById(decoded.id).select('-password');
-
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not found',
-        code: 'ADMIN_NOT_FOUND'
-      });
-    }
-
-    if (admin.status !== 'active') {
+    if (!user.verified && !isExempt && !isGetRequest && !isPublicGetPath) {
       return res.status(403).json({
         success: false,
-        message: 'Admin account is not active',
-        code: 'ADMIN_INACTIVE'
+        message: 'Please verify your email to access this feature.',
+        code: 'EMAIL_NOT_VERIFIED',
+        requiresVerification: true,
+        email: user.email
       });
+    }
+
+    req.user = user;
+    req.token = token; // so logout can blacklist it
+    next();
+
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ success: false, message: 'Authentication failed' });
+  }
+};
+
+/* ============================================================
+   optionalAuth — doesn't fail if no token present
+============================================================ */
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+
+    const token = authHeader.split(' ')[1];
+    if (!token || tokenBlacklist.has(token)) return next();
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password -twoFactorSecret');
+      if (user && user.status === 'active') {
+        req.user = user;
+        req.token = token;
+      }
+    } catch { /* ignore — optional */ }
+
+    next();
+  } catch {
+    next();
+  }
+};
+
+/* ============================================================
+   adminAuth — for admin routes
+============================================================ */
+const Admin = require('../models/Admin.model');
+
+const adminAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'Admin authentication required' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token || tokenBlacklist.has(token)) {
+      return res.status(401).json({ success: false, message: 'Invalid or revoked token' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.type !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized as admin' });
+    }
+
+    const admin = await Admin.findById(decoded.id);
+    if (!admin || !admin.isActive) {
+      return res.status(403).json({ success: false, message: 'Admin account not found or inactive' });
     }
 
     req.admin = admin;
+    req.token = token;
     next();
 
   } catch (error) {
-    console.error('❌ AdminAuth error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Authentication failed',
-      code: 'AUTH_ERROR'
-    });
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Admin session expired' });
+    }
+    res.status(401).json({ success: false, message: 'Admin authentication failed' });
   }
 };
 
-/**
- * Check specific admin permission
- * Usage: router.post('/users', adminAuth, checkPermission('manage_users'), controller)
- */
-exports.checkPermission = (permission) => {
+/* ============================================================
+   checkPermission — granular admin permission check
+============================================================ */
+const checkPermission = (permission) => {
   return (req, res, next) => {
-    const admin = req.admin;
-
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin authentication required'
-      });
+    if (!req.admin) {
+      return res.status(401).json({ success: false, message: 'Admin authentication required' });
     }
-
-    // Master admin has all permissions
-    if (admin.role === 'master') {
-      return next();
+    if (req.admin.role === 'master') return next();
+    if (!req.admin.permissions?.[permission]) {
+      return res.status(403).json({ success: false, message: `Permission denied: ${permission}` });
     }
-
-    if (!admin.permissions || !admin.permissions[permission]) {
-      return res.status(403).json({
-        success: false,
-        message: `Permission denied: ${permission} required`
-      });
-    }
-
     next();
   };
 };
 
-/**
- * Backward-compatible: old isAdmin middleware
- * Checks if user (not admin) has admin role
- */
-exports.isAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Admin access required',
-      code: 'ADMIN_REQUIRED'
-    });
-  }
-  next();
-};
+/* ============================================================
+   isAdmin — alias for adminAuth (backward compat)
+============================================================ */
+const isAdmin = adminAuth;
 
-module.exports = exports;
+/* ============================================================
+   protectAdmin — alias for adminAuth used in admin.routes
+============================================================ */
+const protectAdmin = adminAuth;
+
+module.exports = {
+  authenticate,
+  protect: authenticate,    // alias
+  optionalAuth,
+  adminAuth,
+  protectAdmin,
+  isAdmin,
+  checkPermission,
+  blacklistToken            // exported so logout controller can call it
+};

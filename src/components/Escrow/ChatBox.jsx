@@ -29,7 +29,9 @@ const ChatBox = ({ escrowId, currentUser }) => {
       const response = await chatService.getMessages(escrowId);
       if (response.success) {
         // Support both response shapes from backend
-        const msgs = response.data?.messages || response.data?.chat || response.data || [];
+        // Backend returns: { success, data: { messages: [], pagination: {} } }
+        // chatService returns axios response.data, so response = backend body
+        const msgs = response.data?.messages || [];
         setMessages(Array.isArray(msgs) ? msgs : []);
       }
     } catch (error) {
@@ -81,7 +83,7 @@ const ChatBox = ({ escrowId, currentUser }) => {
   // sender may be a populated object {_id, name} OR a plain ObjectId string.
   // Compare against both currentUser.id and currentUser._id.
   const isCurrentUser = (msg) => {
-    const senderId = msg.sender?._id?.toString() || msg.sender?.toString();
+    const senderId = msg.sender?._id?.toString() || msg.sender?.toString() || '';
     const myId = currentUser?.id?.toString() || currentUser?._id?.toString();
     return senderId === myId;
   };

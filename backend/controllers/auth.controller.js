@@ -366,17 +366,22 @@ exports.resetPassword = async (req, res) => {
 };
 
 /* ============================================================
-   LOGOUT
+   LOGOUT — blacklists the current token
 ============================================================ */
 exports.logout = (req, res) => {
-  // Optionally deactivate the session that was used
+  // Blacklist the token so it can't be reused even before expiry
+  try {
+    const { blacklistToken } = require('../middleware/auth.middleware');
+    if (req.token) blacklistToken(req.token);
+  } catch (e) { /* non-fatal */ }
+
+  // Deactivate the session (non-blocking)
   if (req.user) {
-    const authHeader = req.headers.authorization;
-    // Non-blocking session cleanup
     User.findByIdAndUpdate(req.user._id, {
       $set: { 'loginSessions.$[].isActive': false }
     }).catch(() => {});
   }
+
   res.json({ success: true, message: 'Logged out successfully' });
 };
 

@@ -9,7 +9,8 @@ import {
   Bell,
   Settings,
   LogOut,
-  Plus
+  Plus,
+  Wallet
 } from 'lucide-react';
 
 import BusinessOverviewTab from '../components/Dashboard/BusinessOverviewTab';
@@ -135,8 +136,10 @@ const UnifiedDashboard = () => {
   };
 
   const handleCreateSuccess = () => {
+    // Do NOT reload or navigate here.
+    // CreateEscrowModal handles navigation to /escrow/:id after success.
+    // Calling window.location.reload() here would race against that navigation and win.
     setShowCreateModal(false);
-    window.location.reload();
   };
 
   if (loadingUser || !user) {
@@ -186,6 +189,15 @@ const UnifiedDashboard = () => {
               >
                 <Plus className="w-5 h-5" />
                 Create Escrow
+              </button>
+
+              {/* Wallet */}
+              <button
+                onClick={() => navigate('/wallet')}
+                className="p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"
+                title="Wallet"
+              >
+                <Wallet className="w-6 h-6" />
               </button>
 
               {/* Notifications */}

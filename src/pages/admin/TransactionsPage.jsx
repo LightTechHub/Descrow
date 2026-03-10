@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Search, Download, Eye, Loader, Package,
+  ArrowLeft, Search, Eye, Loader, Package,
   CheckCircle, Clock, XCircle, AlertCircle, RefreshCw,
   ChevronLeft, ChevronRight, X
 } from 'lucide-react';
@@ -14,6 +14,7 @@ const TransactionDetailModal = ({ transaction, onClose }) => {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchDetails = async () => {
       try {
@@ -67,7 +68,7 @@ const TransactionDetailModal = ({ transaction, onClose }) => {
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Amount</p>
                   <p className="text-white font-bold text-lg">
-                    {t.currency || '₦'}{(t.amount || 0).toLocaleString()}
+                    {t.currency || '₦'}{parseFloat(t.amount?.toString() || '0').toLocaleString()}
                   </p>
                 </div>
                 <div>
@@ -96,7 +97,7 @@ const TransactionDetailModal = ({ transaction, onClose }) => {
                   {t.milestones.map((m, i) => (
                     <div key={i} className="flex items-center justify-between py-1 text-sm">
                       <span className="text-gray-300">{m.description}</span>
-                      <span className="text-white font-semibold">{t.currency}{m.amount?.toLocaleString()}</span>
+                      <span className="text-white font-semibold">{t.currency}{parseFloat(m.amount?.toString() || '0').toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -121,11 +122,13 @@ const TransactionsPage = ({ admin }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedTx, setSelectedTx] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchTransactions();
   }, [statusFilter, currentPage]);
 
   // Debounce search
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const timer = setTimeout(() => { setCurrentPage(1); fetchTransactions(); }, 400);
     return () => clearTimeout(timer);
@@ -270,7 +273,7 @@ const TransactionsPage = ({ admin }) => {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-white font-semibold text-sm">
-                        {tx.currency || '₦'}{(tx.amount || 0).toLocaleString()}
+                        {tx.currency || '₦'}{parseFloat(tx.amount?.toString() || '0').toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-3">{getStatusBadge(tx.status)}</td>

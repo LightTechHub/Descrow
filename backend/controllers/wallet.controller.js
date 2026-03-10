@@ -373,7 +373,7 @@ exports.adminUpdateWithdrawal = async (req, res) => {
 
     withdrawal.status = status;
     withdrawal.adminNote = adminNote || withdrawal.adminNote;
-    withdrawal.processedBy = req.admin._id;
+    withdrawal.processedBy = (req.admin || req.user)?._id;
     if (status === 'completed') withdrawal.completedAt = new Date();
     await withdrawal.save();
 

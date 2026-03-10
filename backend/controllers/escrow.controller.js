@@ -1106,6 +1106,33 @@ exports.confirmDelivery = async (req, res) => {
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
+    // ✅ Credit seller's wallet with their net amount
+    try {
+      const { creditWalletOnCompletion } = require('./wallet.controller');
+      await creditWalletOnCompletion(escrow.seller._id, escrow);
+    } catch (walletErr) {
+      console.error('⚠️ Wallet credit failed (non-fatal):', walletErr.message);
+      // Don't fail the confirmation — log and investigate separately
+    }
+
+    // Notify seller
+    try {
+      const { createNotification } = require('../utils/notificationHelper');
+      const sellerReceives = escrow.payment?.sellerReceives
+        ? parseFloat(escrow.payment.sellerReceives.toString())
+        : parseFloat(escrow.amount.toString());
+      await createNotification(
+        escrow.seller._id,
+        'payment_received',
+        'Payment Added to Wallet!',
+        `₦${sellerReceives.toLocaleString()} from "${escrow.title}" has been added to your wallet.`,
+        '/wallet',
+        { escrowId: escrow._id, amount: sellerReceives }
+      );
+    } catch (notifErr) {
+      console.error('⚠️ Notification failed:', notifErr.message);
+    }
+
     res.json({
       success: true,
       message: 'Delivery confirmed',
@@ -1304,4 +1331,4 @@ exports.getGPSTracking = async (req, res) => {
   }
 };
 
-module.exports = exports;6
+module.exports = exports;

@@ -1095,24 +1095,29 @@ exports.confirmDelivery = async (req, res) => {
 
     escrow.status = 'completed';
     escrow.delivery.confirmedAt = new Date();
+
+    // ── 24hr payout hold: seller cannot withdraw until this time ──────────────
+    const PAYOUT_HOLD_HOURS = parseInt(process.env.PAYOUT_HOLD_HOURS || '24');
+    escrow.payment = escrow.payment || {};
+    escrow.payment.payoutAvailableAt = new Date(Date.now() + PAYOUT_HOLD_HOURS * 60 * 60 * 1000);
+
     escrow.timeline.push({
       status: 'completed',
       timestamp: new Date(),
       actor: userId,
       actorRole: 'buyer',
-      note: 'Delivery confirmed by buyer'
+      note: `Delivery confirmed by buyer. Payout available after ${PAYOUT_HOLD_HOURS}h hold.`
     });
 
     await escrow.save();
     await escrow.populate('buyer seller', 'name email');
 
-    // ✅ Credit seller's wallet with their net amount
+    // ✅ Credit seller's wallet (funds held until payoutAvailableAt)
     try {
       const { creditWalletOnCompletion } = require('./wallet.controller');
       await creditWalletOnCompletion(escrow.seller._id, escrow);
     } catch (walletErr) {
       console.error('⚠️ Wallet credit failed (non-fatal):', walletErr.message);
-      // Don't fail the confirmation — log and investigate separately
     }
 
     // Notify seller
@@ -1125,9 +1130,9 @@ exports.confirmDelivery = async (req, res) => {
         escrow.seller._id,
         'payment_received',
         'Payment Added to Wallet!',
-        `₦${sellerReceives.toLocaleString()} from "${escrow.title}" has been added to your wallet.`,
+        `₦${sellerReceives.toLocaleString()} from "${escrow.title}" has been added to your wallet. Available to withdraw in ${PAYOUT_HOLD_HOURS} hours.`,
         '/wallet',
-        { escrowId: escrow._id, amount: sellerReceives }
+        { escrowId: escrow._id, amount: sellerReceives, payoutAvailableAt: escrow.payment.payoutAvailableAt }
       );
     } catch (notifErr) {
       console.error('⚠️ Notification failed:', notifErr.message);
@@ -1328,6 +1333,74 @@ exports.getGPSTracking = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch tracking' });
+  }
+};
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTO-RELEASE: runs via cron job (subscription.cron.js or dedicated cron)
+// Escrows in 'delivered' state for 72+ hours without buyer confirmation
+// are auto-completed and seller wallet credited
+// ══════════════════════════════════════════════════════════════════════════════
+exports.autoReleaseEscrows = async () => {
+  const DISPUTE_WINDOW_HOURS = parseInt(process.env.DISPUTE_WINDOW_HOURS || '72');
+  const cutoff = new Date(Date.now() - DISPUTE_WINDOW_HOURS * 60 * 60 * 1000);
+
+  try {
+    const escrows = await Escrow.find({
+      status: 'delivered',
+      'delivery.deliveredAt': { $lte: cutoff },
+      'dispute.isDisputed': { $ne: true }
+    }).populate('buyer seller', 'name email');
+
+    let released = 0;
+    for (const escrow of escrows) {
+      try {
+        escrow.status = 'completed';
+        escrow.delivery.confirmedAt = new Date();
+        const PAYOUT_HOLD_HOURS = parseInt(process.env.PAYOUT_HOLD_HOURS || '24');
+        escrow.payment = escrow.payment || {};
+        escrow.payment.payoutAvailableAt = new Date(Date.now() + PAYOUT_HOLD_HOURS * 60 * 60 * 1000);
+        escrow.timeline.push({
+          status: 'completed',
+          timestamp: new Date(),
+          note: `Auto-released after ${DISPUTE_WINDOW_HOURS}h buyer inaction`
+        });
+        await escrow.save();
+
+        const { creditWalletOnCompletion } = require('./wallet.controller');
+        await creditWalletOnCompletion(escrow.seller._id, escrow);
+
+        const { createNotification } = require('../utils/notificationHelper');
+        const sellerReceives = escrow.payment?.sellerReceives
+          ? parseFloat(escrow.payment.sellerReceives.toString())
+          : parseFloat(escrow.amount.toString());
+
+        await createNotification(
+          escrow.seller._id, 'payment_received',
+          'Payment Auto-Released!',
+          `₦${sellerReceives.toLocaleString()} from "${escrow.title}" auto-released (buyer didn't dispute in ${DISPUTE_WINDOW_HOURS}h).`,
+          '/wallet', { escrowId: escrow._id }
+        );
+        await createNotification(
+          escrow.buyer._id, 'escrow_completed',
+          'Escrow Auto-Completed',
+          `"${escrow.title}" was auto-completed after ${DISPUTE_WINDOW_HOURS} hours.`,
+          `/escrow/${escrow._id}`, { escrowId: escrow._id }
+        );
+
+        released++;
+        console.log(`✅ Auto-released escrow ${escrow.escrowId}`);
+      } catch (err) {
+        console.error(`❌ Failed to auto-release escrow ${escrow._id}:`, err.message);
+      }
+    }
+
+    console.log(`🔄 Auto-release cron: ${released}/${escrows.length} escrows released`);
+    return { released, checked: escrows.length };
+  } catch (err) {
+    console.error('❌ autoReleaseEscrows error:', err);
+    return { released: 0, error: err.message };
   }
 };
 

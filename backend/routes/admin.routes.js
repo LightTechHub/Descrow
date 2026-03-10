@@ -128,7 +128,7 @@ router.post('/fees/reset', protectAdmin, masterOnly,
 
 // ── Withdrawal management ────────────────────────────────────────────
 const { adminGetWithdrawals, adminUpdateWithdrawal } = require('../controllers/wallet.controller');
-router.get('/withdrawals', authenticate, adminOnly, adminGetWithdrawals);
-router.patch('/withdrawals/:id', authenticate, adminOnly, adminUpdateWithdrawal);
+router.get('/withdrawals', protectAdmin, adminGetWithdrawals);
+router.patch('/withdrawals/:id', protectAdmin, adminUpdateWithdrawal);
 
 module.exports = router;

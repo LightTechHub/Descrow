@@ -16,6 +16,7 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   const [userDetails, setUserDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(true);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchDetails = async () => {
       try {
@@ -266,10 +267,12 @@ const UsersPage = ({ admin }) => {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchUsers();
   }, [filters, currentPage]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentPage(1);

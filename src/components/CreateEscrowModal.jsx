@@ -331,7 +331,6 @@ const CreateEscrowModal = ({ user, onClose, onSuccess }) => {
           </div>,
           { duration: 3000 }
         );
-        onSuccess?.();
         setTimeout(() => { onClose(); navigate(`/escrow/${mongoId}`); }, 1000);
       } else {
         toast.error(response.message || 'Failed to create escrow');

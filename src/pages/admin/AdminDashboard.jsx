@@ -5,7 +5,7 @@ import {
   Users, DollarSign, Package, AlertCircle,
   TrendingUp, Shield, LogOut, Loader,
   RefreshCw, ChevronRight, LayoutDashboard,
-  Settings, Key, CreditCard, UserCog, Menu, X
+  Settings, Key, CreditCard, UserCog, Menu, X, Banknote
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { path: '/admin/transactions', label: 'Transactions', icon: Package,         permission: 'viewTransactions' },
   { path: '/admin/disputes',     label: 'Disputes',     icon: AlertCircle,     permission: 'manageDisputes' },
   { path: '/admin/analytics',    label: 'Analytics',    icon: TrendingUp,      permission: 'viewAnalytics' },
+  { path: '/admin/withdrawals',  label: 'Withdrawals',  icon: Banknote,        permission: 'viewTransactions' },
   { path: '/admin/admins',       label: 'Admins',       icon: UserCog,         masterOnly: true },
   { path: '/admin/fees',         label: 'Fee Settings', icon: Settings,        masterOnly: true },
   { path: '/admin/payments',     label: 'Payments',     icon: CreditCard,      masterOnly: true },
@@ -230,11 +231,12 @@ const AdminDashboard = ({ admin }) => {
           </div>
 
           {/* Quick Nav */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
               { permission: 'viewTransactions', path: '/admin/transactions', icon: Package,     label: 'Transactions', color: 'text-blue-400',   count: stats?.totalEscrows },
               { permission: 'manageDisputes',   path: '/admin/disputes',     icon: AlertCircle, label: 'Disputes',     color: 'text-yellow-400', count: stats?.pendingDisputes },
               { permission: 'verifyUsers',      path: '/admin/users',        icon: Users,       label: 'Users',        color: 'text-green-400',  count: stats?.totalUsers },
+              { permission: 'viewTransactions', path: '/admin/withdrawals',  icon: Banknote,    label: 'Withdrawals',  color: 'text-orange-400', count: null },
               { permission: 'viewAnalytics',    path: '/admin/analytics',    icon: TrendingUp,  label: 'Analytics',    color: 'text-purple-400', count: null }
             ].filter(item => admin?.role === 'master' || admin?.permissions?.[item.permission])
              .map((item) => {

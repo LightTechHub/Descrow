@@ -40,6 +40,7 @@ import ProfilePage from './pages/Profile/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
 import PaymentPage from './pages/PaymentPage';
 import PaymentVerificationPage from './pages/PaymentVerificationPage';
+import WalletPage from './pages/WalletPage';
 
 // ==================== SUBSCRIPTION PAGES ====================
 import UpgradePage from './pages/Subscription/UpgradePage';
@@ -56,6 +57,7 @@ import PaymentGatewaysPage from './pages/admin/PaymentGatewaysPage';
 import APIManagementPage from './pages/admin/APIManagementPage';
 import AdminManagementPage from './pages/admin/AdminManagementPage';
 import FeeManagementPage from './pages/admin/FeeManagementPage';
+import WithdrawalsPage from './pages/admin/WithdrawalsPage';
 
 // ==================== 404 ====================
 const NotFound = () => {
@@ -96,7 +98,6 @@ function App() {
   const [admin, setAdmin] = useState(null);
   const [adminLoading, setAdminLoading] = useState(true);
 
-  // FIX: use useLocation for reactive path checks
   const location = useLocation();
 
   // ── Admin auth init ──────────────────────────────────────────────────────────
@@ -114,8 +115,19 @@ function App() {
     setAdminLoading(false);
   }, []);
 
-  // ── Single loading gate — wait for both auth systems ────────────────────────
-  // FIX: removed the duplicate loading check that appeared twice
+  // ── Auto-logout on 401 (token expired) ──────────────────────────────────────
+  useEffect(() => {
+    const handleUnauthorized = (e) => {
+      if (e.detail?.status === 401 && isAuthenticated) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login?reason=session_expired';
+      }
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, [isAuthenticated]);
+
   if (loading || adminLoading) {
     return <Spinner />;
   }
@@ -128,10 +140,7 @@ function App() {
 
   const AdminProtectedRoute = ({ children, requiredPermission }) => {
     if (!admin) return <Navigate to="/admin/login" replace />;
-    // FIX: master admin bypasses all permission checks
     if (requiredPermission && admin.role !== 'master') {
-      // FIX: manageFees was missing from permissions — treat it as master-only
-      // For other permissions, check the permissions object
       const masterOnlyPerms = ['manageFees', 'manageAdmins', 'manageAPI', 'managePayments'];
       if (masterOnlyPerms.includes(requiredPermission)) {
         return <Navigate to="/admin/dashboard" replace />;
@@ -144,7 +153,6 @@ function App() {
   };
 
   // ── Navbar / Footer visibility ────────────────────────────────────────────────
-  // FIX: use location.pathname from useLocation() hook, not window.location.pathname
   const path = location.pathname;
 
   const noNavbarPrefixes = [
@@ -154,7 +162,8 @@ function App() {
   const noFooterPrefixes = [
     '/login', '/signup', '/verify-email', '/forgot-password',
     '/reset-password', '/resend-verification', '/complete-profile', '/admin',
-    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade'
+    '/dashboard', '/escrow', '/profile', '/notifications', '/payment', '/upgrade',
+    '/wallet'
   ];
 
   const shouldShowNavbar = !noNavbarPrefixes.some(p => path.startsWith(p));
@@ -201,6 +210,7 @@ function App() {
           <Route path="/payment/verify" element={<ProtectedRoute><PaymentVerificationPage /></ProtectedRoute>} />
           <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
           <Route path="/upgrade/callback" element={<ProtectedRoute><PaymentCallbackPage /></ProtectedRoute>} />
+          <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
 
           {/* ── Legacy redirects ─────────────────────────────────────────────── */}
           <Route path="/buyer-dashboard" element={<Navigate to="/dashboard" replace />} />
@@ -235,7 +245,6 @@ function App() {
               <AnalyticsPage admin={admin} />
             </AdminProtectedRoute>
           } />
-          {/* FIX: master-only pages — no requiredPermission needed, guard is in component */}
           <Route path="/admin/payments" element={
             <AdminProtectedRoute><PaymentGatewaysPage admin={admin} /></AdminProtectedRoute>
           } />
@@ -247,6 +256,11 @@ function App() {
           } />
           <Route path="/admin/fees" element={
             <AdminProtectedRoute><FeeManagementPage admin={admin} /></AdminProtectedRoute>
+          } />
+          <Route path="/admin/withdrawals" element={
+            <AdminProtectedRoute requiredPermission="viewTransactions">
+              <WithdrawalsPage admin={admin} />
+            </AdminProtectedRoute>
           } />
 
           {/* ── 404 ──────────────────────────────────────────────────────────── */}

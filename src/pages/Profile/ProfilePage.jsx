@@ -1,9 +1,9 @@
 // src/pages/Profile/ProfilePage.jsx
-// COMPLETE FIXED VERSION - PROPERLY LOADS AND DISPLAYS BUSINESS INFO
+// FIXED: removed unused Loader import
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  User, Shield, Settings, FileCheck, CreditCard, ArrowLeft, Loader,
+  User, Shield, Settings, FileCheck, CreditCard, ArrowLeft,
   AlertTriangle, Mail, CheckCircle, Camera, Crown, TrendingUp, Code
 } from 'lucide-react';
 import ProfileTab from './ProfileTab';
@@ -38,7 +38,6 @@ const ProfilePage = () => {
         return;
       }
 
-      // Get full profile data from API (this includes businessInfo)
       const [profileResponse, kycResponse] = await Promise.allSettled([
         profileService.getProfile(),
         profileService.getKYCStatus()
@@ -47,11 +46,6 @@ const ProfilePage = () => {
       if (profileResponse.status === 'fulfilled' && profileResponse.value.success) {
         const profileData = profileResponse.value.data;
         const userData = profileData.user || profileData;
-        
-        // Log to see what we're getting
-        console.log('📊 Profile data loaded:', userData);
-        console.log('🏢 Business info:', userData.businessInfo);
-        console.log('📧 Email:', userData.email);
         
         if (!userData.kycStatus) {
           userData.kycStatus = {
@@ -177,7 +171,6 @@ const ProfilePage = () => {
 
       if (response.success) {
         toast.success('Profile picture updated successfully');
-        
         setUser(prev => ({
           ...prev,
           profilePicture: response.data.profilePicture || response.data.avatarUrl
@@ -247,36 +240,23 @@ const ProfilePage = () => {
 
   const getTierInfo = (tier) => {
     const tiers = {
-      free: { name: 'Free', color: 'gray', icon: Shield },
-      starter: { name: 'Starter', color: 'blue', icon: Shield },
-      growth: { name: 'Growth', color: 'green', icon: TrendingUp },
+      free:       { name: 'Free',       color: 'gray',   icon: Shield },
+      starter:    { name: 'Starter',    color: 'blue',   icon: Shield },
+      growth:     { name: 'Growth',     color: 'green',  icon: TrendingUp },
       enterprise: { name: 'Enterprise', color: 'purple', icon: Crown },
-      api: { name: 'API', color: 'indigo', icon: Code }
+      api:        { name: 'API',        color: 'indigo', icon: Code }
     };
     return tiers[tier?.toLowerCase()] || tiers.free;
   };
 
   const tierInfo = getTierInfo(user.tier);
 
-  // ===== FIXED: Get display name based on account type =====
   const getDisplayName = () => {
     if (user.accountType === 'business') {
-      // For business accounts, show company name first
-      console.log('🏢 Business account - companyName:', user.businessInfo?.companyName);
       return user.businessInfo?.companyName || user.name || 'Business Account';
-    } else {
-      // For individual accounts, show personal name
-      return user.name || 'User';
     }
+    return user.name || 'User';
   };
-
-  // ===== FIXED: Debug what we have =====
-  console.log('👤 Current user data:', {
-    accountType: user.accountType,
-    name: user.name,
-    businessInfo: user.businessInfo,
-    companyName: user.businessInfo?.companyName
-  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -319,7 +299,6 @@ const ProfilePage = () => {
                 />
               ) : null}
               
-              {/* Fallback Avatar - SOLID BLUE */}
               <div className={`w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold border-4 border-white dark:border-gray-800 shadow-lg ${user.profilePicture ? 'hidden' : ''} fallback-avatar`}>
                 {user.accountType === 'business' 
                   ? (user.businessInfo?.companyName?.charAt(0).toUpperCase() || user.name?.charAt(0).toUpperCase() || 'B')
@@ -344,13 +323,11 @@ const ProfilePage = () => {
             </div>
 
             <div className="flex-1">
-              {/* ===== FIXED: Display Name - Company name for business ===== */}
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {getDisplayName()}
               </h1>
               <p className="text-gray-600 dark:text-gray-400">{user.email}</p>
               
-              {/* ===== FIXED: Show owner name for business accounts ===== */}
               {user.accountType === 'business' && user.name && (
                 <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
                   <User className="w-3 h-3 inline mr-1" />
@@ -362,9 +339,9 @@ const ProfilePage = () => {
                 <button
                   onClick={() => navigate('/upgrade')}
                   className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 transition hover:shadow-md ${
-                    tierInfo.color === 'gray' ? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 hover:bg-gray-200' :
-                    tierInfo.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 hover:bg-blue-200' :
-                    tierInfo.color === 'green' ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 hover:bg-green-200' :
+                    tierInfo.color === 'gray'   ? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 hover:bg-gray-200' :
+                    tierInfo.color === 'blue'   ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 hover:bg-blue-200' :
+                    tierInfo.color === 'green'  ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 hover:bg-green-200' :
                     tierInfo.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300 hover:bg-purple-200' :
                     'bg-indigo-100 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-200'
                   }`}
@@ -448,91 +425,30 @@ const ProfilePage = () => {
 const TierUpgradeCTA = ({ currentTier, navigate }) => {
   const getUpgradeMessage = () => {
     switch (currentTier?.toLowerCase()) {
-      case 'free':
-        return {
-          message: 'Upgrade to Starter for more transactions and lower fees',
-          nextTier: 'Starter',
-          color: 'blue'
-        };
-      case 'starter':
-        return {
-          message: 'Upgrade to Growth for milestone payments and unlimited transactions',
-          nextTier: 'Growth',
-          color: 'green'
-        };
-      case 'growth':
-        return {
-          message: 'Upgrade to Enterprise for API access and custom branding',
-          nextTier: 'Enterprise',
-          color: 'purple'
-        };
-      default:
-        return null;
+      case 'free':       return { message: 'Upgrade to Starter for more transactions and lower fees', nextTier: 'Starter', color: 'blue' };
+      case 'starter':    return { message: 'Upgrade to Growth for milestone payments and unlimited transactions', nextTier: 'Growth', color: 'green' };
+      case 'growth':     return { message: 'Upgrade to Enterprise for API access and custom branding', nextTier: 'Enterprise', color: 'purple' };
+      default:           return null;
     }
   };
 
   const upgradeInfo = getUpgradeMessage();
   if (!upgradeInfo) return null;
 
+  const colorMap = { blue: 'blue', green: 'green', purple: 'purple' };
+  const c = colorMap[upgradeInfo.color];
+
   return (
-    <div className={`mt-4 bg-${
-      upgradeInfo.color === 'blue' ? 'blue' :
-      upgradeInfo.color === 'green' ? 'green' :
-      'purple'
-    }-50 dark:bg-${
-      upgradeInfo.color === 'blue' ? 'blue' :
-      upgradeInfo.color === 'green' ? 'green' :
-      'purple'
-    }-900/20 border border-${
-      upgradeInfo.color === 'blue' ? 'blue' :
-      upgradeInfo.color === 'green' ? 'green' :
-      'purple'
-    }-200 dark:border-${
-      upgradeInfo.color === 'blue' ? 'blue' :
-      upgradeInfo.color === 'green' ? 'green' :
-      'purple'
-    }-800 rounded-xl p-4`}>
+    <div className={`mt-4 bg-${c}-50 dark:bg-${c}-900/20 border border-${c}-200 dark:border-${c}-800 rounded-xl p-4`}>
       <div className="flex items-center gap-3">
-        <Crown className={`w-6 h-6 text-${
-          upgradeInfo.color === 'blue' ? 'blue' :
-          upgradeInfo.color === 'green' ? 'green' :
-          'purple'
-        }-600 flex-shrink-0`} />
+        <Crown className={`w-6 h-6 text-${c}-600 flex-shrink-0`} />
         <div className="flex-1">
-          <p className={`text-sm font-semibold text-${
-            upgradeInfo.color === 'blue' ? 'blue' :
-            upgradeInfo.color === 'green' ? 'green' :
-            'purple'
-          }-900 dark:text-${
-            upgradeInfo.color === 'blue' ? 'blue' :
-            upgradeInfo.color === 'green' ? 'green' :
-            'purple'
-          }-200`}>
-            Unlock More Features
-          </p>
-          <p className={`text-sm mt-1 text-${
-            upgradeInfo.color === 'blue' ? 'blue' :
-            upgradeInfo.color === 'green' ? 'green' :
-            'purple'
-          }-800 dark:text-${
-            upgradeInfo.color === 'blue' ? 'blue' :
-            upgradeInfo.color === 'green' ? 'green' :
-            'purple'
-          }-300`}>
-            {upgradeInfo.message}
-          </p>
+          <p className={`text-sm font-semibold text-${c}-900 dark:text-${c}-200`}>Unlock More Features</p>
+          <p className={`text-sm mt-1 text-${c}-800 dark:text-${c}-300`}>{upgradeInfo.message}</p>
         </div>
         <button
           onClick={() => navigate('/upgrade')}
-          className={`px-6 py-2.5 bg-${
-            upgradeInfo.color === 'blue' ? 'blue' :
-            upgradeInfo.color === 'green' ? 'green' :
-            'purple'
-          }-600 hover:bg-${
-            upgradeInfo.color === 'blue' ? 'blue' :
-            upgradeInfo.color === 'green' ? 'green' :
-            'purple'
-          }-700 text-white text-sm font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-2`}
+          className={`px-6 py-2.5 bg-${c}-600 hover:bg-${c}-700 text-white text-sm font-semibold rounded-lg transition whitespace-nowrap flex items-center gap-2`}
         >
           <Crown className="w-4 h-4" />
           Upgrade to {upgradeInfo.nextTier}
@@ -547,12 +463,8 @@ const EmailVerificationWarning = () => (
     <div className="flex items-center gap-3">
       <Mail className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
       <div className="flex-1">
-        <p className="text-sm font-medium text-red-800 dark:text-red-200">
-          Verify Your Email Address
-        </p>
-        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-          Check your inbox for the verification email.
-        </p>
+        <p className="text-sm font-medium text-red-800 dark:text-red-200">Verify Your Email Address</p>
+        <p className="text-sm text-red-700 dark:text-red-300 mt-1">Check your inbox for the verification email.</p>
       </div>
     </div>
   </div>
@@ -575,12 +487,8 @@ const KYCVerificationWarning = ({ kycStatus, onVerifyClick }) => {
       <div className="flex items-center gap-3">
         <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-            Identity Verification Required
-          </p>
-          <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-            {message}
-          </p>
+          <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Identity Verification Required</p>
+          <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">{message}</p>
         </div>
         {buttonText && (
           <button
@@ -608,13 +516,8 @@ const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApprov
         isDisabled = true;
         disabledReason = 'Verify email first';
       } else if (tab.id === 'bank-accounts') {
-        if (!isEmailVerified) {
-          isDisabled = true;
-          disabledReason = 'Verify email first';
-        } else if (!isKYCApproved) {
-          isDisabled = true;
-          disabledReason = 'Complete identity verification first';
-        }
+        if (!isEmailVerified) { isDisabled = true; disabledReason = 'Verify email first'; }
+        else if (!isKYCApproved) { isDisabled = true; disabledReason = 'Complete identity verification first'; }
       }
 
       return (
@@ -642,9 +545,7 @@ const TabSidebar = ({ tabs, activeTab, onTabChange, isEmailVerified, isKYCApprov
 
 const PayoutInfo = () => (
   <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-    <h4 className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">
-      💰 Automatic Payouts
-    </h4>
+    <h4 className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">💰 Automatic Payouts</h4>
     <div className="text-xs text-blue-800 dark:text-blue-300 space-y-1">
       <p><strong>NGN:</strong> Paystack → Bank Transfer</p>
       <p><strong>USD/Foreign:</strong> Flutterwave → Bank/Crypto</p>
@@ -658,18 +559,12 @@ const PayoutInfo = () => (
 
 const TabContent = ({ activeTab, user, kycStatus, onUpdate, kycVerified }) => {
   switch (activeTab) {
-    case 'profile':
-      return <ProfileTab user={user} onUpdate={onUpdate} />;
-    case 'kyc':
-      return <KYCTab user={user} kycStatus={kycStatus} onUpdate={onUpdate} />;
-    case 'bank-accounts':
-      return <BankAccountTab user={user} onUpdate={onUpdate} kycVerified={kycVerified} />;
-    case 'security':
-      return <SecurityTab user={user} onUpdate={onUpdate} />;
-    case 'settings':
-      return <SettingsTab user={user} onUpdate={onUpdate} />;
-    default:
-      return <ProfileTab user={user} onUpdate={onUpdate} />;
+    case 'profile':       return <ProfileTab user={user} onUpdate={onUpdate} />;
+    case 'kyc':           return <KYCTab user={user} kycStatus={kycStatus} onUpdate={onUpdate} />;
+    case 'bank-accounts': return <BankAccountTab user={user} onUpdate={onUpdate} kycVerified={kycVerified} />;
+    case 'security':      return <SecurityTab user={user} onUpdate={onUpdate} />;
+    case 'settings':      return <SettingsTab user={user} onUpdate={onUpdate} />;
+    default:              return <ProfileTab user={user} onUpdate={onUpdate} />;
   }
 };
 

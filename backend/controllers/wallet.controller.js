@@ -77,6 +77,31 @@ exports.requestWithdrawal = async (req, res) => {
     const parsedAmount = parseFloat(amount);
     const wallet = await getOrCreateWallet(req.user.id);
 
+    // ── Payout hold check: funds credited but not yet available ─────────────────
+    // Check if any recent credits have payoutAvailableAt in the future
+    const Escrow = require('../models/Escrow.model');
+    const heldEscrows = await Escrow.find({
+      seller: req.user.id,
+      status: 'completed',
+      'payment.payoutAvailableAt': { $gt: new Date() }
+    }).select('title payment.payoutAvailableAt');
+
+    if (heldEscrows.length > 0) {
+      const earliestRelease = heldEscrows.reduce((min, e) => {
+        const t = new Date(e.payment.payoutAvailableAt);
+        return t < min ? t : min;
+      }, new Date(heldEscrows[0].payment.payoutAvailableAt));
+
+      const minutesLeft = Math.ceil((earliestRelease - Date.now()) / 60000);
+      const hoursLeft = Math.ceil(minutesLeft / 60);
+      return res.status(400).json({
+        success: false,
+        message: `Your funds are under a security hold. Available to withdraw in ${hoursLeft > 1 ? `${hoursLeft} hours` : `${minutesLeft} minutes`}.`,
+        code: 'PAYOUT_HOLD',
+        payoutAvailableAt: earliestRelease
+      });
+    }
+
     if (wallet.balance < parsedAmount) {
       return res.status(400).json({
         success: false,
@@ -163,6 +188,9 @@ exports.requestWithdrawal = async (req, res) => {
       await withdrawal.save();
     }
 
+    // ── Auto-approval threshold ─────────────────────────────────────────────────
+    const AUTO_APPROVE_THRESHOLD = parseInt(process.env.WITHDRAWAL_AUTO_APPROVE_THRESHOLD || '50000');
+
     res.status(201).json({
       success: true,
       message: 'Withdrawal request submitted successfully',
@@ -171,9 +199,25 @@ exports.requestWithdrawal = async (req, res) => {
         reference: withdrawal.reference,
         amount: parsedAmount,
         status: withdrawal.status,
-        bankDetails: { bankName, accountName, accountNumber }
+        bankDetails: { bankName, accountName, accountNumber },
+        autoApproved: parsedAmount <= AUTO_APPROVE_THRESHOLD
       }
     });
+
+    // Send withdrawal requested email (fire-and-forget after response)
+    try {
+      const emailService = require('../services/email.service');
+      const User = require('../models/User.model');
+      const user = await User.findById(req.user.id).select('name email');
+      if (user) {
+        await emailService.sendWithdrawalEmail(user.email, user.name, 'requested', {
+          amount: parsedAmount, currency: 'NGN',
+          bankName, accountName, reference: withdrawal.reference
+        });
+      }
+    } catch (emailErr) {
+      console.error('withdrawal email failed:', emailErr.message);
+    }
   } catch (err) {
     console.error('requestWithdrawal error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -376,6 +420,22 @@ exports.adminUpdateWithdrawal = async (req, res) => {
     withdrawal.processedBy = (req.admin || req.user)?._id;
     if (status === 'completed') withdrawal.completedAt = new Date();
     await withdrawal.save();
+
+    // Send email notification for completed/failed
+    try {
+      const emailService = require('../services/email.service');
+      const userDoc = await User.findById(withdrawal.user._id || withdrawal.user).select('name email');
+      if (userDoc && ['completed', 'failed'].includes(status)) {
+        await emailService.sendWithdrawalEmail(userDoc.email, userDoc.name, status, {
+          amount: withdrawal.amount, currency: withdrawal.currency,
+          bankName: withdrawal.bankDetails.bankName,
+          accountName: withdrawal.bankDetails.accountName,
+          reference: withdrawal.reference
+        });
+      }
+    } catch (emailErr) {
+      console.error('withdrawal status email failed:', emailErr.message);
+    }
 
     res.json({ success: true, message: `Withdrawal marked as ${status}`, data: withdrawal });
   } catch (err) {

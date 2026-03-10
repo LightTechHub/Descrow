@@ -1,7 +1,7 @@
 // File: src/components/Navbar.jsx - FIXED VERSION
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, ChevronDown, Bell, Settings, User, LogOut, LayoutDashboard, Shield } from 'lucide-react';
+import { Menu, X, ChevronDown, Bell, Settings, User, LogOut, LayoutDashboard, Shield, Wallet } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import ThemeToggle from './ThemeToggle';
@@ -209,6 +209,15 @@ export default function Navbar({ user: propUser }) {
                             </Link>
 
                             <Link
+                              to="/wallet"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] transition text-gray-700 dark:text-gray-300"
+                            >
+                              <Wallet className="w-4 h-4" />
+                              <span className="text-sm font-medium">Wallet</span>
+                            </Link>
+
+                            <Link
                               to="/profile?tab=settings"
                               onClick={() => setShowUserMenu(false)}
                               className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] transition text-gray-700 dark:text-gray-300"
@@ -387,6 +396,16 @@ export default function Navbar({ user: propUser }) {
                     >
                       <User className="w-5 h-5" />
                       <span>Profile</span>
+                    </Link>
+
+                    <Link
+                      to="/wallet"
+                      role="menuitem"
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 text-gray-900 dark:text-white hover:bg-[#f8fafc] dark:hover:bg-[#252f3f] rounded-lg transition font-medium"
+                    >
+                      <Wallet className="w-5 h-5" />
+                      <span>Wallet</span>
                     </Link>
 
                     <Link

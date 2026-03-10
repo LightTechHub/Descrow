@@ -1,6 +1,7 @@
+// src/pages/Profile/SecurityTab.jsx - FIXED: removed unused Loader import
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Shield, Key, Smartphone, Laptop, Loader, CheckCircle, XCircle,
+  Shield, Key, Smartphone, Laptop, CheckCircle, XCircle,
   Copy, Download, AlertCircle, Eye, EyeOff, Info
 } from 'lucide-react';
 import securityService from '../../services/securityService';
@@ -15,7 +16,6 @@ const SecurityTab = ({ user, onUpdate }) => {
   const [twoFAData, setTwoFAData] = useState(null);
   const [verificationCode, setVerificationCode] = useState('');
 
-  // Password states
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showSetPassword, setShowSetPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState(null);
@@ -211,11 +211,7 @@ const SecurityTab = ({ user, onUpdate }) => {
       if (response.success) {
         toast.success('Password changed successfully!');
         setShowChangePassword(false);
-        setPasswordData({
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: ''
-        });
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       }
     } catch (error) {
       console.error('Change password error:', error);
@@ -226,9 +222,7 @@ const SecurityTab = ({ user, onUpdate }) => {
   };
 
   const handleRevokeSession = async (sessionId) => {
-    if (!window.confirm('Are you sure you want to revoke this session?')) {
-      return;
-    }
+    if (!window.confirm('Are you sure you want to revoke this session?')) return;
 
     try {
       const response = await securityService.revokeSession(sessionId);
@@ -244,9 +238,7 @@ const SecurityTab = ({ user, onUpdate }) => {
   };
 
   const handleRevokeAllSessions = async () => {
-    if (!window.confirm('This will log you out from all other devices. Continue?')) {
-      return;
-    }
+    if (!window.confirm('This will log you out from all other devices. Continue?')) return;
 
     try {
       const response = await securityService.revokeAllSessions();
@@ -279,15 +271,13 @@ const SecurityTab = ({ user, onUpdate }) => {
 
   return (
     <div className="space-y-6">
-      {/* OAuth User Notice - Set Password */}
+      {/* OAuth User Notice */}
       {passwordStatus?.needsPasswordSetup && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h4 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-1">
-                Set a Password
-              </h4>
+              <h4 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-1">Set a Password</h4>
               <p className="text-sm text-yellow-800 dark:text-yellow-300 mb-3">
                 You signed up with Google. Set a password to enable security features like 2FA and perform sensitive operations.
               </p>
@@ -310,24 +300,18 @@ const SecurityTab = ({ user, onUpdate }) => {
               <Shield className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Two-Factor Authentication (2FA)
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Add an extra layer of security to your account
-              </p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Two-Factor Authentication (2FA)</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Add an extra layer of security to your account</p>
             </div>
           </div>
 
           {twoFAStatus.enabled ? (
             <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300 rounded-full text-sm font-medium">
-              <CheckCircle className="w-4 h-4" />
-              Enabled
+              <CheckCircle className="w-4 h-4" /> Enabled
             </span>
           ) : (
             <span className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 rounded-full text-sm font-medium">
-              <XCircle className="w-4 h-4" />
-              Disabled
+              <XCircle className="w-4 h-4" /> Disabled
             </span>
           )}
         </div>
@@ -340,8 +324,7 @@ const SecurityTab = ({ user, onUpdate }) => {
             {passwordStatus?.needsPasswordSetup && (
               <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <p className="text-sm text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                  <Info className="w-4 h-4" />
-                  Set a password first to enable 2FA
+                  <Info className="w-4 h-4" /> Set a password first to enable 2FA
                 </p>
               </div>
             )}
@@ -375,12 +358,9 @@ const SecurityTab = ({ user, onUpdate }) => {
           </div>
         )}
 
-        {/* 2FA Setup Modal */}
         {show2FASetup && twoFAData && (
           <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Setup Two-Factor Authentication
-            </h4>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Setup Two-Factor Authentication</h4>
 
             <div className="mb-6">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -392,26 +372,19 @@ const SecurityTab = ({ user, onUpdate }) => {
             </div>
 
             <div className="mb-6">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Or enter this code manually:
-              </p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Or enter this code manually:</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg font-mono text-sm">
                   {twoFAData.manualEntry}
                 </code>
-                <button
-                  onClick={() => copyToClipboard(twoFAData.manualEntry)}
-                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition"
-                >
+                <button onClick={() => copyToClipboard(twoFAData.manualEntry)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition">
                   <Copy className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </button>
               </div>
             </div>
 
             <div className="mb-6">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Step 2: Save your backup codes
-              </p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Step 2: Save your backup codes</p>
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-3">
                 <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-300 mb-2">
                   <AlertCircle className="w-5 h-5" />
@@ -419,37 +392,29 @@ const SecurityTab = ({ user, onUpdate }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {twoFAData.backupCodes.map((code, idx) => (
-                    <code key={idx} className="text-sm text-yellow-900 dark:text-yellow-200 font-mono">
-                      {code}
-                    </code>
+                    <code key={idx} className="text-sm text-yellow-900 dark:text-yellow-200 font-mono">{code}</code>
                   ))}
                 </div>
               </div>
-              <button
-                onClick={downloadBackupCodes}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-              >
-                <Download className="w-4 h-4" />
-                Download Backup Codes
+              <button onClick={downloadBackupCodes} className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                <Download className="w-4 h-4" /> Download Backup Codes
               </button>
             </div>
 
             <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Step 3: Enter the 6-digit code to verify
-              </p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Step 3: Enter the 6-digit code to verify</p>
               <div className="flex gap-3">
                 <input
                   type="text"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 outline-none transition text-gray-900 dark:text-white text-center text-2xl font-mono tracking-widest"
+                  className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-900 dark:text-white text-center text-2xl font-mono tracking-widest"
                 />
                 <button
                   onClick={handleVerify2FA}
                   disabled={loading || verificationCode.length !== 6}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
                 >
                   {loading ? 'Verifying...' : 'Verify & Enable'}
                 </button>
@@ -457,11 +422,7 @@ const SecurityTab = ({ user, onUpdate }) => {
             </div>
 
             <button
-              onClick={() => {
-                setShow2FASetup(false);
-                setTwoFAData(null);
-                setVerificationCode('');
-              }}
+              onClick={() => { setShow2FASetup(false); setTwoFAData(null); setVerificationCode(''); }}
               className="mt-4 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
             >
               Cancel Setup
@@ -477,202 +438,85 @@ const SecurityTab = ({ user, onUpdate }) => {
             <Key className="w-6 h-6 text-purple-600 dark:text-purple-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Password
-            </h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Password</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              {passwordStatus?.needsPasswordSetup 
-                ? 'Set a password for security operations'
-                : 'Update your password regularly for better security'
-              }
+              {passwordStatus?.needsPasswordSetup ? 'Set a password for security operations' : 'Update your password regularly for better security'}
             </p>
           </div>
         </div>
 
-        {/* SET PASSWORD (for OAuth users) */}
         {passwordStatus?.needsPasswordSetup && (
           <>
             {!showSetPassword ? (
-              <button
-                onClick={() => setShowSetPassword(true)}
-                className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
-              >
+              <button onClick={() => setShowSetPassword(true)} className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition">
                 Set Password
               </button>
             ) : (
               <form onSubmit={handleSetPassword} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPasswords.new ? 'text' : 'password'}
-                      value={oauthPasswordData.newPassword}
-                      onChange={(e) => setOauthPasswordData({ ...oauthPasswordData, newPassword: e.target.value })}
-                      required
-                      minLength={8}
-                      placeholder="Minimum 8 characters"
-                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                    >
-                      {showPasswords.new ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                {[
+                  { label: 'New Password', key: 'newPassword', showKey: 'new' },
+                  { label: 'Confirm Password', key: 'confirmPassword', showKey: 'confirm' }
+                ].map(({ label, key, showKey }) => (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{label}</label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords[showKey] ? 'text' : 'password'}
+                        value={oauthPasswordData[key]}
+                        onChange={(e) => setOauthPasswordData({ ...oauthPasswordData, [key]: e.target.value })}
+                        required
+                        minLength={key === 'newPassword' ? 8 : undefined}
+                        placeholder={key === 'newPassword' ? 'Minimum 8 characters' : 'Re-enter password'}
+                        className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition text-gray-900 dark:text-white"
+                      />
+                      <button type="button" onClick={() => setShowPasswords({ ...showPasswords, [showKey]: !showPasswords[showKey] })} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400">
+                        {showPasswords[showKey] ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPasswords.confirm ? 'text' : 'password'}
-                      value={oauthPasswordData.confirmPassword}
-                      onChange={(e) => setOauthPasswordData({ ...oauthPasswordData, confirmPassword: e.target.value })}
-                      required
-                      placeholder="Re-enter password"
-                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                    >
-                      {showPasswords.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
+                ))}
                 <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSetPassword(false);
-                      setOauthPasswordData({ newPassword: '', confirmPassword: '' });
-                    }}
-                    className="px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
-                  >
-                    {loading ? 'Setting...' : 'Set Password'}
-                  </button>
+                  <button type="button" onClick={() => { setShowSetPassword(false); setOauthPasswordData({ newPassword: '', confirmPassword: '' }); }} className="px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition">Cancel</button>
+                  <button type="submit" disabled={loading} className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50">{loading ? 'Setting...' : 'Set Password'}</button>
                 </div>
               </form>
             )}
           </>
         )}
 
-        {/* CHANGE PASSWORD (for users who already have a password) */}
         {!passwordStatus?.needsPasswordSetup && (
           <>
             {!showChangePassword ? (
-              <button
-                onClick={() => setShowChangePassword(true)}
-                className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
-              >
+              <button onClick={() => setShowChangePassword(true)} className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition">
                 Change Password
               </button>
             ) : (
               <form onSubmit={handleChangePassword} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Current Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPasswords.current ? 'text' : 'password'}
-                      value={passwordData.currentPassword}
-                      onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                      required
-                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                    >
-                      {showPasswords.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                {[
+                  { label: 'Current Password', key: 'currentPassword', showKey: 'current' },
+                  { label: 'New Password', key: 'newPassword', showKey: 'new' },
+                  { label: 'Confirm New Password', key: 'confirmPassword', showKey: 'confirm' }
+                ].map(({ label, key, showKey }) => (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{label}</label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords[showKey] ? 'text' : 'password'}
+                        value={passwordData[key]}
+                        onChange={(e) => setPasswordData({ ...passwordData, [key]: e.target.value })}
+                        required
+                        minLength={key === 'newPassword' ? 8 : undefined}
+                        className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition text-gray-900 dark:text-white"
+                      />
+                      <button type="button" onClick={() => setShowPasswords({ ...showPasswords, [showKey]: !showPasswords[showKey] })} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400">
+                        {showPasswords[showKey] ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPasswords.new ? 'text' : 'password'}
-                      value={passwordData.newPassword}
-                      onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                      required
-                      minLength={8}
-                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                    >
-                      {showPasswords.new ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Confirm New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPasswords.confirm ? 'text' : 'password'}
-                      value={passwordData.confirmPassword}
-                      onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                      required
-                      className="w-full px-4 py-2.5 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 outline-none transition text-gray-900 dark:text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                    >
-                      {showPasswords.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
+                ))}
                 <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowChangePassword(false);
-                      setPasswordData({
-                        currentPassword: '',
-                        newPassword: '',
-                        confirmPassword: ''
-                      });
-                    }}
-                    className="px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
-                  >
-                    {loading ? 'Updating...' : 'Update Password'}
-                  </button>
+                  <button type="button" onClick={() => { setShowChangePassword(false); setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition">Cancel</button>
+                  <button type="submit" disabled={loading} className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50">{loading ? 'Updating...' : 'Update Password'}</button>
                 </div>
               </form>
             )}
@@ -688,20 +532,12 @@ const SecurityTab = ({ user, onUpdate }) => {
               <Laptop className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Active Sessions
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Manage devices where you're currently logged in
-              </p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Active Sessions</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Manage devices where you're currently logged in</p>
             </div>
           </div>
-
           {sessions.length > 1 && (
-            <button
-              onClick={handleRevokeAllSessions}
-              className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition"
-            >
+            <button onClick={handleRevokeAllSessions} className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition">
               Revoke All
             </button>
           )}
@@ -709,15 +545,10 @@ const SecurityTab = ({ user, onUpdate }) => {
 
         <div className="space-y-3">
           {sessions.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-              No active sessions found
-            </p>
+            <p className="text-gray-600 dark:text-gray-400 text-center py-8">No active sessions found</p>
           ) : (
             sessions.map((session) => (
-              <div
-                key={session._id}
-                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
-              >
+              <div key={session._id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                     {session.deviceInfo?.device === 'mobile' ? (
@@ -735,11 +566,7 @@ const SecurityTab = ({ user, onUpdate }) => {
                     </p>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleRevokeSession(session._id)}
-                  className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition"
-                >
+                <button onClick={() => handleRevokeSession(session._id)} className="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition">
                   Revoke
                 </button>
               </div>

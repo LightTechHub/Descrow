@@ -130,5 +130,41 @@ router.post('/fees/reset', protectAdmin, masterOnly,
 const { adminGetWithdrawals, adminUpdateWithdrawal } = require('../controllers/wallet.controller');
 router.get('/withdrawals', protectAdmin, adminGetWithdrawals);
 router.patch('/withdrawals/:id', protectAdmin, adminUpdateWithdrawal);
+router.get('/withdrawals/settings', protectAdmin, masterOnly, adminController.getWithdrawalSettings);
+router.put('/withdrawals/settings', protectAdmin, masterOnly, adminController.updateWithdrawalSettings);
+
+// ── Escrow intervention ──────────────────────────────────────────────
+router.post('/escrow/:id/force-complete', protectAdmin, [
+  body('reason').notEmpty().withMessage('Reason required')
+], adminController.forceCompleteEscrow);
+router.post('/escrow/:id/force-cancel', protectAdmin, [
+  body('reason').notEmpty().withMessage('Reason required')
+], adminController.forceCancelEscrow);
+
+// ── User ban/unban ──────────────────────────────────────────────────
+router.post('/users/:id/ban', protectAdmin, [
+  body('reason').notEmpty().withMessage('Reason required')
+], adminController.banUser);
+router.post('/users/:id/unban', protectAdmin, adminController.unbanUser);
+
+// ── Wallet management ────────────────────────────────────────────────
+router.get('/users/:userId/wallet', protectAdmin, adminController.getUserWallet);
+router.post('/users/:userId/wallet/credit', protectAdmin, masterOnly, [
+  body('amount').isNumeric().isFloat({ min: 1 }).withMessage('Valid amount required'),
+  body('reason').notEmpty().withMessage('Reason required')
+], adminController.adminCreditWallet);
+router.post('/users/:userId/wallet/debit', protectAdmin, masterOnly, [
+  body('amount').isNumeric().isFloat({ min: 1 }).withMessage('Valid amount required'),
+  body('reason').notEmpty().withMessage('Reason required')
+], adminController.adminDebitWallet);
+
+// ── Broadcast notifications ──────────────────────────────────────────
+router.post('/broadcast', protectAdmin, masterOnly, [
+  body('title').notEmpty().withMessage('Title required'),
+  body('message').notEmpty().withMessage('Message required')
+], adminController.broadcastNotification);
+
+// ── Revenue dashboard ────────────────────────────────────────────────
+router.get('/revenue', protectAdmin, adminController.getRevenueStats);
 
 module.exports = router;

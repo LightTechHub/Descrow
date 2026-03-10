@@ -1,3 +1,5 @@
+// backend/controllers/auth.controller.js
+// ADDED: login lockout (5 attempts → 30min), device/IP tracking, new device alert email
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -14,174 +16,168 @@ const generateToken = (userId, email = null) => {
   );
 };
 
+// Parse device info from request
+const parseDeviceInfo = (req) => {
+  const ua = req.headers['user-agent'] || '';
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+
+  let browser = 'Unknown';
+  let os = 'Unknown';
+  let deviceType = 'desktop';
+
+  if (/Mobile|Android|iPhone|iPad/.test(ua)) deviceType = 'mobile';
+  if (/iPad/.test(ua)) deviceType = 'tablet';
+
+  if (/Chrome\//.test(ua) && !/Chromium|Edg/.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+  else if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\//.test(ua)) browser = 'Opera';
+
+  if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Mac OS X/.test(ua)) os = 'macOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+
+  return { ip, browser, os, deviceType, userAgent: ua };
+};
+
 /* ============================================================
-   REGISTER (LOCAL - EMAIL/PASSWORD)
+   REGISTER
 ============================================================ */
 exports.register = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
+      return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
     const { name, email, password, phone, country, accountType, agreedToTerms, businessInfo } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, and password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
     }
 
-    // Check for existing user
-    const existingUser = await User.findOne({ 
-      email: email.toLowerCase()
-    });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
 
     if (existingUser) {
-      // Allow re-registration if deleted or unverified
       if (existingUser.status === 'deleted' || existingUser.deletedAt) {
-        console.log('🗑️ Removing deleted account for re-registration:', email);
         await User.findByIdAndDelete(existingUser._id);
       } else if (!existingUser.verified) {
-        console.log('📧 Removing unverified account for fresh registration:', email);
         await User.findByIdAndDelete(existingUser._id);
       } else {
-        return res.status(400).json({
-          success: false,
-          message: 'This email is already registered. Please login instead.'
-        });
+        return res.status(400).json({ success: false, message: 'This email is already registered. Please login instead.' });
       }
     }
 
-    // Create user
     const userData = {
-      name,
-      email: email.toLowerCase(),
-      password,
-      phone: phone || undefined,
-      accountType: accountType || 'individual',
-      role: 'dual',
-      tier: 'free',
-      verified: false,
-      status: 'active',
-      authProvider: 'local',
-      agreedToTerms: agreedToTerms || false,
-      agreedToTermsAt: agreedToTerms ? new Date() : undefined
+      name, email: email.toLowerCase(), password,
+      phone: phone || undefined, accountType: accountType || 'individual',
+      role: 'dual', tier: 'free', verified: false, status: 'active', authProvider: 'local',
+      agreedToTerms: agreedToTerms || false, agreedToTermsAt: agreedToTerms ? new Date() : undefined
     };
 
-    if (country) {
-      userData.address = { country };
-    }
-
+    if (country) userData.address = { country };
     if (accountType === 'business' && businessInfo) {
-      userData.businessInfo = {
-        companyName: businessInfo.companyName,
-        companyType: businessInfo.companyType,
-        industry: businessInfo.industry,
-        registrationNumber: businessInfo.registrationNumber,
-        taxId: businessInfo.taxId
-      };
+      userData.businessInfo = { companyName: businessInfo.companyName, companyType: businessInfo.companyType, industry: businessInfo.industry, registrationNumber: businessInfo.registrationNumber, taxId: businessInfo.taxId };
     }
 
     const user = await User.create(userData);
-
-    // Send verification email
     const verificationToken = generateToken(user._id);
     emailService.sendVerificationEmail(user.email, user.name, verificationToken)
       .catch(err => console.error('Failed to send verification email:', err));
 
-    console.log('✅ User registered:', user.email, '| Type:', user.accountType);
-
-    res.status(201).json({
-      success: true,
-      message: 'Registration successful! Please check your email to verify your account.',
-      requiresVerification: true,
-      email: user.email
-    });
+    console.log('✅ User registered:', user.email);
+    res.status(201).json({ success: true, message: 'Registration successful! Please check your email to verify your account.', requiresVerification: true, email: user.email });
 
   } catch (error) {
     console.error('❌ Register error:', error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already registered'
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Registration failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    if (error.code === 11000) return res.status(400).json({ success: false, message: 'Email already registered' });
+    res.status(500).json({ success: false, message: 'Registration failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
 /* ============================================================
-   LOGIN (LOCAL - EMAIL/PASSWORD)
+   LOGIN — with lockout + device tracking
 ============================================================ */
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ 
-      email: email.toLowerCase(),
-      status: { $ne: 'deleted' }
-    }).select('+password');
+    const user = await User.findOne({ email: email.toLowerCase(), status: { $ne: 'deleted' } }).select('+password +loginAttempts +lockUntil +loginSessions');
 
     if (!user) {
-      return res.status(401).json({
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // ── Check if account is locked ──────────────────────────────────────────
+    if (user.isLocked) {
+      const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      return res.status(423).json({
         success: false,
-        message: 'Invalid email or password'
+        message: `Account temporarily locked due to too many failed attempts. Try again in ${minutesLeft} minute(s).`,
+        code: 'ACCOUNT_LOCKED',
+        lockUntil: user.lockUntil
       });
     }
 
-    // Check if email is verified BEFORE password check
+    // ── Email verification check ─────────────────────────────────────────────
     if (!user.verified) {
-      console.log('⚠️ Login attempt with unverified email:', email);
-      return res.status(403).json({
-        success: false,
-        message: 'Please verify your email before logging in',
-        code: 'EMAIL_NOT_VERIFIED',
-        requiresVerification: true,
-        email: user.email
-      });
+      return res.status(403).json({ success: false, message: 'Please verify your email before logging in', code: 'EMAIL_NOT_VERIFIED', requiresVerification: true, email: user.email });
     }
 
-    // Check password
+    // ── Password check ────────────────────────────────────────────────────────
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
+      await user.incLoginAttempts();
+      const attemptsLeft = Math.max(0, 5 - (user.loginAttempts + 1));
+      const message = attemptsLeft > 0
+        ? `Invalid email or password. ${attemptsLeft} attempt(s) remaining before lockout.`
+        : 'Invalid email or password. Account has been locked for 30 minutes.';
+      return res.status(401).json({ success: false, message });
     }
 
-    // Check account status
+    // ── Account status ────────────────────────────────────────────────────────
     if (!user.isActive || user.status === 'suspended') {
-      return res.status(403).json({
-        success: false,
-        message: 'Account is suspended. Please contact support.'
-      });
+      return res.status(403).json({ success: false, message: 'Account is suspended. Please contact support.' });
     }
+
+    // ── Reset lockout on success ──────────────────────────────────────────────
+    await user.resetLoginAttempts();
+
+    // ── Device tracking ───────────────────────────────────────────────────────
+    const device = parseDeviceInfo(req);
+    const sessionId = crypto.randomBytes(16).toString('hex');
+
+    // Check if this is a new/unseen device (compare by IP+browser+OS)
+    const knownDevice = user.loginSessions?.find(
+      s => s.isActive && s.ipAddress === device.ip && s.browser === device.browser && s.os === device.os
+    );
+
+    if (!knownDevice) {
+      // New device — send alert email (fire-and-forget)
+      emailService.sendNewDeviceAlertEmail(user.email, user.name, {
+        browser: device.browser,
+        os: device.os,
+        ip: device.ip,
+        deviceType: device.deviceType,
+        time: new Date().toLocaleString()
+      }).catch(err => console.error('Failed to send new device alert:', err));
+    }
+
+    // Add this session (cap at 10 sessions)
+    const newSession = { sessionId, ipAddress: device.ip, userAgent: device.userAgent, deviceType: device.deviceType, browser: device.browser, os: device.os, createdAt: new Date(), lastActivity: new Date(), isActive: true };
+    user.loginSessions = [...(user.loginSessions || []).slice(-9), newSession];
 
     // Update last login
     user.lastLogin = new Date();
     await user.save();
 
-    // Generate token
     const token = generateToken(user._id, user.email);
 
     console.log('✅ User logged in:', user.email);
@@ -191,14 +187,8 @@ exports.login = async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        tier: user.tier,
-        verified: user.verified,
-        isKYCVerified: user.isKYCVerified,
-        accountType: user.accountType,
+        _id: user._id, name: user.name, email: user.email, role: user.role, tier: user.tier,
+        verified: user.verified, isKYCVerified: user.isKYCVerified, accountType: user.accountType,
         profilePicture: user.profilePicture,
         businessInfo: user.accountType === 'business' ? user.businessInfo : undefined
       }
@@ -206,265 +196,77 @@ exports.login = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Login failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Login failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
 /* ============================================================
-   GOOGLE AUTH - INITIAL
-   ✅ FIXED: Creates temporary user immediately
+   GOOGLE AUTH
 ============================================================ */
 exports.googleAuth = async (req, res) => {
   try {
     const { googleId, email, name, picture } = req.body;
+    if (!googleId || !email) return res.status(400).json({ success: false, message: 'Google ID and email are required' });
 
-    console.log('🔵 Google auth request:', { googleId, email, name });
+    let user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
 
-    if (!googleId || !email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Google ID and email are required'
-      });
-    }
-
-    // Find existing user by googleId or email
-    let user = await User.findOne({
-      $or: [
-        { googleId },
-        { email: email.toLowerCase() }
-      ]
-    });
-
-    // EXISTING USER - Login
     if (user) {
-      // Link Google account if not linked
-      if (!user.googleId) {
-        console.log('🔗 Linking Google account to existing user:', email);
-        user.googleId = googleId;
-        user.authProvider = 'google';
-      }
-      
+      if (!user.googleId) { user.googleId = googleId; user.authProvider = 'google'; }
       user.verified = true;
       user.verifiedAt = user.verifiedAt || new Date();
       user.lastLogin = new Date();
       user.profilePicture = picture || user.profilePicture;
       await user.save();
 
-      // Check if profile is complete
-      if (!user.agreedToTerms) {
-        console.log('📝 Existing user needs to complete profile');
-        return res.json({
-          success: true,
-          requiresProfileCompletion: true,
-          googleData: { googleId, email, name, picture }
-        });
-      }
+      if (!user.agreedToTerms) return res.json({ success: true, requiresProfileCompletion: true, googleData: { googleId, email, name, picture } });
 
       const token = generateToken(user._id, user.email);
-
-      console.log('✅ Existing Google user logged in:', email);
-
-      return res.json({
-        success: true,
-        message: 'Login successful',
-        token,
-        user: {
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          accountType: user.accountType,
-          verified: user.verified,
-          isKYCVerified: user.isKYCVerified,
-          tier: user.tier,
-          profilePicture: user.profilePicture,
-          businessInfo: user.accountType === 'business' ? user.businessInfo : undefined
-        }
-      });
+      return res.json({ success: true, message: 'Login successful', token, user: { _id: user._id, name: user.name, email: user.email, accountType: user.accountType, verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier, profilePicture: user.profilePicture, businessInfo: user.accountType === 'business' ? user.businessInfo : undefined } });
     }
 
-    // ✅ NEW USER - Create temporary user immediately
-    console.log('👤 New Google user, creating temporary account:', email);
-
     const randomPassword = crypto.randomBytes(32).toString('hex');
-    
-    const tempUser = await User.create({
-      googleId,
-      email: email.toLowerCase(),
-      name,
-      password: randomPassword,
-      profilePicture: picture,
-      authProvider: 'google',
-      verified: true,
-      verifiedAt: new Date(),
-      role: 'dual',
-      tier: 'free',
-      status: 'active',
-      accountType: 'individual',
-      agreedToTerms: false // Mark as incomplete
-    });
+    await User.create({ googleId, email: email.toLowerCase(), name, password: randomPassword, profilePicture: picture, authProvider: 'google', verified: true, verifiedAt: new Date(), role: 'dual', tier: 'free', status: 'active', accountType: 'individual', agreedToTerms: false });
 
-    console.log('✅ Temporary Google user created:', tempUser._id);
-
-    return res.json({
-      success: true,
-      requiresProfileCompletion: true,
-      message: 'Please complete your profile',
-      googleData: {
-        googleId,
-        email,
-        name,
-        picture
-      }
-    });
+    return res.json({ success: true, requiresProfileCompletion: true, message: 'Please complete your profile', googleData: { googleId, email, name, picture } });
 
   } catch (error) {
     console.error('❌ Google auth error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Google authentication failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Google authentication failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
 /* ============================================================
    GOOGLE AUTH - COMPLETE PROFILE
-   ✅ FIXED: Updates existing temporary user
 ============================================================ */
 exports.completeGoogleProfile = async (req, res) => {
   try {
-    const {
-      googleId,
-      name,
-      email,
-      phone,
-      country,
-      accountType,
-      companyName,
-      companyType,
-      industry,
-      registrationNumber,
-      agreedToTerms,
-      picture
-    } = req.body;
+    const { googleId, name, email, phone, country, accountType, companyName, companyType, industry, registrationNumber, agreedToTerms, picture } = req.body;
 
-    console.log('📝 Completing Google profile for:', email);
+    if (!googleId || !email) return res.status(400).json({ success: false, message: 'Google ID and email are required' });
+    if (!agreedToTerms) return res.status(400).json({ success: false, message: 'You must agree to the terms and conditions' });
+    if (!accountType || !['individual','business'].includes(accountType)) return res.status(400).json({ success: false, message: 'Valid account type required (individual or business)' });
+    if (accountType === 'business' && !companyName) return res.status(400).json({ success: false, message: 'Company name is required for business accounts' });
 
-    // Validation
-    if (!googleId || !email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Google ID and email are required'
-      });
-    }
+    const user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found. Please sign in with Google again.' });
 
-    if (!agreedToTerms) {
-      return res.status(400).json({
-        success: false,
-        message: 'You must agree to the terms and conditions'
-      });
-    }
-
-    if (!accountType || !['individual', 'business'].includes(accountType)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid account type required (individual or business)'
-      });
-    }
-
-    if (accountType === 'business' && !companyName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Company name is required for business accounts'
-      });
-    }
-
-    // ✅ Find user by googleId OR email
-    const user = await User.findOne({
-      $or: [
-        { googleId },
-        { email: email.toLowerCase() }
-      ]
-    });
-
-    if (!user) {
-      console.error('❌ Temporary user not found for:', { googleId, email });
-      return res.status(404).json({
-        success: false,
-        message: 'User not found. Please sign in with Google again.'
-      });
-    }
-
-    // ✅ Update profile
-    user.name = name;
-    user.phone = phone;
-    user.accountType = accountType;
-    user.agreedToTerms = true;
-    user.agreedToTermsAt = new Date();
+    user.name = name; user.phone = phone; user.accountType = accountType;
+    user.agreedToTerms = true; user.agreedToTermsAt = new Date();
     user.profilePicture = picture || user.profilePicture;
-    user.googleId = googleId;
-    user.verified = true;
-    user.verifiedAt = user.verifiedAt || new Date();
-
-    if (country) {
-      user.address = user.address || {};
-      user.address.country = country;
-    }
-
+    user.googleId = googleId; user.verified = true; user.verifiedAt = user.verifiedAt || new Date();
+    if (country) { user.address = user.address || {}; user.address.country = country; }
     if (accountType === 'business') {
-      user.businessInfo = {
-        companyName,
-        companyType: companyType || 'other',
-        industry: industry || 'other',
-        registrationNumber: registrationNumber || '',
-        businessEmail: email,
-        businessPhone: phone
-      };
-      console.log('✅ Business info set:', companyName);
+      user.businessInfo = { companyName, companyType: companyType || 'other', industry: industry || 'other', registrationNumber: registrationNumber || '', businessEmail: email, businessPhone: phone };
     }
-
     await user.save();
 
     const token = generateToken(user._id, user.email);
-
-    console.log('✅ Google profile completed:', email, '| Type:', accountType);
-
-    res.json({
-      success: true,
-      message: 'Profile completed successfully',
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        accountType: user.accountType,
-        verified: user.verified,
-        isKYCVerified: user.isKYCVerified,
-        tier: user.tier,
-        profilePicture: user.profilePicture,
-        businessInfo: accountType === 'business' ? user.businessInfo : undefined
-      }
-    });
+    res.json({ success: true, message: 'Profile completed successfully', token, user: { _id: user._id, name: user.name, email: user.email, accountType: user.accountType, verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier, profilePicture: user.profilePicture, businessInfo: accountType === 'business' ? user.businessInfo : undefined } });
 
   } catch (error) {
     console.error('❌ Complete Google profile error:', error);
-    
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'This email is already registered'
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to complete profile',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    if (error.code === 11000) return res.status(400).json({ success: false, message: 'This email is already registered' });
+    res.status(500).json({ success: false, message: 'Failed to complete profile', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -474,58 +276,23 @@ exports.completeGoogleProfile = async (req, res) => {
 exports.verifyEmail = async (req, res) => {
   try {
     const token = req.query.token || req.params.token || req.body.token;
-
-    if (!token || token === 'undefined') {
-      return res.status(400).json({
-        success: false,
-        message: 'Verification token is required'
-      });
-    }
+    if (!token || token === 'undefined') return res.status(400).json({ success: false, message: 'Verification token is required' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    if (user.verified) {
-      return res.json({
-        success: true,
-        message: 'Email already verified',
-        alreadyVerified: true
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.verified) return res.json({ success: true, message: 'Email already verified', alreadyVerified: true });
 
     user.verified = true;
     user.verifiedAt = new Date();
     await user.save();
 
     console.log('✅ Email verified:', user.email);
-
-    res.json({
-      success: true,
-      message: 'Email verified successfully! You can now login.'
-    });
+    res.json({ success: true, message: 'Email verified successfully! You can now login.' });
 
   } catch (error) {
-    console.error('❌ Verify email error:', error);
-
-    if (error.name === 'TokenExpiredError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Verification link expired',
-        expired: true
-      });
-    }
-
-    res.status(400).json({
-      success: false,
-      message: 'Invalid verification link'
-    });
+    if (error.name === 'TokenExpiredError') return res.status(400).json({ success: false, message: 'Verification link expired', expired: true });
+    res.status(400).json({ success: false, message: 'Invalid verification link' });
   }
 };
 
@@ -535,46 +302,19 @@ exports.verifyEmail = async (req, res) => {
 exports.resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email is required'
-      });
-    }
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
 
     const user = await User.findOne({ email: email.toLowerCase() });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    if (user.verified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already verified'
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.verified) return res.status(400).json({ success: false, message: 'Email already verified' });
 
     const verificationToken = generateToken(user._id);
     await emailService.sendVerificationEmail(user.email, user.name, verificationToken);
-
-    console.log('✅ Verification email resent:', email);
-
-    res.json({
-      success: true,
-      message: 'Verification email sent! Please check your inbox.'
-    });
+    res.json({ success: true, message: 'Verification email sent! Please check your inbox.' });
 
   } catch (error) {
     console.error('❌ Resend verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to resend verification email'
-    });
+    res.status(500).json({ success: false, message: 'Failed to resend verification email' });
   }
 };
 
@@ -584,31 +324,16 @@ exports.resendVerification = async (req, res) => {
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-
     const user = await User.findOne({ email: email.toLowerCase() });
-
-    if (!user) {
-      // Don't reveal if email exists
-      return res.json({
-        success: true,
-        message: 'If that email exists, a reset link has been sent'
-      });
-    }
+    if (!user) return res.json({ success: true, message: 'If that email exists, a reset link has been sent' });
 
     const resetToken = generateToken(user._id);
     await emailService.sendPasswordResetEmail(user.email, user.name, resetToken);
-
-    res.json({
-      success: true,
-      message: 'If that email exists, a reset link has been sent'
-    });
+    res.json({ success: true, message: 'If that email exists, a reset link has been sent' });
 
   } catch (error) {
     console.error('❌ Forgot password error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process password reset'
-    });
+    res.status(500).json({ success: false, message: 'Failed to process password reset' });
   }
 };
 
@@ -619,47 +344,24 @@ exports.resetPassword = async (req, res) => {
   try {
     const token = req.query.token || req.params.token || req.body.token;
     const { password } = req.body;
-
-    if (!token) {
-      return res.status(400).json({
-        success: false,
-        message: 'Reset token is required'
-      });
-    }
-
-    if (!password || password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters'
-      });
-    }
+    if (!token) return res.status(400).json({ success: false, message: 'Reset token is required' });
+    if (!password || password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invalid reset token'
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'Invalid reset token' });
 
     user.password = password;
     await user.save();
 
-    console.log('✅ Password reset:', user.email);
+    // Send password changed notification
+    emailService.sendPasswordChangedEmail(user.email, user.name)
+      .catch(err => console.error('Failed to send password changed email:', err));
 
-    res.json({
-      success: true,
-      message: 'Password reset successfully! You can now login.'
-    });
+    res.json({ success: true, message: 'Password reset successfully! You can now login.' });
 
   } catch (error) {
-    console.error('❌ Reset password error:', error);
-    res.status(400).json({
-      success: false,
-      message: 'Invalid or expired reset token'
-    });
+    res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
   }
 };
 
@@ -667,10 +369,15 @@ exports.resetPassword = async (req, res) => {
    LOGOUT
 ============================================================ */
 exports.logout = (req, res) => {
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
+  // Optionally deactivate the session that was used
+  if (req.user) {
+    const authHeader = req.headers.authorization;
+    // Non-blocking session cleanup
+    User.findByIdAndUpdate(req.user._id, {
+      $set: { 'loginSessions.$[].isActive': false }
+    }).catch(() => {});
+  }
+  res.json({ success: true, message: 'Logged out successfully' });
 };
 
 /* ============================================================
@@ -679,105 +386,45 @@ exports.logout = (req, res) => {
 exports.refreshToken = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user || !user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account inactive'
-      });
-    }
-
+    if (!user || !user.isActive) return res.status(403).json({ success: false, message: 'Account inactive' });
     const token = generateToken(user._id, user.email);
-    res.json({
-      success: true,
-      token
-    });
+    res.json({ success: true, token });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Refresh failed'
-    });
+    res.status(500).json({ success: false, message: 'Refresh failed' });
   }
 };
 
-
 /* ============================================================
-   SET PASSWORD (for Google users or any user to change password)
+   SET PASSWORD
 ============================================================ */
 exports.setPassword = async (req, res) => {
   try {
     const { password } = req.body;
-    const userId = req.user.id; // from protect middleware
+    if (!password || password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
 
-    // Validation
-    if (!password || password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters'
-      });
-    }
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Find user and include password field (pre-save hook will hash)
-    const user = await User.findById(userId).select('+password');
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Set new password (pre-save hook in User model will hash it)
     user.password = password;
     await user.save();
-
-    console.log('✅ Password set for user:', user.email);
-
-    res.json({
-      success: true,
-      message: 'Password set successfully'
-    });
+    res.json({ success: true, message: 'Password set successfully' });
   } catch (error) {
     console.error('❌ setPassword error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to set password',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    res.status(500).json({ success: false, message: 'Failed to set password' });
   }
 };
 
 /* ============================================================
-   CHECK PASSWORD STATUS (does user have a password set?)
-   Note: All users have a password field (even Google users get a random one).
-   This function returns true if the field exists. For more accurate detection
-   (e.g., distinguish random vs user-chosen), consider adding a flag to the schema.
+   CHECK PASSWORD STATUS
 ============================================================ */
 exports.checkPasswordStatus = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const user = await User.findById(userId).select('+password');
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Password exists if the field is present (always true unless we implement a custom flag)
-    const hasPassword = !!user.password;
-
-    res.json({
-      success: true,
-      hasPassword
-    });
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, hasPassword: !!user.password });
   } catch (error) {
-    console.error('❌ checkPasswordStatus error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check password status'
-    });
+    res.status(500).json({ success: false, message: 'Failed to check password status' });
   }
 };
-
 
 module.exports = exports;

@@ -9,6 +9,8 @@ const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const crypto = require('crypto');
 const fs = require('fs');
 
 // ==================== CREATE UPLOAD DIRECTORIES ====================
@@ -74,6 +76,7 @@ app.use(helmet({
 }));
 
 app.use(mongoSanitize());
+app.use(xss());          // sanitize user input against XSS
 app.use(compression());
 
 // ==================== CORS CONFIGURATION ====================
@@ -101,6 +104,35 @@ app.use(cors({
 }));
 
 app.options('*', cors());
+
+// ==================== PAYSTACK WEBHOOK SIGNATURE VERIFICATION ====================
+// Must be applied BEFORE the JSON body parser on the webhook route
+const verifyPaystackWebhook = (req, res, next) => {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) return next(); // skip in dev if key not set
+
+  const signature = req.headers['x-paystack-signature'];
+  if (!signature) {
+    return res.status(400).json({ success: false, message: 'Missing webhook signature' });
+  }
+
+  const rawBody = req.rawBody;
+  if (!rawBody) {
+    return res.status(400).json({ success: false, message: 'Missing raw body' });
+  }
+
+  const expectedSig = crypto
+    .createHmac('sha512', secret)
+    .update(rawBody)
+    .digest('hex');
+
+  if (signature !== expectedSig) {
+    console.warn('⚠️ Invalid Paystack webhook signature — possible forgery attempt');
+    return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
+  }
+
+  next();
+};
 
 // ==================== BODY PARSERS ====================
 app.use(express.json({
@@ -137,9 +169,23 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true
 });
 
+const escrowLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Too many escrow requests, please slow down.' }
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  message: { success: false, message: 'Too many payment requests, please try again shortly.' }
+});
+
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/escrow', escrowLimiter);
+app.use('/api/payments', paymentLimiter);
 
 // ==================== STATIC FILES ====================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -209,7 +255,8 @@ app.use('/api/bank', bankAccountRoutes);
 // Contact
 app.use('/api/contact', contactRoutes);
 
-// Webhooks
+// Webhooks (Paystack signature verified before routing)
+app.use('/api/webhooks/paystack', verifyPaystackWebhook);
 app.use('/api/webhooks', webhookRoutes);
 
 // Public API

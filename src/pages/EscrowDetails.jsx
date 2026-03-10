@@ -1,10 +1,10 @@
-// File: src/pages/EscrowDetailsPage.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/EscrowDetails.jsx - FIXED: unused imports removed, useCallback deps, DeliveryTracking wired
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, DollarSign, Loader, Copy, CheckCircle, Clock, ShieldCheck,
-  MessageCircle, FileText, RefreshCw, XCircle, Users, Target, Calendar,
-  Package, AlertTriangle, CheckCircle2, TrendingUp, Award
+  ArrowLeft, Loader, Copy, CheckCircle, Clock, ShieldCheck,
+  FileText, RefreshCw, XCircle, Users, Target, Calendar,
+  Package, AlertTriangle, CheckCircle2, TrendingUp, Award, Truck
 } from 'lucide-react';
 
 import StatusStepper from '../components/Escrow/StatusStepper';
@@ -12,6 +12,7 @@ import ActionButtons from '../components/Escrow/ActionButtons';
 import DeliveryModal from '../components/Escrow/DeliveryModal';
 import DisputeModal from '../components/Escrow/DisputeModal';
 import ChatBox from '../components/Escrow/ChatBox';
+import DeliveryTracking from '../components/Escrow/DeliveryTracking';
 
 import escrowService from '../services/escrowService';
 import { authService } from '../services/authService';
@@ -33,17 +34,8 @@ const EscrowDetailsPage = () => {
   const [activeTab, setActiveTab] = useState('details');
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const user = authService.getCurrentUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    setCurrentUser(user);
-    fetchEscrowDetails();
-  }, [id]);
-
-  const fetchEscrowDetails = async (silent = false) => {
+  // FIX: wrap in useCallback so useEffect dep array is stable
+  const fetchEscrowDetails = useCallback(async (silent = false) => {
     try {
       silent ? setRefreshing(true) : setLoading(true);
       const res = await escrowService.getEscrowById(id);
@@ -53,11 +45,6 @@ const EscrowDetailsPage = () => {
       const escrowData = res.data.escrow;
       setEscrow(escrowData);
 
-      // FIX: Backend getUserRoles() only checks the participants[] array.
-      // But buyer and seller are stored in escrow.buyer / escrow.seller (top-level ObjectId fields),
-      // NOT as entries in participants[]. So getUserRoles() always returns [] for buyer/seller,
-      // causing ActionButtons to receive no role and render nothing.
-      // Fix: derive role on the frontend by comparing currentUser._id against escrow.buyer._id / seller._id.
       const user = authService.getCurrentUser();
       const userId = user?._id || user?.id;
 
@@ -70,7 +57,6 @@ const EscrowDetailsPage = () => {
       } else if (userId && sellerId && userId.toString() === sellerId.toString()) {
         derivedRole = 'seller';
       } else if (res.data.userRole && res.data.userRole.length > 0) {
-        // Fallback to backend role for agents/inspectors/arbitrators
         derivedRole = Array.isArray(res.data.userRole) ? res.data.userRole[0] : res.data.userRole;
       }
 
@@ -82,7 +68,17 @@ const EscrowDetailsPage = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [id]); // FIX: id is the only real dep; navigate is stable from react-router
+
+  useEffect(() => {
+    const user = authService.getCurrentUser();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    setCurrentUser(user);
+    fetchEscrowDetails();
+  }, [fetchEscrowDetails, navigate]);
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(escrow?.escrowId || escrow?._id);
@@ -91,24 +87,12 @@ const EscrowDetailsPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // FIX: handleAction was only handling 'deliver', 'dispute', 'fund'.
-  // 'accept', 'reject', 'confirm', 'cancel' were silently dropped.
-  // ActionButtons calls onAction('accept') for seller on pending status —
-  // with no handler, clicking Accept did nothing and the button appeared broken.
   const handleAction = async (action) => {
     try {
-      if (action === 'deliver') {
-        setShowDeliveryModal(true);
-        return;
-      }
-      if (action === 'dispute') {
-        setShowDisputeModal(true);
-        return;
-      }
-      if (action === 'fund') {
-        navigate(`/payment/${escrow._id}`);
-        return;
-      }
+      if (action === 'deliver') { setShowDeliveryModal(true); return; }
+      if (action === 'dispute') { setShowDisputeModal(true); return; }
+      if (action === 'fund') { navigate(`/payment/${escrow._id}`); return; }
+
       if (action === 'accept') {
         const res = await escrowService.acceptEscrow(escrow._id);
         if (res.success) {
@@ -156,24 +140,24 @@ const EscrowDetailsPage = () => {
 
   const getMilestoneStatusBadge = (status) => {
     const badges = {
-      pending: { text: 'Pending', color: 'bg-gray-100 text-gray-700', icon: Clock },
-      in_progress: { text: 'In Progress', color: 'bg-blue-100 text-blue-700', icon: TrendingUp },
-      submitted: { text: 'Submitted', color: 'bg-purple-100 text-purple-700', icon: FileText },
-      approved: { text: 'Approved', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-      rejected: { text: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
-      paid: { text: 'Paid', color: 'bg-emerald-100 text-emerald-700', icon: Award }
+      pending:     { text: 'Pending',     color: 'bg-gray-100 text-gray-700',   icon: Clock },
+      in_progress: { text: 'In Progress', color: 'bg-blue-100 text-blue-700',   icon: TrendingUp },
+      submitted:   { text: 'Submitted',   color: 'bg-purple-100 text-purple-700', icon: FileText },
+      approved:    { text: 'Approved',    color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+      rejected:    { text: 'Rejected',    color: 'bg-red-100 text-red-700',     icon: XCircle },
+      paid:        { text: 'Paid',        color: 'bg-emerald-100 text-emerald-700', icon: Award }
     };
     return badges[status] || badges.pending;
   };
 
   const getParticipantRoleBadge = (role) => {
     const roles = {
-      buyer: { text: 'Buyer', color: 'bg-blue-100 text-blue-700' },
-      seller: { text: 'Seller', color: 'bg-green-100 text-green-700' },
-      agent: { text: 'Agent', color: 'bg-purple-100 text-purple-700' },
-      arbitrator: { text: 'Arbitrator', color: 'bg-orange-100 text-orange-700' },
-      inspector: { text: 'Inspector', color: 'bg-indigo-100 text-indigo-700' },
-      shipper: { text: 'Shipper', color: 'bg-pink-100 text-pink-700' }
+      buyer:       { text: 'Buyer',       color: 'bg-blue-100 text-blue-700' },
+      seller:      { text: 'Seller',      color: 'bg-green-100 text-green-700' },
+      agent:       { text: 'Agent',       color: 'bg-purple-100 text-purple-700' },
+      arbitrator:  { text: 'Arbitrator',  color: 'bg-orange-100 text-orange-700' },
+      inspector:   { text: 'Inspector',   color: 'bg-indigo-100 text-indigo-700' },
+      shipper:     { text: 'Shipper',     color: 'bg-pink-100 text-pink-700' }
     };
     return roles[role] || { text: role, color: 'bg-gray-100 text-gray-700' };
   };
@@ -206,6 +190,11 @@ const EscrowDetailsPage = () => {
   const statusInfo = getStatusInfo(escrow.status);
   const hasMilestones = escrow.milestones && escrow.milestones.length > 0;
   const hasMultipleParticipants = escrow.participants && escrow.participants.length > 2;
+  const hasDeliveryProof = escrow.delivery?.proof || escrow.deliveryProof;
+
+  // Determine which tabs to show
+  const tabs = ['details', 'timeline', 'attachments', 'chat'];
+  if (hasDeliveryProof) tabs.splice(2, 0, 'delivery'); // insert before attachments
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-12">
@@ -239,7 +228,7 @@ const EscrowDetailsPage = () => {
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{escrow.title}</h1>
-                
+
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
                     onClick={handleCopyId}
@@ -373,7 +362,7 @@ const EscrowDetailsPage = () => {
               <div className="space-y-3">
                 {escrow.participants.map((participant, index) => {
                   const roleBadge = getParticipantRoleBadge(participant.role);
-                  const user = participant.user;
+                  const participantUser = participant.user;
 
                   return (
                     <div
@@ -382,11 +371,11 @@ const EscrowDetailsPage = () => {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                          {user?.name?.[0] || '?'}
+                          {participantUser?.name?.[0] || '?'}
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{user?.name || 'Unknown'}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{user?.email || 'N/A'}</p>
+                          <p className="font-semibold text-gray-900 dark:text-white">{participantUser?.name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{participantUser?.email || 'N/A'}</p>
                         </div>
                       </div>
 
@@ -411,17 +400,18 @@ const EscrowDetailsPage = () => {
 
           {/* Tabs */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden">
-            <div className="flex border-b border-gray-200 dark:border-gray-800">
-              {['details', 'timeline', 'attachments', 'chat'].map(tab => (
+            <div className="flex border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
+              {tabs.map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-4 px-6 font-semibold capitalize transition ${
+                  className={`flex-1 min-w-max py-4 px-5 font-semibold capitalize transition flex items-center justify-center gap-2 ${
                     activeTab === tab
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
+                  {tab === 'delivery' && <Truck className="w-4 h-4" />}
                   {tab}
                 </button>
               ))}
@@ -476,6 +466,10 @@ const EscrowDetailsPage = () => {
                     </div>
                   )}
                 </div>
+              )}
+
+              {activeTab === 'delivery' && (
+                <DeliveryTracking deliveryProof={escrow.delivery?.proof || escrow.deliveryProof} />
               )}
 
               {activeTab === 'timeline' && (

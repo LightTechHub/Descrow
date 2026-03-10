@@ -38,23 +38,15 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
           );
 
         case 'accepted':
-          // Don't show button here if banner is showing (hideFundButton = true)
-          if (hideFundButton) {
-            return null;
-          }
+          if (hideFundButton) return null;
           return (
             <button
               onClick={() => handleAction('fund')}
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
-                <Loader className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <CreditCard className="w-5 h-5" />
-                  Pay Now
-                </>
+              {loading ? <Loader className="w-5 h-5 animate-spin" /> : (
+                <><CreditCard className="w-5 h-5" />Pay Now</>
               )}
             </button>
           );
@@ -76,13 +68,8 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
-                <Loader className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Check className="w-5 h-5" />
-                  Confirm Receipt
-                </>
+              {loading ? <Loader className="w-5 h-5 animate-spin" /> : (
+                <><Check className="w-5 h-5" />Confirm Receipt</>
               )}
             </button>
           );
@@ -113,13 +100,8 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? (
-                  <Loader className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Accept Deal
-                  </>
+                {loading ? <Loader className="w-5 h-5 animate-spin" /> : (
+                  <><Check className="w-5 h-5" />Accept Deal</>
                 )}
               </button>
               <button
@@ -150,13 +132,8 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
-                <Loader className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Package className="w-5 h-5" />
-                  Mark as Delivered
-                </>
+              {loading ? <Loader className="w-5 h-5 animate-spin" /> : (
+                <><Package className="w-5 h-5" />Mark as Delivered</>
               )}
             </button>
           );
@@ -173,11 +150,17 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
 
         case 'completed':
           return (
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-                <Loader className="w-5 h-5 animate-spin" />
-                <span className="font-medium">Processing payout...</span>
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
+                <Check className="w-5 h-5" />
+                <span className="font-medium">Funds added to your wallet!</span>
               </div>
+              <a
+                href="/wallet"
+                className="block w-full text-center px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition text-sm"
+              >
+                View Wallet & Withdraw
+              </a>
             </div>
           );
 
@@ -204,10 +187,7 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
 
   return (
     <div className="space-y-4">
-      {/* Main Action */}
       {getActionButton()}
-
-      {/* Secondary Actions */}
       <div className="flex gap-3">
         {canCancel && (
           <button
@@ -219,7 +199,6 @@ const ActionButtons = ({ escrow, userRole, onAction, hideFundButton }) => {
             Cancel
           </button>
         )}
-
         {canDispute && !escrow.dispute?.isDisputed && (
           <button
             onClick={() => handleAction('dispute')}

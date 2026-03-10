@@ -43,6 +43,7 @@ const KYCVerificationPage = () => {
   const determineVerificationMethod = (userData) => {
     const accountType = userData?.accountType || 'individual';
     const country = userData?.address?.country || userData?.businessInfo?.country;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
     if (accountType === 'individual') {
       setVerificationMethod('didit');

@@ -16,11 +16,13 @@ const PaymentPage = () => {
 
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchEscrowDetails();
   }, [escrowId]);
 
   // Auto-select best payment method based on currency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (escrow) {
       const method = searchParams.get('method');

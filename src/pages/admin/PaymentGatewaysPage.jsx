@@ -12,6 +12,7 @@ const PaymentGatewaysPage = ({ admin }) => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchPaymentStats();
   }, []);
@@ -77,7 +78,7 @@ const PaymentGatewaysPage = ({ admin }) => {
     }
   ];
 
-  const totalTransactions = paymentMethods.reduce((sum, m) => sum + m.transactions, 0);
+  
   const totalVolume = stats?.transactionStats?.totalVolume || stats?.escrowStats?.totalVolume || 0;
   const baseUrl = process.env.REACT_APP_API_URL || 'https://your-backend.com';
 

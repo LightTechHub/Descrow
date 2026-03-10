@@ -202,6 +202,7 @@ const DisputesPage = ({ admin }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedDispute, setSelectedDispute] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchDisputes();
   }, [statusFilter, currentPage]);

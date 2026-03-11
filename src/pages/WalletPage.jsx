@@ -21,6 +21,104 @@ const apiFetch = async (path, options = {}) => {
   return res.json();
 };
 
+// ── Deposit Modal ─────────────────────────────────────────────────────────────
+const DepositModal = ({ onClose, onSuccess }) => {
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const API = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
+
+  const QUICK_AMOUNTS = [5000, 10000, 25000, 50000, 100000, 250000];
+
+  const handleDeposit = async () => {
+    const amountNGN = parseInt(amount);
+    if (!amountNGN || amountNGN < 500) return toast.error('Minimum deposit is ₦500');
+    if (amountNGN > 10000000) return toast.error('Maximum single deposit is ₦10,000,000');
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/wallet/deposit/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ amount: amountNGN })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.authorizationUrl) {
+        // Redirect to Paystack checkout
+        window.location.href = data.data.authorizationUrl;
+      } else {
+        toast.error(data.message || 'Failed to initiate deposit');
+      }
+    } catch (err) {
+      toast.error('Failed to connect to payment gateway');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Funds to Wallet</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Powered by Paystack · Secure payment</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
+            <XCircle className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount (₦)</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₦</span>
+              <input
+                type="number"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="0"
+                min="500"
+                className="w-full pl-8 pr-4 py-4 border border-gray-300 dark:border-gray-600 rounded-xl text-xl font-bold text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Quick amounts</p>
+            <div className="grid grid-cols-3 gap-2">
+              {QUICK_AMOUNTS.map(q => (
+                <button
+                  key={q}
+                  onClick={() => setAmount(q.toString())}
+                  className={`py-2 px-3 rounded-lg text-sm font-semibold border transition ${
+                    parseInt(amount) === q
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  ₦{q.toLocaleString()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleDeposit}
+            disabled={loading || !amount || parseInt(amount) < 500}
+            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? <><Loader className="w-5 h-5 animate-spin" /> Processing...</> : <>Continue to Payment</>}
+          </button>
+
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
+            You'll be redirected to Paystack to complete the payment securely.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Withdrawal Modal ───────────────────────────────────────────────────────────
 const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
   const [step, setStep] = useState(1); // 1=form, 2=verify, 3=confirm
@@ -298,6 +396,7 @@ const WalletPage = () => {
   const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
   const [activeTab, setActiveTab] = useState('transactions');
   const [balanceHidden, setBalanceHidden] = useState(false);
 
@@ -389,14 +488,23 @@ const WalletPage = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => setShowWithdrawModal(true)}
-            disabled={balance < 1000}
-            className="w-full py-4 bg-white text-blue-700 rounded-xl font-bold text-lg hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
-          >
-            <ArrowUpCircle className="w-5 h-5" />
-            {balance < 1000 ? 'Minimum ₦1,000 to withdraw' : 'Withdraw Funds'}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowDepositModal(true)}
+              className="flex-1 py-4 bg-white text-blue-700 rounded-xl font-bold text-lg hover:bg-blue-50 transition flex items-center justify-center gap-2 shadow-lg"
+            >
+              <ArrowDownCircle className="w-5 h-5" />
+              Add Funds
+            </button>
+            <button
+              onClick={() => setShowWithdrawModal(true)}
+              disabled={balance < 1000}
+              className="flex-1 py-4 bg-white/20 text-white border border-white/30 rounded-xl font-bold text-lg hover:bg-white/30 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <ArrowUpCircle className="w-5 h-5" />
+              {balance < 1000 ? 'Min ₦1,000' : 'Withdraw'}
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -520,6 +628,13 @@ const WalletPage = () => {
         <WithdrawalModal
           balance={balance}
           onClose={() => setShowWithdrawModal(false)}
+          onSuccess={fetchData}
+        />
+      )}
+
+      {showDepositModal && (
+        <DepositModal
+          onClose={() => setShowDepositModal(false)}
           onSuccess={fetchData}
         />
       )}

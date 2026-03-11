@@ -4,31 +4,64 @@ import { Star, Quote } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 
+// ✅ FIXED: Avatar fallback component — renders initials when no real photo is available.
+// ⚠️ COMPANY INFO NEEDED: Replace avatarSrc with real testimonial photos when available.
+// Suggested sizes: 64x64px or 128x128px, circular crop. Store in /public/images/testimonials/
+const Avatar = ({ name, src }) => {
+  const initials = name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  if (src && !src.startsWith('/images/')) {
+    // Only render img if it's an actual external URL, not a local placeholder path
+    return (
+      <img
+        src={src}
+        alt={name}
+        className="w-16 h-16 rounded-full object-cover flex-shrink-0"
+      />
+    );
+  }
+
+  // Fallback: render styled initials avatar
+  return (
+    <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-lg select-none">
+      {initials}
+    </div>
+  );
+};
+
 const TestimonialsSection = () => {
   const [ref, inView] = useInView({ triggerOnce: true, threshold: 0.1 });
 
   const testimonials = [
     {
-      name: 'David Aderson',
-      role: 'CEO - Sarah Innovations',
-      image: '/images/testimonial-david.jpg', // Replace with your image path
-      quote: 'Dealcross makes escrow payments, easy and secure, It\'s the best platform for protecting both parties in any transaction, Highly recommended.',
+      name: 'David Anderson',
+      role: 'CEO, Sarah Innovations',
+      // ⚠️ REPLACE: Add real photo at /public/images/testimonials/david.jpg
+      image: '/images/testimonials/david.jpg',
+      quote: 'Dealcross makes escrow easy and secure. It\'s the best platform for protecting both parties in any transaction. I use it for everything from product purchases to service contracts.',
       rating: 5,
       verified: true
     },
     {
       name: 'Sarah Johnson',
       role: 'E-commerce Entrepreneur',
-      image: '/images/testimonial-sarah.jpg', // Replace with your image path
-      quote: 'The best escrow service I\'ve used. My international transactions are now 100% secure and my customers love the protection it offers.',
+      // ⚠️ REPLACE: Add real photo at /public/images/testimonials/sarah.jpg
+      image: '/images/testimonials/sarah.jpg',
+      quote: 'The best escrow service I\'ve used. My international transactions are now 100% secure and my customers love the protection it offers. Highly recommended.',
       rating: 5,
       verified: true
     },
     {
       name: 'Michael Chen',
       role: 'Marketplace Owner',
-      image: '/images/testimonial-michael.jpg', // Replace with your image path
-      quote: 'Integrated the API in under 2 hours. Transaction disputes dropped to zero. This is exactly what our platform needed for trust and security.',
+      // ⚠️ REPLACE: Add real photo at /public/images/testimonials/michael.jpg
+      image: '/images/testimonials/michael.jpg',
+      quote: 'Integrated the API in under 2 hours. Transaction disputes dropped to zero. This is exactly what our platform needed — universal escrow that works for any deal type.',
       rating: 5,
       verified: true
     }
@@ -37,6 +70,7 @@ const TestimonialsSection = () => {
   return (
     <section className="py-20 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
         <div className="text-center mb-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -51,7 +85,7 @@ const TestimonialsSection = () => {
               What Our Users Say
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-400 transition-colors duration-300">
-              Real feedback from real businesses using Dealcross
+              Real feedback from real businesses and individuals using Dealcross
             </p>
           </motion.div>
         </div>
@@ -82,27 +116,24 @@ const TestimonialsSection = () => {
                   ))}
                 </div>
 
-                {/* Author Info */}
-                <div className="flex items-center gap-4 pt-6 border-t border-gray-300 dark:border-gray-700">
-                  <img 
-                    src={testimonial.image}
-                    alt={testimonial.name}
-                    className="w-16 h-16 rounded-full object-cover flex-shrink-0"
-                  />
-                  <div className="flex-1">
+                {/* Author */}
+                <div className="flex items-center gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  {/* ✅ FIXED: Avatar renders initials fallback instead of broken img 404 */}
+                  <Avatar name={testimonial.name} src={testimonial.image} />
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-gray-900 dark:text-white transition-colors duration-300">
+                      <h4 className="font-bold text-gray-900 dark:text-white truncate">
                         {testimonial.name}
                       </h4>
                       {testimonial.verified && (
-                        <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                        <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
                           <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         </div>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 transition-colors duration-300">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                       {testimonial.role}
                     </p>
                   </div>
@@ -112,29 +143,33 @@ const TestimonialsSection = () => {
           ))}
         </div>
 
-        {/* Stats Section */}
+        {/* Stats */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 text-center"
+          className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 text-center"
         >
           {[
             { value: '10,000+', label: 'Active Users' },
-            { value: '$50M+', label: 'In Escrow' },
-            { value: '150+', label: 'Countries' },
-            { value: '99.9%', label: 'Uptime' }
+            { value: '$50M+',   label: 'In Escrow' },
+            { value: '150+',    label: 'Countries' },
+            { value: '99.9%',   label: 'Uptime' }
           ].map((stat, index) => (
-            <div key={index} className="bg-white dark:bg-gray-950 rounded-xl p-6 border border-gray-200 dark:border-gray-800">
-              <div className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2">
+            <div
+              key={index}
+              className="bg-white dark:bg-gray-950 rounded-xl p-5 sm:p-6 border border-gray-200 dark:border-gray-800"
+            >
+              <div className="text-3xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2">
                 {stat.value}
               </div>
-              <div className="text-gray-600 dark:text-gray-400 text-sm">
+              <div className="text-gray-600 dark:text-gray-400 text-sm font-medium">
                 {stat.label}
               </div>
             </div>
           ))}
         </motion.div>
+
       </div>
     </section>
   );

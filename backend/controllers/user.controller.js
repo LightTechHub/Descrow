@@ -10,7 +10,7 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
 // ✅ FIXED: Import models used in deleteAccount
-const APIKey      = require('../models/ApiKey.model');
+const APIKey      = require('../models/APIKey.model');
 const BankAccount = require('../models/BankAccount.model');
 const Notification = require('../models/Notification.model');
 

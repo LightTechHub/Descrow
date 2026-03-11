@@ -1,17 +1,40 @@
-// File: src/components/HeroSection.jsx - FIXED VERSION
+// File: src/components/HeroSection.jsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
+// ✅ FIXED: Avatar fallback for user trust badges — renders coloured circle when image fails
+// ⚠️ COMPANY INFO NEEDED: Replace with real user photos stored at /public/images/users/
+const UserAvatar = ({ src, fallbackColor, label }) => {
+  const [errored, setErrored] = React.useState(false);
+
+  if (!src || errored) {
+    return (
+      <div
+        className={`w-10 h-10 ${fallbackColor} rounded-full border-2 border-white dark:border-blue-900 flex-shrink-0`}
+        aria-label={label}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={label}
+      className="w-10 h-10 rounded-full border-2 border-white dark:border-blue-900 object-cover flex-shrink-0"
+      onError={() => setErrored(true)}
+    />
+  );
+};
+
 const HeroSection = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  // ✅ FIX: Proper navigation handlers
   const handleGetStarted = () => {
-    console.log('Get Started clicked - navigating to /signup');
+    // ✅ FIXED: removed console.log
     navigate('/signup');
   };
 
@@ -19,47 +42,47 @@ const HeroSection = () => {
     const element = document.getElementById('how-it-works');
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      console.warn('how-it-works section not found');
     }
+    // ✅ FIXED: removed console.warn — silently does nothing if section not found
   };
 
-  const userImages = [
-    '/images/user1.jpg',
-    '/images/user2.jpg',
-    '/images/user3.jpg'
+  // ⚠️ COMPANY INFO NEEDED: Replace with real user photos (external URLs or /public/images/users/)
+  const userAvatars = [
+    { src: null, fallbackColor: 'bg-blue-400', label: 'User 1' },
+    { src: null, fallbackColor: 'bg-blue-500', label: 'User 2' },
+    { src: null, fallbackColor: 'bg-blue-600', label: 'User 3' },
   ];
 
   return (
     <section className="relative bg-white dark:bg-[#1e3a5f] py-12 sm:py-16 md:py-20 lg:py-24 overflow-hidden transition-colors duration-300">
-      {/* Subtle Background Elements */}
-      <div className="absolute inset-0 overflow-hidden opacity-0 dark:opacity-10 transition-opacity duration-300">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-400 rounded-full blur-3xl"></div>
+      {/* Background glows — ✅ FIXED: purple-400 orb → blue-400 */}
+      <div className="absolute inset-0 overflow-hidden opacity-0 dark:opacity-10 transition-opacity duration-300 pointer-events-none">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 items-center">
-          
+
           {/* Left Content */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6 leading-tight transition-colors duration-300">
-              {t('welcome_to_dealcross') || 'Secure Escrow Payments for Your Transactions'}
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6 leading-tight">
+              {t('welcome_to_dealcross') || 'Universal Escrow for Every Transaction'}
             </h1>
-            <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-blue-200 mb-6 sm:mb-8 max-w-2xl transition-colors duration-300">
-              {t('your_trusted_escrow') || 'Trustworthy and easy-to-use escrow platform designed to protect buyers and sellers in financial transactions'}
+            <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-blue-200 mb-6 sm:mb-8 max-w-2xl">
+              {t('your_trusted_escrow') || 'Protect buyers and sellers in any deal — goods, services, digital assets, real estate, and more. Trusted by thousands worldwide.'}
             </p>
 
-            {/* ✅ FIXED: CTA Buttons with proper handlers and mobile optimization */}
+            {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6 sm:mb-8">
               <button
                 onClick={handleGetStarted}
                 type="button"
-                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 active:bg-green-800 transition-all duration-200 text-base sm:text-lg flex items-center justify-center gap-2 shadow-lg touch-manipulation"
+                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 active:bg-green-800 transition-all duration-200 text-base sm:text-lg flex items-center justify-center gap-2 shadow-lg touch-manipulation"
                 aria-label="Get started with Dealcross"
               >
                 Get Started
@@ -68,8 +91,8 @@ const HeroSection = () => {
               <button
                 onClick={handleLearnMore}
                 type="button"
-                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gray-100 dark:bg-white/10 backdrop-blur-sm border-2 border-gray-300 dark:border-white/30 text-gray-900 dark:text-white rounded-lg font-semibold hover:bg-gray-200 dark:hover:bg-white/20 active:bg-gray-300 dark:active:bg-white/30 transition-all duration-200 text-base sm:text-lg touch-manipulation"
-                aria-label="Learn more about how Dealcross works"
+                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gray-100 dark:bg-white/10 backdrop-blur-sm border-2 border-gray-300 dark:border-white/30 text-gray-900 dark:text-white rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-white/20 active:bg-gray-300 dark:active:bg-white/30 transition-all duration-200 text-base sm:text-lg touch-manipulation"
+                aria-label="Learn how Dealcross works"
               >
                 Learn More
               </button>
@@ -78,78 +101,67 @@ const HeroSection = () => {
             {/* Trust Badges */}
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex -space-x-2">
-                {userImages.map((image, index) => (
-                  <img
-                    key={index}
-                    src={image}
-                    alt={`User ${index + 1}`}
-                    className="w-10 h-10 rounded-full border-2 border-white dark:border-[#1e3a5f] object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextElementSibling.style.display = 'block';
-                    }}
-                  />
+                {/* ✅ FIXED: replaced broken <img> with Avatar fallback component */}
+                {userAvatars.map((avatar, index) => (
+                  <UserAvatar key={index} {...avatar} />
                 ))}
-                <div className="w-10 h-10 bg-blue-400 rounded-full border-2 border-white dark:border-[#1e3a5f] hidden"></div>
-                <div className="w-10 h-10 bg-purple-400 rounded-full border-2 border-white dark:border-[#1e3a5f] hidden"></div>
-                <div className="w-10 h-10 bg-pink-400 rounded-full border-2 border-white dark:border-[#1e3a5f] hidden"></div>
               </div>
-              <div className="text-gray-700 dark:text-blue-100 transition-colors duration-300">
+              <div className="text-gray-700 dark:text-blue-100">
                 <div className="flex items-center gap-1 mb-1">
                   {[...Array(5)].map((_, i) => (
                     <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   ))}
                 </div>
-                <p className="text-sm">Trusted by thousands of users</p>
+                <p className="text-sm">Trusted by thousands of users worldwide</p>
               </div>
             </div>
           </motion.div>
 
-          {/* Right Content - Phone Mockup */}
+          {/* Right Content — Phone Mockup */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
             className="relative mt-8 lg:mt-0"
           >
-            {/* Floating Lock Icon */}
+            {/* Floating Lock */}
             <div className="absolute -top-10 -left-10 z-20 hidden lg:block">
               <motion.div
                 animate={{ y: [0, -20, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                 className="w-20 h-20 bg-blue-500/20 backdrop-blur-sm rounded-2xl border border-blue-400/30 flex items-center justify-center shadow-xl"
               >
                 <span className="text-3xl" role="img" aria-label="Lock">🔒</span>
               </motion.div>
             </div>
 
-            {/* Floating Money Icon */}
+            {/* Floating Money */}
             <div className="absolute -bottom-10 -right-10 z-20 hidden lg:block">
               <motion.div
                 animate={{ y: [0, 20, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
                 className="w-24 h-24 bg-green-500/20 backdrop-blur-sm rounded-2xl border border-green-400/30 flex items-center justify-center shadow-xl"
               >
-                <span className="text-4xl" role="img" aria-label="Money">💰</span>
+                <span className="text-4xl" role="img" aria-label="Money bag">💰</span>
               </motion.div>
             </div>
 
-            {/* Phone Mockup Container */}
+            {/* Phone Mockup */}
             <div className="relative mx-auto max-w-sm lg:max-w-md">
-              {/* Phone Frame */}
               <div className="relative bg-gray-900 rounded-[3rem] p-3 shadow-2xl">
                 <div className="bg-white dark:bg-gray-950 rounded-[2.5rem] overflow-hidden">
+
                   {/* Status Bar */}
                   <div className="bg-[#1e3a5f] px-6 py-3 flex items-center justify-between text-white text-xs">
                     <span>9:41</span>
-                    <div className="flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <div className="flex items-center gap-1" aria-hidden="true">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
                       </svg>
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M17.778 8.222c-4.296-4.296-11.26-4.296-15.556 0A1 1 0 01.808 6.808c5.076-5.077 13.308-5.077 18.384 0a1 1 0 01-1.414 1.414zM14.95 11.05a7 7 0 00-9.9 0 1 1 0 01-1.414-1.414 9 9 0 0112.728 0 1 1 0 01-1.414 1.414zM12.12 13.88a3 3 0 00-4.242 0 1 1 0 01-1.415-1.415 5 5 0 017.072 0 1 1 0 01-1.415 1.415zM9 16a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
                       </svg>
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
                       </svg>
                     </div>
@@ -163,108 +175,77 @@ const HeroSection = () => {
                       </svg>
                       <span className="font-bold text-gray-900 dark:text-white text-sm">Dealcross</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      <div className="w-7 h-7 bg-orange-400 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                        F
-                      </div>
+                    <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                      U
                     </div>
                   </div>
 
                   {/* App Content */}
                   <div className="p-4 bg-gray-50 dark:bg-gray-950">
-                    <div className="text-xs text-gray-600 dark:text-gray-400 mb-3 font-semibold">sordanfra@dcross</div>
-                    
-                    {/* Stats Cards */}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-semibold">My Escrows</div>
+
+                    {/* Stat Cards */}
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       <div className="bg-blue-600 rounded-xl p-3 text-white">
-                        <div className="text-[10px] opacity-80 mb-1">Assupiciaae</div>
+                        <div className="text-[10px] opacity-80 mb-1">In Escrow</div>
                         <div className="text-lg font-bold">$1,200</div>
                       </div>
                       <div className="bg-green-600 rounded-xl p-3 text-white">
-                        <div className="text-[10px] opacity-80 mb-1">Deret distant</div>
+                        <div className="text-[10px] opacity-80 mb-1">Completed</div>
                         <div className="text-lg font-bold">$5,200</div>
                       </div>
                     </div>
 
-                    <div className="bg-purple-600 rounded-xl p-3 text-white mb-4">
-                      <div className="text-[10px] opacity-80 mb-1">There delivered</div>
+                    <div className="bg-blue-700 rounded-xl p-3 text-white mb-4">
+                      <div className="text-[10px] opacity-80 mb-1">Total Protected</div>
                       <div className="text-xl font-bold">$18,750</div>
                     </div>
 
                     {/* Active Escrows */}
                     <div className="space-y-2">
                       <div className="text-[10px] font-bold text-gray-900 dark:text-white mb-2">Active Escrows</div>
-                      
-                      <div className="bg-white dark:bg-gray-900 rounded-lg p-2.5 shadow-sm">
-                        <div className="flex justify-between text-[10px] mb-1.5">
-                          <span className="text-gray-700 dark:text-gray-300 font-medium">Website Development</span>
-                          <span className="text-green-600 dark:text-green-400 font-bold">$5,000</span>
+                      {[
+                        { label: 'Website Development', amount: '$5,000', pct: '75%' },
+                        { label: 'Equipment Purchase',  amount: '$3,000', pct: '50%' },
+                        { label: 'Digital Marketing',   amount: '$3,790', pct: '100%', full: true }
+                      ].map((item, i) => (
+                        <div key={i} className="bg-white dark:bg-gray-900 rounded-lg p-2.5 shadow-sm">
+                          <div className="flex justify-between text-[10px] mb-1.5">
+                            <span className="text-gray-700 dark:text-gray-300 font-medium">{item.label}</span>
+                            <span className="text-green-600 dark:text-green-400 font-bold">{item.amount}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5">
+                            <div
+                              className={`${item.full ? 'bg-green-600' : 'bg-blue-600'} h-1.5 rounded-full`}
+                              style={{ width: item.pct }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5">
-                          <div className="bg-blue-600 h-1.5 rounded-full" style={{width: '75%'}}></div>
-                        </div>
-                      </div>
-
-                      <div className="bg-white dark:bg-gray-900 rounded-lg p-2.5 shadow-sm">
-                        <div className="flex justify-between text-[10px] mb-1.5">
-                          <span className="text-gray-700 dark:text-gray-300 font-medium">Equipment Purchase</span>
-                          <span className="text-green-600 dark:text-green-400 font-bold">$3,000</span>
-                        </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5">
-                          <div className="bg-blue-600 h-1.5 rounded-full" style={{width: '50%'}}></div>
-                        </div>
-                      </div>
-
-                      <div className="bg-white dark:bg-gray-900 rounded-lg p-2.5 shadow-sm">
-                        <div className="flex justify-between text-[10px] mb-1.5">
-                          <span className="text-gray-700 dark:text-gray-300 font-medium">Digital Marketing</span>
-                          <span className="text-green-600 dark:text-green-400 font-bold">$3,790</span>
-                        </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5">
-                          <div className="bg-green-600 h-1.5 rounded-full" style={{width: '100%'}}></div>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
 
                   {/* Bottom Nav */}
-                  <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-3 flex justify-around">
-                    <div className="flex flex-col items-center gap-1">
-                      <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                      </svg>
-                      <span className="text-[9px] text-blue-600 font-semibold">Home</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                        <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                      </svg>
-                      <span className="text-[9px] text-gray-400">Escrows</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                        <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
-                        <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
-                      </svg>
-                      <span className="text-[9px] text-gray-400">Accounts</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                      </svg>
-                      <span className="text-[9px] text-gray-400">Profile</span>
-                    </div>
+                  <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-6 py-3 flex justify-around" aria-hidden="true">
+                    {[
+                      { label: 'Home', active: true },
+                      { label: 'Escrows', active: false },
+                      { label: 'Wallet', active: false },
+                      { label: 'Profile', active: false }
+                    ].map(({ label, active }) => (
+                      <div key={label} className="flex flex-col items-center gap-1">
+                        <div className={`w-5 h-5 rounded ${active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                        <span className={`text-[9px] font-semibold ${active ? 'text-blue-600' : 'text-gray-400'}`}>{label}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              {/* Floating Shield - Desktop Only */}
+              {/* Floating Shield */}
               <motion.div
                 animate={{ rotate: [0, 5, 0, -5, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
                 className="absolute top-1/2 -left-16 transform -translate-y-1/2 hidden xl:block"
               >
                 <div className="w-24 h-24 bg-blue-500/20 backdrop-blur-sm rounded-full border border-blue-400/30 flex items-center justify-center shadow-xl">
@@ -272,20 +253,22 @@ const HeroSection = () => {
                 </div>
               </motion.div>
 
-              {/* Floating Coins - Desktop Only */}
+              {/* Floating Coins */}
               <motion.div
                 animate={{ y: [0, -15, 0] }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                 className="absolute bottom-1/4 -right-12 hidden xl:block"
+                aria-hidden="true"
               >
                 <div className="flex flex-col gap-0.5">
-                  <div className="w-12 h-3 bg-yellow-400 rounded-full shadow-lg"></div>
-                  <div className="w-12 h-3 bg-yellow-500 rounded-full shadow-lg -ml-1"></div>
-                  <div className="w-12 h-3 bg-yellow-600 rounded-full shadow-lg"></div>
+                  <div className="w-12 h-3 bg-yellow-400 rounded-full shadow-lg" />
+                  <div className="w-12 h-3 bg-yellow-500 rounded-full shadow-lg -ml-1" />
+                  <div className="w-12 h-3 bg-yellow-600 rounded-full shadow-lg" />
                 </div>
               </motion.div>
             </div>
           </motion.div>
+
         </div>
       </div>
     </section>

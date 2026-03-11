@@ -480,17 +480,30 @@ const KYCVerificationPage = () => {
                     <ArrowRight className="w-5 h-5" />
                   </button>
                 ) : (
-                  <button
-                    onClick={handleStartVerification}
-                    disabled={initiating}
-                    className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {initiating ? (
-                      <><Loader className="w-5 h-5 animate-spin" /> Starting Verification...</>
-                    ) : (
-                      <>{isBusinessAccount ? <Building className="w-5 h-5" /> : <Shield className="w-5 h-5" />} Start {isBusinessAccount ? 'Business' : 'Identity'} Verification <ArrowRight className="w-5 h-5" /></>
+                  <>
+                    <button
+                      onClick={handleStartVerification}
+                      disabled={initiating}
+                      className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {initiating ? (
+                        <><Loader className="w-5 h-5 animate-spin" /> Starting Verification...</>
+                      ) : (
+                        <>{isBusinessAccount ? <Building className="w-5 h-5" /> : <Shield className="w-5 h-5" />} Start {isBusinessAccount ? 'Business' : 'Identity'} Verification <ArrowRight className="w-5 h-5" /></>
+                      )}
+                    </button>
+
+                    {/* Manual upload fallback for individuals (international or no BVN/NIN) */}
+                    {!isBusinessAccount && (
+                      <button
+                        onClick={() => setShowManualUpload(true)}
+                        className="w-full px-5 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg font-medium text-sm hover:border-blue-400 hover:text-blue-600 dark:hover:border-blue-500 dark:hover:text-blue-400 transition flex items-center justify-center gap-2"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Use manual document upload instead (international / no BVN)
+                      </button>
                     )}
-                  </button>
+                  </>
                 )}
               </>
             )}

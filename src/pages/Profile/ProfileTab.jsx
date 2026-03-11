@@ -1,419 +1,247 @@
+// File: src/pages/ProfileTab.jsx
+// ✅ NEW: KYC field locking — name/businessName locked after KYC approval
+// ✅ FIXED: Mobile-first sizing throughout
 import React, { useState } from 'react';
-import {
-  Camera, Save, Edit2, X, User, Phone, Mail, MapPin,
-  Building2, Link as LinkIcon, Calendar, CheckCircle,
-  Briefcase, Globe, Hash,
-} from 'lucide-react';
-import profileService from '../../services/profileService';
-import { useAuth } from '../../contexts/AuthContext';
+import { Lock, User, Phone, Globe, MapPin, FileText, Save, Loader, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import API from '../utils/api';
 
-// Fixes avatar 404: uses backend root URL (no /api) for static files
-const resolveAvatarUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  const base =
-    process.env.REACT_APP_BACKEND_URL ||
-    (process.env.REACT_APP_API_URL || '').replace(/\/api\/?$/, '') ||
-    '';
-  return `${base}${url.startsWith('/') ? url : `/${url}`}`;
-};
+const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
+  const isLocked = kycApproved; // Name/business fields locked after KYC
 
-const ProfileTab = ({ user, onUpdate }) => {
-  const { updateUser } = useAuth();
-  const [editMode, setEditMode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  // Always build form from current user so existing data is pre-filled
-  const buildForm = () => ({
-    name:  user.name  || '',
-    phone: user.phone || '',
-    bio:   user.bio   || '',
+  const [form, setForm] = useState({
+    name:  user?.name  || '',
+    phone: user?.phone || '',
+    bio:   user?.bio   || '',
     address: {
-      street:     user.address?.street     || '',
-      city:       user.address?.city       || '',
-      state:      user.address?.state      || '',
-      country:    user.address?.country    || user.country || '',
-      postalCode: user.address?.postalCode || user.address?.zipCode || '',
+      street:  user?.address?.street  || '',
+      city:    user?.address?.city    || '',
+      state:   user?.address?.state   || '',
+      country: user?.address?.country || '',
     },
     businessInfo: {
-      companyName:        user.businessInfo?.companyName        || '',
-      companyType:        user.businessInfo?.companyType        || '',
-      industry:           user.businessInfo?.industry           || '',
-      taxId:              user.businessInfo?.taxId              || '',
-      registrationNumber: user.businessInfo?.registrationNumber || '',
-      website:            user.businessInfo?.website            || '',
-    },
-    socialLinks: {
-      twitter:  user.socialLinks?.twitter  || '',
-      linkedin: user.socialLinks?.linkedin || '',
-      website:  user.socialLinks?.website  || '',
-    },
-  });
-
-  const [formData, setFormData] = useState(buildForm);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    if (name.includes('.')) {
-      const [parent, child] = name.split('.');
-      setFormData(prev => ({
-        ...prev,
-        [parent]: { ...prev[parent], [child]: value },
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      companyName:    user?.businessInfo?.companyName    || '',
+      businessType:   user?.businessInfo?.businessType   || '',
+      website:        user?.businessInfo?.website        || '',
+      registrationNo: user?.businessInfo?.registrationNo || '',
     }
-  };
+  });
+  const [saving, setSaving] = useState(false);
 
-  const handleAvatarChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error('Max file size is 5MB'); return; }
-    if (!file.type.startsWith('image/')) { toast.error('Images only'); return; }
-    try {
-      setUploading(true);
-      const response = await profileService.uploadAvatar(file);
-      if (response.success) {
-        toast.success('Photo updated!');
-        onUpdate && onUpdate();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Upload failed');
-    } finally {
-      setUploading(false);
+  const handleChange = (path, value) => {
+    const keys = path.split('.');
+    if (keys.length === 1) {
+      setForm(f => ({ ...f, [keys[0]]: value }));
+    } else {
+      setForm(f => ({ ...f, [keys[0]]: { ...f[keys[0]], [keys[1]]: value } }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
     try {
-      setLoading(true);
-      const payload = {
-        name:        formData.name,
-        phone:       formData.phone,
-        bio:         formData.bio,
-        address:     formData.address,
-        socialLinks: formData.socialLinks,
-      };
-      if (user.accountType === 'business') {
-        const bi = { ...formData.businessInfo };
-        if (!bi.companyType) delete bi.companyType;
-        if (!bi.industry)    delete bi.industry;
-        payload.businessInfo = bi;
-      }
-
-      const response = await profileService.updateProfile(payload);
-      if (response.success) {
-        toast.success('Profile saved!');
-        setEditMode(false);
-        // Sync to context/localStorage so country persists on reload
-        if (response.data) updateUser(response.data);
-        onUpdate && onUpdate();
+      const res = await API.put('/users/profile', form);
+      if (res.data.success) {
+        toast.success('Profile updated successfully');
+        if (onUpdate) onUpdate(res.data.data.user);
+      } else {
+        toast.error(res.data.message || 'Failed to update profile');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Save failed');
+      const msg = err?.response?.data?.message || 'Failed to update profile';
+      toast.error(msg);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    setEditMode(false);
-    setFormData(buildForm());
-  };
+  const isBusinessAccount = user?.accountType === 'business';
 
-  const avatarInitial = () => {
-    if (user.accountType === 'business')
-      return user.businessInfo?.companyName?.charAt(0)?.toUpperCase() || user.name?.charAt(0)?.toUpperCase() || 'B';
-    return user.name?.charAt(0)?.toUpperCase() || 'U';
-  };
+  const LockedBadge = () => (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-full">
+      <Lock className="w-3 h-3" /> Locked after KYC
+    </span>
+  );
 
-  const displayName = () =>
-    user.accountType === 'business'
-      ? user.businessInfo?.companyName || user.name || 'Business Account'
-      : user.name || 'User';
-
-  const country = () =>
-    user.address?.country || user.country || 'Not provided';
-
-  const memberSince = () => {
-    if (!user.createdAt) return 'Recently joined';
-    try { return new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }); }
-    catch { return 'Recently joined'; }
-  };
-
-  // ─── VIEW MODE ──────────────────────────────────────────────────────────────
-  if (!editMode) {
-    return (
-      <div className="space-y-6">
-        {/* Avatar + header */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <div className="flex justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Profile Information</h3>
-            <button onClick={() => setEditMode(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition text-sm">
-              <Edit2 className="w-4 h-4" /> Edit Profile
-            </button>
-          </div>
-          <div className="flex items-center gap-6 pb-6 border-b border-gray-200 dark:border-gray-800">
-            <div className="relative">
-              {user.profilePicture ? (
-                <img src={resolveAvatarUrl(user.profilePicture)} alt={displayName()}
-                  className="w-24 h-24 rounded-full object-cover border-4 border-gray-200 dark:border-gray-700"
-                  onError={(e) => { e.target.style.display = 'none'; }} />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-blue-600 flex items-center justify-center text-white text-3xl font-bold border-4 border-gray-200 dark:border-gray-700">
-                  {avatarInitial()}
-                </div>
-              )}
-              {uploading && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{displayName()}</h2>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mb-3">{user.email}</p>
-              <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer text-sm">
-                <Camera className="w-4 h-4" />
-                {uploading ? 'Uploading...' : 'Change Photo'}
-                <input type="file" accept="image/*" onChange={handleAvatarChange} disabled={uploading} className="hidden" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {/* Personal info */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Personal Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoRow icon={User}      label="Full Name"    value={user.name || 'Not provided'} />
-            <InfoRow icon={Mail}      label="Email"        value={user.email} verified={user.verified} />
-            <InfoRow icon={Phone}     label="Phone"        value={user.phone || 'Not provided'} />
-            <InfoRow icon={MapPin}    label="Country"      value={country()} />
-            <InfoRow icon={Building2} label="Account Type" value={user.accountType === 'business' ? 'Business Account' : 'Individual Account'} />
-            <InfoRow icon={Calendar}  label="Member Since" value={memberSince()} />
-          </div>
-          {user.bio && (
-            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Bio</p>
-              <p className="text-gray-700 dark:text-gray-300">{user.bio}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Address */}
-        {(user.address?.city || user.address?.country) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Address</h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              {[user.address?.street, user.address?.city, user.address?.state,
-                user.address?.postalCode, user.address?.country || user.country]
-                .filter(Boolean).join(', ')}
-            </p>
-          </div>
-        )}
-
-        {/* Business info */}
-        {user.accountType === 'business' && user.businessInfo && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Building2 className="w-5 h-5" /> Business Information
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {user.businessInfo.companyName        && <InfoRow icon={Building2} label="Company Name"        value={user.businessInfo.companyName} />}
-              {user.businessInfo.companyType        && <InfoRow icon={Briefcase} label="Company Type"        value={user.businessInfo.companyType.replace(/_/g, ' ')} />}
-              {user.businessInfo.industry           && <InfoRow icon={Briefcase} label="Industry"            value={user.businessInfo.industry.replace(/_/g, ' ')} />}
-              {user.businessInfo.taxId              && <InfoRow icon={Hash}      label="Tax ID"              value={user.businessInfo.taxId} />}
-              {user.businessInfo.registrationNumber && <InfoRow icon={Hash}      label="Reg. Number"         value={user.businessInfo.registrationNumber} />}
-              {user.businessInfo.website            && <InfoRow icon={Globe}     label="Website"             value={user.businessInfo.website} isLink />}
-            </div>
-          </div>
-        )}
-
-        {/* Social links */}
-        {(user.socialLinks?.twitter || user.socialLinks?.linkedin || user.socialLinks?.website) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <LinkIcon className="w-5 h-5" /> Social Links
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {user.socialLinks.twitter  && <InfoRow icon={LinkIcon} label="Twitter"  value={user.socialLinks.twitter}  isLink />}
-              {user.socialLinks.linkedin && <InfoRow icon={LinkIcon} label="LinkedIn" value={user.socialLinks.linkedin} isLink />}
-              {user.socialLinks.website  && <InfoRow icon={Globe}    label="Website"  value={user.socialLinks.website}  isLink />}
-            </div>
-          </div>
-        )}
+  const FieldWrapper = ({ label, locked = false, children }) => (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+        {locked && <LockedBadge />}
       </div>
-    );
-  }
+      {children}
+    </div>
+  );
 
-  // ─── EDIT MODE ───────────────────────────────────────────────────────────────
+  const inputClass = (locked = false) =>
+    `w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border text-sm sm:text-base transition outline-none ${
+      locked
+        ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed select-none'
+        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+    }`;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-        <div className="flex justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Edit Profile</h3>
-          <button type="button" onClick={handleCancel} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+    <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
+
+      {/* KYC Locked Info Banner */}
+      {isLocked && (
+        <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 sm:p-4">
+          <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs sm:text-sm text-amber-700 dark:text-amber-300 leading-relaxed">
+            <strong>Identity verified.</strong> Your name{isBusinessAccount ? ' and business name are' : ' is'} locked to protect against identity fraud.
+            To request a change, contact <a href="mailto:support@dealcross.net" className="underline font-semibold">support@dealcross.net</a>.
+          </p>
         </div>
-        <div className="space-y-4">
-          <Field label={user.accountType === 'business' ? 'Owner Full Name *' : 'Full Name *'}>
-            <input required type="text" name="name" value={formData.name} onChange={handleChange}
-              className={inputCls} />
-          </Field>
-          <Field label="Phone Number">
-            <input type="tel" name="phone" value={formData.phone} onChange={handleChange}
-              placeholder="+234 800 000 0000" className={inputCls} />
-          </Field>
-          <Field label="Bio">
-            <textarea rows={4} name="bio" value={formData.bio} onChange={handleChange}
-              placeholder="Tell us about yourself..." className={`${inputCls} resize-none`} />
-          </Field>
+      )}
+
+      {/* Personal Information */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-4 sm:mb-5">
+          <User className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+          <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Personal Information</h3>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+          <FieldWrapper label={isBusinessAccount ? 'Owner Name' : 'Full Name'} locked={isLocked}>
+            <div className="relative">
+              {isLocked && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />}
+              <input
+                type="text"
+                value={form.name}
+                onChange={e => handleChange('name', e.target.value)}
+                readOnly={isLocked}
+                className={inputClass(isLocked) + (isLocked ? ' pr-9' : '')}
+                placeholder="Your full name"
+              />
+            </div>
+          </FieldWrapper>
+
+          <FieldWrapper label="Phone Number">
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={e => handleChange('phone', e.target.value)}
+                className={inputClass() + ' pl-9'}
+                placeholder="+234 800 000 0000"
+              />
+            </div>
+          </FieldWrapper>
+        </div>
+
+        <div className="mt-4 sm:mt-5">
+          <FieldWrapper label="Bio / Description">
+            <div className="relative">
+              <FileText className="absolute left-3 top-3 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <textarea
+                value={form.bio}
+                onChange={e => handleChange('bio', e.target.value)}
+                rows={3}
+                className={inputClass() + ' pl-9 resize-none'}
+                placeholder="Brief description about yourself or your business..."
+                maxLength={300}
+              />
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 text-right">{form.bio.length}/300</p>
+          </FieldWrapper>
         </div>
       </div>
 
       {/* Address */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-        <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">Address</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
-            <input type="text" name="address.street" value={formData.address.street}
-              onChange={handleChange} placeholder="Street Address" className={inputCls} />
-          </div>
-          <input type="text" name="address.city" value={formData.address.city}
-            onChange={handleChange} placeholder="City" className={inputCls} />
-          <input type="text" name="address.state" value={formData.address.state}
-            onChange={handleChange} placeholder="State / Province" className={inputCls} />
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Country</label>
-            <select name="address.country" value={formData.address.country}
-              onChange={handleChange} className={inputCls}>
-              <option value="">Select Country</option>
-              {[
-                'Nigeria','United States','United Kingdom','Canada','Ghana','Kenya',
-                'South Africa','Australia','Germany','France','India','Japan',
-                'China','Brazil','Mexico','Italy','Spain','Netherlands','Sweden',
-                'Norway','Denmark','Finland','Switzerland','Belgium','Austria',
-                'Portugal','Ireland','New Zealand','Singapore','Malaysia',
-                'United Arab Emirates','Saudi Arabia','Israel','Turkey','Russia',
-                'Poland','Egypt','Morocco','Tunisia','Algeria','Uganda','Tanzania',
-                'Rwanda','Ethiopia','Zambia','Zimbabwe','Senegal','Cameroon','Angola',
-              ].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <input type="text" name="address.postalCode" value={formData.address.postalCode}
-            onChange={handleChange} placeholder="Postal Code" className={inputCls} />
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-4 sm:mb-5">
+          <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+          <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Address</h3>
+          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(can be updated anytime)</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+          {[
+            { label: 'Street Address', key: 'street', placeholder: '12 Main Street', colSpan: 'sm:col-span-2' },
+            { label: 'City', key: 'city', placeholder: 'Aba' },
+            { label: 'State', key: 'state', placeholder: 'Abia State' },
+            { label: 'Country', key: 'country', placeholder: 'Nigeria' },
+          ].map(({ label, key, placeholder, colSpan }) => (
+            <div key={key} className={colSpan || ''}>
+              <FieldWrapper label={label}>
+                <input
+                  type="text"
+                  value={form.address[key]}
+                  onChange={e => handleChange(`address.${key}`, e.target.value)}
+                  className={inputClass()}
+                  placeholder={placeholder}
+                />
+              </FieldWrapper>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Business info */}
-      {user.accountType === 'business' && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">Business Information</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" name="businessInfo.companyName" value={formData.businessInfo.companyName}
-              onChange={handleChange} placeholder="Company Name" className={inputCls} />
-            <select name="businessInfo.companyType" value={formData.businessInfo.companyType}
-              onChange={handleChange} className={inputCls}>
-              <option value="">Company Type {user.businessInfo?.companyType ? `(current: ${user.businessInfo.companyType})` : ''}</option>
-              <option value="sole_proprietor">Sole Proprietor</option>
-              <option value="partnership">Partnership</option>
-              <option value="llc">LLC</option>
-              <option value="corporation">Corporation</option>
-              <option value="ngo">NGO</option>
-              <option value="other">Other</option>
-            </select>
-            <select name="businessInfo.industry" value={formData.businessInfo.industry}
-              onChange={handleChange} className={inputCls}>
-              <option value="">Industry {user.businessInfo?.industry ? `(current: ${user.businessInfo.industry})` : ''}</option>
-              <option value="ecommerce">E-commerce</option>
-              <option value="real_estate">Real Estate</option>
-              <option value="freelance">Freelance</option>
-              <option value="saas">SaaS / Software</option>
-              <option value="professional_services">Professional Services</option>
-              <option value="finance">Finance</option>
-              <option value="healthcare">Healthcare</option>
-              <option value="education">Education</option>
-              <option value="manufacturing">Manufacturing</option>
-              <option value="retail">Retail</option>
-              <option value="technology">Technology</option>
-              <option value="logistics">Logistics</option>
-              <option value="fashion">Fashion</option>
-              <option value="services">Services</option>
-              <option value="other">Other</option>
-            </select>
-            <input type="text" name="businessInfo.taxId" value={formData.businessInfo.taxId}
-              onChange={handleChange} placeholder="Tax ID" className={inputCls} />
-            <input type="text" name="businessInfo.registrationNumber" value={formData.businessInfo.registrationNumber}
-              onChange={handleChange} placeholder="Registration Number" className={inputCls} />
-            <input type="url" name="businessInfo.website" value={formData.businessInfo.website}
-              onChange={handleChange} placeholder="https://yourcompany.com" className={inputCls} />
+      {/* Business Info */}
+      {isBusinessAccount && (
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4 sm:mb-5">
+            <Globe className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+            <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Business Information</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+            <FieldWrapper label="Business / Company Name" locked={isLocked}>
+              <div className="relative">
+                {isLocked && <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />}
+                <input
+                  type="text"
+                  value={form.businessInfo.companyName}
+                  onChange={e => handleChange('businessInfo.companyName', e.target.value)}
+                  readOnly={isLocked}
+                  className={inputClass(isLocked) + (isLocked ? ' pr-9' : '')}
+                  placeholder="Acme Ltd"
+                />
+              </div>
+            </FieldWrapper>
+            <FieldWrapper label="Business Type">
+              <input
+                type="text"
+                value={form.businessInfo.businessType}
+                onChange={e => handleChange('businessInfo.businessType', e.target.value)}
+                className={inputClass()}
+                placeholder="e.g. E-commerce, Technology"
+              />
+            </FieldWrapper>
+            <FieldWrapper label="Website">
+              <input
+                type="url"
+                value={form.businessInfo.website}
+                onChange={e => handleChange('businessInfo.website', e.target.value)}
+                className={inputClass()}
+                placeholder="https://yourcompany.com"
+              />
+            </FieldWrapper>
+            <FieldWrapper label="Registration Number">
+              <input
+                type="text"
+                value={form.businessInfo.registrationNo}
+                onChange={e => handleChange('businessInfo.registrationNo', e.target.value)}
+                className={inputClass()}
+                placeholder="RC 1234567"
+              />
+            </FieldWrapper>
           </div>
         </div>
       )}
 
-      {/* Social */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-        <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">Social Links</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input type="url" name="socialLinks.twitter" value={formData.socialLinks.twitter}
-            onChange={handleChange} placeholder="https://twitter.com/handle" className={inputCls} />
-          <input type="url" name="socialLinks.linkedin" value={formData.socialLinks.linkedin}
-            onChange={handleChange} placeholder="https://linkedin.com/in/profile" className={inputCls} />
-          <input type="url" name="socialLinks.website" value={formData.socialLinks.website}
-            onChange={handleChange} placeholder="https://yourwebsite.com" className={inputCls} />
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button type="button" onClick={handleCancel} disabled={loading}
-          className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50">
-          Cancel
-        </button>
-        <button type="submit" disabled={loading}
-          className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
-          {loading
-            ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
-            : <><Save className="w-5 h-5" /> Save Changes</>}
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex items-center gap-2 px-5 sm:px-8 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm sm:text-base transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+        >
+          {saving ? <><Loader className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save Changes</>}
         </button>
       </div>
     </form>
   );
 };
-
-const inputCls = 'w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white text-sm';
-
-const Field = ({ label, children }) => (
-  <div>
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-    {children}
-  </div>
-);
-
-const InfoRow = ({ icon: Icon, label, value, verified, isLink }) => (
-  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-      <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-    </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{label}</p>
-      {isLink
-        ? <a href={value} target="_blank" rel="noopener noreferrer"
-            className="text-sm font-medium text-blue-600 hover:underline truncate block">{value}</a>
-        : <p className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
-            {value}
-            {verified && <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />}
-          </p>
-      }
-    </div>
-  </div>
-);
 
 export default ProfileTab;

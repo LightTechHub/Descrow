@@ -10,9 +10,9 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
 // ✅ FIXED: Import models used in deleteAccount
-const APIKey      = require('../models/APIKey.model');
+const APIKey      = require('../models/ApiKey.model');
 const BankAccount = require('../models/BankAccount.model');
-const Notification = require('../models/Notification');
+const Notification = require('../models/Notification.model');
 
 // ======================================================
 // ======================= KYC ==========================
@@ -332,7 +332,41 @@ exports.updateProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    const updates = { name, phone, avatar, bio, address: address ? { ...user.address, ...address } : user.address, socialLinks: socialLinks ? { ...user.socialLinks, ...socialLinks } : user.socialLinks, businessInfo: businessInfo ? { ...user.businessInfo, ...businessInfo } : user.businessInfo };
+    // ── KYC Field Locking ─────────────────────────────────────────────────────
+    // After KYC approval, core identity fields are locked to prevent fraud.
+    // Fields that CAN still be changed: phone, avatar, bio, address, socialLinks, password, preferences.
+    const kycApproved = user.isKYCVerified && user.kycStatus?.status === 'approved';
+    if (kycApproved) {
+      const LOCKED_FIELDS = ['name', 'businessInfo.companyName', 'accountType'];
+      const attemptedLocked = [];
+
+      // Check if name is being changed (covers firstName/lastName rolled into name)
+      if (req.body.name !== undefined && req.body.name !== user.name) {
+        attemptedLocked.push('Full Name');
+      }
+      // Check if businessName / companyName is being changed
+      if (businessInfo?.companyName !== undefined && businessInfo.companyName !== user.businessInfo?.companyName) {
+        attemptedLocked.push('Business Name');
+      }
+
+      if (attemptedLocked.length > 0) {
+        return res.status(403).json({
+          success: false,
+          message: `Cannot change ${attemptedLocked.join(' and ')} after KYC approval. Contact support@dealcross.net if this is an error.`
+        });
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const updates = {
+      name,
+      phone,
+      avatar,
+      bio,
+      address: address ? { ...user.address, ...address } : user.address,
+      socialLinks: socialLinks ? { ...user.socialLinks, ...socialLinks } : user.socialLinks,
+      businessInfo: businessInfo ? { ...user.businessInfo, ...businessInfo } : user.businessInfo
+    };
     Object.keys(updates).forEach(key => { if (updates[key] !== undefined) user[key] = updates[key]; });
     await user.save();
 

@@ -58,6 +58,7 @@ import APIManagementPage from './pages/admin/APIManagementPage';
 import AdminManagementPage from './pages/admin/AdminManagementPage';
 import FeeManagementPage from './pages/admin/FeeManagementPage';
 import WithdrawalsPage from './pages/admin/WithdrawalsPage';
+import AdminPlatformPage from './pages/admin/AdminPlatformPage';
 
 // ==================== 404 ====================
 const NotFound = () => {
@@ -260,6 +261,11 @@ function App() {
           <Route path="/admin/withdrawals" element={
             <AdminProtectedRoute requiredPermission="viewTransactions">
               <WithdrawalsPage admin={admin} />
+            </AdminProtectedRoute>
+          } />
+          <Route path="/admin/platform" element={
+            <AdminProtectedRoute>
+              <AdminPlatformPage admin={admin} />
             </AdminProtectedRoute>
           } />
 

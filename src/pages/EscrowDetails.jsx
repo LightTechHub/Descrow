@@ -1,10 +1,10 @@
-// src/pages/EscrowDetails.jsx - FIXED: unused imports removed, useCallback deps, DeliveryTracking wired
-import React, { useState, useEffect, useCallback } from 'react';
+// File: src/pages/EscrowDetailsPage.jsx
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Loader, Copy, CheckCircle, Clock, ShieldCheck,
-  FileText, RefreshCw, XCircle, Users, Target, Calendar,
-  Package, AlertTriangle, CheckCircle2, TrendingUp, Award, Truck
+  ArrowLeft, DollarSign, Loader, Copy, CheckCircle, Clock, ShieldCheck,
+  MessageCircle, FileText, RefreshCw, XCircle, Users, Target, Calendar,
+  Package, AlertTriangle, CheckCircle2, TrendingUp, Award, CreditCard, Wallet, X
 } from 'lucide-react';
 
 import StatusStepper from '../components/Escrow/StatusStepper';
@@ -12,12 +12,153 @@ import ActionButtons from '../components/Escrow/ActionButtons';
 import DeliveryModal from '../components/Escrow/DeliveryModal';
 import DisputeModal from '../components/Escrow/DisputeModal';
 import ChatBox from '../components/Escrow/ChatBox';
-import DeliveryTracking from '../components/Escrow/DeliveryTracking';
 
 import escrowService from '../services/escrowService';
 import { authService } from '../services/authService';
 import { getStatusInfo, formatCurrency, formatDate } from '../utils/escrowHelpers';
 import toast from 'react-hot-toast';
+
+// ── Payment Choice Modal ──────────────────────────────────────────────────────
+// Shown when buyer clicks "Pay Now" — lets them choose wallet vs direct payment
+const PaymentChoiceModal = ({ escrow, onClose, onDirectPay }) => {
+  const navigate = useNavigate();
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [fundingFromWallet, setFundingFromWallet] = useState(false);
+
+  const API = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
+
+  const escrowAmount = escrow?.payment?.buyerPays
+    ? parseFloat(escrow.payment.buyerPays.toString())
+    : parseFloat(escrow?.amount?.toString() || '0');
+
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        const res = await fetch(`${API}/wallet`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await res.json();
+        if (data.success) setWalletBalance(data.data.balance);
+      } catch { /* balance stays null */ }
+      finally { setLoading(false); }
+    };
+    fetchBalance();
+  }, []);
+
+  const handleWalletFund = async () => {
+    if (walletBalance < escrowAmount) {
+      toast.error(`Insufficient wallet balance. Need ₦${escrowAmount.toLocaleString()}, have ₦${walletBalance.toLocaleString()}`);
+      return;
+    }
+    setFundingFromWallet(true);
+    try {
+      const res = await fetch(`${API}/escrow/${escrow._id}/fund-from-wallet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Escrow funded from wallet!');
+        onClose();
+        // Trigger page refresh
+        window.location.reload();
+      } else {
+        toast.error(data.message || 'Failed to fund from wallet');
+      }
+    } catch {
+      toast.error('Something went wrong. Please try again.');
+    } finally {
+      setFundingFromWallet(false);
+    }
+  };
+
+  const canPayFromWallet = walletBalance !== null && walletBalance >= escrowAmount;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Choose Payment Method</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Amount due: <span className="font-bold text-gray-900 dark:text-white">₦{escrowAmount.toLocaleString()}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Wallet option */}
+          <button
+            onClick={handleWalletFund}
+            disabled={loading || fundingFromWallet || !canPayFromWallet}
+            className={`w-full flex items-center gap-4 p-5 rounded-xl border-2 transition text-left ${
+              canPayFromWallet
+                ? 'border-green-400 bg-green-50 dark:bg-green-900/20 hover:border-green-500 cursor-pointer'
+                : 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+              canPayFromWallet ? 'bg-green-100 dark:bg-green-900/40' : 'bg-gray-100 dark:bg-gray-800'
+            }`}>
+              {fundingFromWallet
+                ? <Loader className="w-6 h-6 text-green-600 animate-spin" />
+                : <Wallet className={`w-6 h-6 ${canPayFromWallet ? 'text-green-600' : 'text-gray-400'}`} />
+              }
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 dark:text-white">Pay from Wallet</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {loading ? 'Checking balance...' : (
+                  walletBalance !== null
+                    ? <>Balance: <span className={`font-semibold ${canPayFromWallet ? 'text-green-600' : 'text-red-500'}`}>₦{walletBalance.toLocaleString()}</span>
+                       {!canPayFromWallet && <span className="ml-2 text-red-400">(Insufficient)</span>}
+                      </>
+                    : 'Instant — no payment page needed'
+                )}
+              </p>
+            </div>
+            {canPayFromWallet && (
+              <span className="px-3 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 text-xs font-bold rounded-full">Instant</span>
+            )}
+          </button>
+
+          {/* Direct payment option */}
+          <button
+            onClick={onDirectPay}
+            className="w-full flex items-center gap-4 p-5 rounded-xl border-2 border-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:border-blue-500 transition text-left cursor-pointer"
+          >
+            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+              <CreditCard className="w-6 h-6 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-gray-900 dark:text-white">Pay with Card / Bank Transfer</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Paystack · Flutterwave · Crypto</p>
+            </div>
+            <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-full">Secure</span>
+          </button>
+
+          {!canPayFromWallet && walletBalance !== null && (
+            <div className="text-center pt-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Need more wallet balance?{' '}
+                <button onClick={() => navigate('/wallet')} className="text-blue-600 hover:underline font-semibold">
+                  Top up wallet
+                </button>
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const EscrowDetailsPage = () => {
   const { id } = useParams();
@@ -30,12 +171,22 @@ const EscrowDetailsPage = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
   const [error, setError] = useState(null);
 
-  // FIX: wrap in useCallback so useEffect dep array is stable
-  const fetchEscrowDetails = useCallback(async (silent = false) => {
+  useEffect(() => {
+    const user = authService.getCurrentUser();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    setCurrentUser(user);
+    fetchEscrowDetails();
+  }, [id]);
+
+  const fetchEscrowDetails = async (silent = false) => {
     try {
       silent ? setRefreshing(true) : setLoading(true);
       const res = await escrowService.getEscrowById(id);
@@ -45,6 +196,11 @@ const EscrowDetailsPage = () => {
       const escrowData = res.data.escrow;
       setEscrow(escrowData);
 
+      // FIX: Backend getUserRoles() only checks the participants[] array.
+      // But buyer and seller are stored in escrow.buyer / escrow.seller (top-level ObjectId fields),
+      // NOT as entries in participants[]. So getUserRoles() always returns [] for buyer/seller,
+      // causing ActionButtons to receive no role and render nothing.
+      // Fix: derive role on the frontend by comparing currentUser._id against escrow.buyer._id / seller._id.
       const user = authService.getCurrentUser();
       const userId = user?._id || user?.id;
 
@@ -57,6 +213,7 @@ const EscrowDetailsPage = () => {
       } else if (userId && sellerId && userId.toString() === sellerId.toString()) {
         derivedRole = 'seller';
       } else if (res.data.userRole && res.data.userRole.length > 0) {
+        // Fallback to backend role for agents/inspectors/arbitrators
         derivedRole = Array.isArray(res.data.userRole) ? res.data.userRole[0] : res.data.userRole;
       }
 
@@ -68,17 +225,7 @@ const EscrowDetailsPage = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id]); // FIX: id is the only real dep; navigate is stable from react-router
-
-  useEffect(() => {
-    const user = authService.getCurrentUser();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    setCurrentUser(user);
-    fetchEscrowDetails();
-  }, [fetchEscrowDetails, navigate]);
+  };
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(escrow?.escrowId || escrow?._id);
@@ -87,12 +234,24 @@ const EscrowDetailsPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // FIX: handleAction was only handling 'deliver', 'dispute', 'fund'.
+  // 'accept', 'reject', 'confirm', 'cancel' were silently dropped.
+  // ActionButtons calls onAction('accept') for seller on pending status —
+  // with no handler, clicking Accept did nothing and the button appeared broken.
   const handleAction = async (action) => {
     try {
-      if (action === 'deliver') { setShowDeliveryModal(true); return; }
-      if (action === 'dispute') { setShowDisputeModal(true); return; }
-      if (action === 'fund') { navigate(`/payment/${escrow._id}`); return; }
-
+      if (action === 'deliver') {
+        setShowDeliveryModal(true);
+        return;
+      }
+      if (action === 'dispute') {
+        setShowDisputeModal(true);
+        return;
+      }
+      if (action === 'fund') {
+        setShowPaymentChoice(true);
+        return;
+      }
       if (action === 'accept') {
         const res = await escrowService.acceptEscrow(escrow._id);
         if (res.success) {
@@ -140,24 +299,24 @@ const EscrowDetailsPage = () => {
 
   const getMilestoneStatusBadge = (status) => {
     const badges = {
-      pending:     { text: 'Pending',     color: 'bg-gray-100 text-gray-700',   icon: Clock },
-      in_progress: { text: 'In Progress', color: 'bg-blue-100 text-blue-700',   icon: TrendingUp },
-      submitted:   { text: 'Submitted',   color: 'bg-purple-100 text-purple-700', icon: FileText },
-      approved:    { text: 'Approved',    color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-      rejected:    { text: 'Rejected',    color: 'bg-red-100 text-red-700',     icon: XCircle },
-      paid:        { text: 'Paid',        color: 'bg-emerald-100 text-emerald-700', icon: Award }
+      pending: { text: 'Pending', color: 'bg-gray-100 text-gray-700', icon: Clock },
+      in_progress: { text: 'In Progress', color: 'bg-blue-100 text-blue-700', icon: TrendingUp },
+      submitted: { text: 'Submitted', color: 'bg-purple-100 text-purple-700', icon: FileText },
+      approved: { text: 'Approved', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+      rejected: { text: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
+      paid: { text: 'Paid', color: 'bg-emerald-100 text-emerald-700', icon: Award }
     };
     return badges[status] || badges.pending;
   };
 
   const getParticipantRoleBadge = (role) => {
     const roles = {
-      buyer:       { text: 'Buyer',       color: 'bg-blue-100 text-blue-700' },
-      seller:      { text: 'Seller',      color: 'bg-green-100 text-green-700' },
-      agent:       { text: 'Agent',       color: 'bg-purple-100 text-purple-700' },
-      arbitrator:  { text: 'Arbitrator',  color: 'bg-orange-100 text-orange-700' },
-      inspector:   { text: 'Inspector',   color: 'bg-indigo-100 text-indigo-700' },
-      shipper:     { text: 'Shipper',     color: 'bg-pink-100 text-pink-700' }
+      buyer: { text: 'Buyer', color: 'bg-blue-100 text-blue-700' },
+      seller: { text: 'Seller', color: 'bg-green-100 text-green-700' },
+      agent: { text: 'Agent', color: 'bg-purple-100 text-purple-700' },
+      arbitrator: { text: 'Arbitrator', color: 'bg-orange-100 text-orange-700' },
+      inspector: { text: 'Inspector', color: 'bg-indigo-100 text-indigo-700' },
+      shipper: { text: 'Shipper', color: 'bg-pink-100 text-pink-700' }
     };
     return roles[role] || { text: role, color: 'bg-gray-100 text-gray-700' };
   };
@@ -190,11 +349,6 @@ const EscrowDetailsPage = () => {
   const statusInfo = getStatusInfo(escrow.status);
   const hasMilestones = escrow.milestones && escrow.milestones.length > 0;
   const hasMultipleParticipants = escrow.participants && escrow.participants.length > 2;
-  const hasDeliveryProof = escrow.delivery?.proof || escrow.deliveryProof;
-
-  // Determine which tabs to show
-  const tabs = ['details', 'timeline', 'attachments', 'chat'];
-  if (hasDeliveryProof) tabs.splice(2, 0, 'delivery'); // insert before attachments
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-12">
@@ -228,7 +382,7 @@ const EscrowDetailsPage = () => {
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{escrow.title}</h1>
-
+                
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
                     onClick={handleCopyId}
@@ -362,7 +516,7 @@ const EscrowDetailsPage = () => {
               <div className="space-y-3">
                 {escrow.participants.map((participant, index) => {
                   const roleBadge = getParticipantRoleBadge(participant.role);
-                  const participantUser = participant.user;
+                  const user = participant.user;
 
                   return (
                     <div
@@ -371,11 +525,11 @@ const EscrowDetailsPage = () => {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                          {participantUser?.name?.[0] || '?'}
+                          {user?.name?.[0] || '?'}
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{participantUser?.name || 'Unknown'}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{participantUser?.email || 'N/A'}</p>
+                          <p className="font-semibold text-gray-900 dark:text-white">{user?.name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{user?.email || 'N/A'}</p>
                         </div>
                       </div>
 
@@ -400,18 +554,17 @@ const EscrowDetailsPage = () => {
 
           {/* Tabs */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden">
-            <div className="flex border-b border-gray-200 dark:border-gray-800 overflow-x-auto">
-              {tabs.map(tab => (
+            <div className="flex border-b border-gray-200 dark:border-gray-800">
+              {['details', 'timeline', 'attachments', 'chat'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 min-w-max py-4 px-5 font-semibold capitalize transition flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-4 px-6 font-semibold capitalize transition ${
                     activeTab === tab
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  {tab === 'delivery' && <Truck className="w-4 h-4" />}
                   {tab}
                 </button>
               ))}
@@ -466,10 +619,6 @@ const EscrowDetailsPage = () => {
                     </div>
                   )}
                 </div>
-              )}
-
-              {activeTab === 'delivery' && (
-                <DeliveryTracking deliveryProof={escrow.delivery?.proof || escrow.deliveryProof} />
               )}
 
               {activeTab === 'timeline' && (
@@ -643,6 +792,14 @@ const EscrowDetailsPage = () => {
             setShowDisputeModal(false);
             fetchEscrowDetails(true);
           }}
+        />
+      )}
+
+      {showPaymentChoice && (
+        <PaymentChoiceModal
+          escrow={escrow}
+          onClose={() => setShowPaymentChoice(false)}
+          onDirectPay={() => { setShowPaymentChoice(false); navigate(`/payment/${escrow._id}`); }}
         />
       )}
     </div>

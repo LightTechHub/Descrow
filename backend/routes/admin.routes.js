@@ -167,4 +167,96 @@ router.post('/broadcast', protectAdmin, masterOnly, [
 // ── Revenue dashboard ────────────────────────────────────────────────
 router.get('/revenue', protectAdmin, adminController.getRevenueStats);
 
+// ── Wallet Deposits (view all deposits across platform) ─────────────────────
+router.get('/wallet/deposits', protectAdmin, checkPermission('viewTransactions'), adminController.getWalletDeposits);
+
+// ── KYC Queue & Field Unlock ────────────────────────────────────────────────
+router.get('/kyc/queue', protectAdmin, checkPermission('verifyUsers'), adminController.getKYCQueue);
+router.post('/users/:userId/kyc/unlock-fields', protectAdmin, masterOnly, adminController.unlockKYCFields);
+
+// ── Referrals ────────────────────────────────────────────────────────────────
+router.get('/referrals', protectAdmin, checkPermission('viewAnalytics'), adminController.getReferralStats);
+router.post('/referrals/:userId/adjust', protectAdmin, masterOnly, adminController.adjustReferralCredit);
+
+// ── Communications ────────────────────────────────────────────────────────────
+router.get('/newsletter', protectAdmin, masterOnly, adminController.getNewsletterSubscribers);
+router.get('/contact-submissions', protectAdmin, adminController.getContactSubmissions);
+
+// ── ONE-TIME wallet backfill ──────────────────────────────────────────
+// Hit POST /api/admin/backfill-wallets once with your admin token.
+// Safe to call multiple times — skips escrows already credited.
+router.post('/backfill-wallets', protectAdmin, masterOnly, async (req, res) => {
+  try {
+    const Escrow = require('../models/Escrow.model');
+    const Wallet = require('../models/Wallet.model');
+
+    const getOrCreate = async (userId) => {
+      let w = await Wallet.findOne({ user: userId });
+      if (!w) w = await Wallet.create({ user: userId });
+      return w;
+    };
+
+    const escrows = await Escrow.find({ status: 'completed' })
+      .populate('seller', 'name email');
+
+    let credited = 0, skipped = 0, errors = 0;
+    const log = [];
+
+    for (const escrow of escrows) {
+      try {
+        const sellerId = escrow.seller?._id || escrow.seller;
+        if (!sellerId) {
+          skipped++;
+          log.push('SKIP (no seller): ' + (escrow.escrowId || escrow._id));
+          continue;
+        }
+
+        const wallet = await getOrCreate(sellerId);
+
+        const alreadyCredited = wallet.transactions.some(
+          tx => tx.escrowId && tx.escrowId.toString() === escrow._id.toString() && tx.type === 'credit'
+        );
+        if (alreadyCredited) {
+          skipped++;
+          log.push('SKIP (already done): ' + (escrow.escrowId || escrow._id));
+          continue;
+        }
+
+        const raw = escrow.payment && escrow.payment.sellerReceives
+          ? escrow.payment.sellerReceives
+          : escrow.amount;
+        const amount = parseFloat(raw ? raw.toString() : '0');
+
+        if (!amount || isNaN(amount) || amount <= 0) {
+          skipped++;
+          log.push('SKIP (bad amount): ' + (escrow.escrowId || escrow._id));
+          continue;
+        }
+
+        await wallet.credit(
+          amount,
+          '[Backfill] Payment for: ' + escrow.title,
+          escrow._id,
+          escrow.escrowId,
+          'BACKFILL_' + (escrow.escrowId || escrow._id)
+        );
+
+        credited++;
+        log.push('OK: ' + (escrow.escrowId || escrow._id) + ' — NGN ' + amount + ' -> ' + (escrow.seller && escrow.seller.name ? escrow.seller.name : sellerId));
+      } catch (err) {
+        errors++;
+        log.push('ERROR: ' + (escrow.escrowId || escrow._id) + ' — ' + err.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      summary: { total: escrows.length, credited: credited, skipped: skipped, errors: errors },
+      log: log
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

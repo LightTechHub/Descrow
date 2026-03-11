@@ -442,3 +442,208 @@ exports.adminUpdateWithdrawal = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── POST /api/wallet/deposit/initiate ─────────────────────────────────────────
+// Initiates a Paystack payment to top up wallet balance.
+// On payment success, Paystack webhook calls /api/wallet/deposit/verify.
+exports.initiateDeposit = async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const parsedAmount = parseFloat(amount);
+
+    if (!parsedAmount || parsedAmount < 500) {
+      return res.status(400).json({ success: false, message: 'Minimum deposit is ₦500.' });
+    }
+    if (parsedAmount > 10000000) {
+      return res.status(400).json({ success: false, message: 'Maximum single deposit is ₦10,000,000.' });
+    }
+
+    const user = await User.findById(req.user.id).select('email name');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const reference = `DEP_${req.user.id}_${Date.now()}`;
+
+    // Initialize Paystack payment
+    const response = await axios.post(
+      'https://api.paystack.co/transaction/initialize',
+      {
+        email: user.email,
+        amount: Math.round(parsedAmount * 100), // kobo
+        reference,
+        callback_url: `${process.env.FRONTEND_URL}/wallet?deposit=success`,
+        metadata: {
+          userId: req.user.id,
+          purpose: 'wallet_deposit',
+          amount: parsedAmount,
+          currency: 'NGN'
+        }
+      },
+      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
+    );
+
+    const { authorization_url, access_code } = response.data?.data || {};
+
+    if (!authorization_url) {
+      return res.status(500).json({ success: false, message: 'Could not initialize payment. Try again.' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        authorization_url,
+        access_code,
+        reference,
+        amount: parsedAmount
+      }
+    });
+  } catch (err) {
+    console.error('initiateDeposit error:', err.response?.data || err.message);
+    res.status(500).json({ success: false, message: 'Deposit initialization failed. Try again.' });
+  }
+};
+
+// ── POST /api/wallet/deposit/verify ──────────────────────────────────────────
+// Called by frontend after Paystack redirect, OR by Paystack webhook.
+// Verifies the transaction and credits the wallet.
+exports.verifyDeposit = async (req, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) {
+      return res.status(400).json({ success: false, message: 'Reference required' });
+    }
+
+    // Verify with Paystack
+    const paystackRes = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
+    );
+
+    const txData = paystackRes.data?.data;
+
+    if (!txData || txData.status !== 'success') {
+      return res.status(400).json({ success: false, message: 'Payment not successful. No funds credited.' });
+    }
+
+    // Guard: only process wallet_deposit transactions
+    if (txData.metadata?.purpose !== 'wallet_deposit') {
+      return res.status(400).json({ success: false, message: 'This reference is not a wallet deposit.' });
+    }
+
+    const userId = txData.metadata?.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ success: false, message: 'Could not identify user.' });
+
+    const amountNGN = txData.amount / 100; // convert from kobo
+
+    // Idempotency: check if this reference was already processed
+    const wallet = await getOrCreateWallet(userId);
+    const alreadyProcessed = wallet.transactions.some(t => t.reference === reference);
+    if (alreadyProcessed) {
+      return res.json({ success: true, message: 'Already processed.', data: { alreadyCredited: true } });
+    }
+
+    // Credit wallet
+    const before = wallet.balance;
+    wallet.balance += amountNGN;
+    wallet.totalEarned += amountNGN;
+    wallet.transactions.push({
+      type: 'credit',
+      amount: amountNGN,
+      currency: 'NGN',
+      description: `Wallet top-up via Paystack`,
+      status: 'completed',
+      balanceBefore: before,
+      balanceAfter: wallet.balance,
+      reference
+    });
+    await wallet.save();
+
+    // Notify user
+    try {
+      const { createNotification } = require('../utils/notificationHelper');
+      await createNotification(
+        userId,
+        'payment_received',
+        'Wallet Top-up Successful!',
+        `₦${amountNGN.toLocaleString()} has been added to your wallet.`,
+        '/wallet',
+        { amount: amountNGN, reference }
+      );
+    } catch (_) {}
+
+    console.log(`✅ Wallet deposit verified: ₦${amountNGN} for user ${userId} — ref ${reference}`);
+
+    res.json({
+      success: true,
+      message: `₦${amountNGN.toLocaleString()} added to your wallet.`,
+      data: { amount: amountNGN, newBalance: wallet.balance }
+    });
+
+  } catch (err) {
+    console.error('verifyDeposit error:', err.response?.data || err.message);
+    res.status(500).json({ success: false, message: 'Deposit verification failed.' });
+  }
+};
+
+// ── POST /api/escrow/:id/fund-from-wallet ─────────────────────────────────────
+// Called from EscrowDetailsPage PaymentChoiceModal when buyer pays from wallet balance
+exports.fundEscrowFromWallet = async (req, res) => {
+  try {
+    const { id: escrowId } = req.params;
+    const userId = req.user.id;
+
+    const Escrow = require('../models/Escrow.model');
+    const escrow = await Escrow.findById(escrowId);
+    if (!escrow) return res.status(404).json({ success: false, message: 'Escrow not found' });
+    if (escrow.buyer.toString() !== userId)
+      return res.status(403).json({ success: false, message: 'Only the buyer can fund this escrow' });
+    if (escrow.status !== 'accepted')
+      return res.status(400).json({ success: false, message: `Escrow must be accepted first (current: ${escrow.status})` });
+
+    const amount = escrow.payment?.buyerPays
+      ? parseFloat(escrow.payment.buyerPays.toString())
+      : parseFloat(escrow.amount.toString());
+
+    const wallet = await getOrCreateWallet(userId);
+    if (wallet.balance < amount)
+      return res.status(400).json({ success: false, message: `Insufficient wallet balance. Need ₦${amount.toLocaleString()}, available ₦${wallet.balance.toLocaleString()}` });
+
+    // Debit wallet
+    const reference = `ESCROW_FUND_${escrowId}_${Date.now()}`;
+    await wallet.debit(amount, `Escrow funded: ${escrow.title}`, null, reference);
+
+    // Update escrow to funded
+    escrow.status = 'funded';
+    escrow.payment = escrow.payment || {};
+    escrow.payment.method = 'wallet';
+    escrow.payment.reference = reference;
+    escrow.payment.paidAt = new Date();
+    escrow.payment.buyerPays = amount;
+    escrow.timeline = escrow.timeline || [];
+    escrow.timeline.push({
+      status: 'funded',
+      timestamp: new Date(),
+      actor: userId,
+      actorRole: 'buyer',
+      note: 'Funded from wallet balance'
+    });
+    await escrow.save();
+
+    // Notify seller
+    try {
+      const { createNotification } = require('../utils/notificationHelper');
+      await createNotification(
+        escrow.seller,
+        'escrow_funded',
+        'Escrow Funded!',
+        `"${escrow.title}" has been funded. You can now start delivery.`,
+        `/escrow/${escrowId}`,
+        { escrowId }
+      );
+    } catch (_) {}
+
+    res.json({ success: true, message: 'Escrow funded successfully from wallet!', data: { escrowId, amount, reference } });
+  } catch (err) {
+    console.error('fundEscrowFromWallet error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

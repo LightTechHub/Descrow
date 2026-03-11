@@ -5,17 +5,16 @@ import { Lock, Loader, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { authService } from '../services/authService';
 
 const ResetPassword = () => {
-  const [searchParams] = useSearchParams(); // ✅ CHANGED: Use searchParams instead of useParams
-  const token = searchParams.get('token'); // ✅ CHANGED: Get token from query string
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
   const navigate = useNavigate();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('idle'); // idle, success, error
+  const [status, setStatus] = useState('idle'); // idle | success | error
   const [message, setMessage] = useState('');
 
-  // ✅ NEW: Check if token exists on mount
   useEffect(() => {
     if (!token) {
       setStatus('error');
@@ -25,8 +24,7 @@ const ResetPassword = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // ✅ NEW: Check token before submitting
+
     if (!token) {
       setMessage('Invalid reset link. Please request a new password reset.');
       setStatus('error');
@@ -34,19 +32,19 @@ const ResetPassword = () => {
     }
 
     if (!password || !confirmPassword) {
-      setMessage('Please fill in all fields');
+      setMessage('Please fill in all fields.');
       setStatus('error');
       return;
     }
 
     if (password.length < 8) {
-      setMessage('Password must be at least 8 characters long');
+      setMessage('Password must be at least 8 characters long.');
       setStatus('error');
       return;
     }
 
     if (password !== confirmPassword) {
-      setMessage('Passwords do not match');
+      setMessage('Passwords do not match.');
       setStatus('error');
       return;
     }
@@ -56,13 +54,11 @@ const ResetPassword = () => {
     setMessage('');
 
     try {
-      console.log('🔐 Resetting password with token:', token); // Debug log
       const response = await authService.resetPassword(token, password);
       setStatus('success');
       setMessage(response.message || 'Password reset successfully! Redirecting to login...');
       setTimeout(() => navigate('/login'), 3000);
     } catch (error) {
-      console.error('❌ Reset password error:', error); // Debug log
       setStatus('error');
       setMessage(error.message || 'Failed to reset password. The link may be invalid or expired.');
     } finally {
@@ -71,30 +67,31 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-gray-900 flex items-center justify-center p-4">
+    // ✅ FIXED: Replaced blue-900 to gray-900 gradient with solid mature blue bg
+    <div className="min-h-screen bg-blue-800 dark:bg-blue-950 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Logo */}
+
+        {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <Lock className="w-12 h-12 text-blue-400" />
-            <span className="text-3xl font-bold text-white">Dealcross</span>
+            <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+              <Lock className="w-7 h-7 text-blue-200" />
+            </div>
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">Reset Password</h1>
           <p className="text-blue-200 text-sm">Enter your new password below</p>
         </div>
 
-        {/* Form / Status */}
+        {/* Card */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8">
           {status === 'success' ? (
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Success!</h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Password Reset!</h2>
               <p className="text-gray-600 dark:text-gray-400 mb-4">{message}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Redirecting to login page...
-              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Redirecting to login page...</p>
               <Link
                 to="/login"
                 className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
@@ -104,13 +101,13 @@ const ResetPassword = () => {
             </div>
           ) : (
             <>
-              {/* ✅ NEW: Show error if no token */}
+              {/* No token error */}
               {!token && (
                 <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm text-red-800 dark:text-red-200 font-semibold mb-2">
+                      <p className="text-sm text-red-800 dark:text-red-200 font-semibold mb-1">
                         Invalid Reset Link
                       </p>
                       <p className="text-sm text-red-700 dark:text-red-300 mb-3">
@@ -118,9 +115,9 @@ const ResetPassword = () => {
                       </p>
                       <Link
                         to="/forgot-password"
-                        className="inline-block text-sm text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 underline font-medium"
+                        className="text-sm text-red-700 dark:text-red-300 hover:underline font-medium"
                       >
-                        Request a new password reset link
+                        Request a new reset link →
                       </Link>
                     </div>
                   </div>
@@ -142,7 +139,7 @@ const ResetPassword = () => {
                     New Password
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                       type="password"
                       value={password}
@@ -155,7 +152,7 @@ const ResetPassword = () => {
                     />
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Must be at least 8 characters long
+                    Must be at least 8 characters
                   </p>
                 </div>
 
@@ -164,7 +161,7 @@ const ResetPassword = () => {
                     Confirm New Password
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                       type="password"
                       value={confirmPassword}
@@ -181,7 +178,7 @@ const ResetPassword = () => {
                 <button
                   type="submit"
                   disabled={loading || !token}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
                 >
                   {loading ? (
                     <>
@@ -197,7 +194,6 @@ const ResetPassword = () => {
           )}
         </div>
 
-        {/* Back to Login */}
         <div className="text-center mt-6">
           <Link to="/login" className="text-sm text-blue-200 hover:text-white transition">
             ← Back to Login

@@ -8,32 +8,34 @@ import { useInView } from 'react-intersection-observer';
 const BlogPreviewList = () => {
   const [ref, inView] = useInView({ triggerOnce: true, threshold: 0.1 });
 
+  // ✅ FIXED: dates updated from March 2025 → 2026; copy updated for escrow positioning
+  // ⚠️ CONTENT NEEDED: Wire to real CMS / blog API when content is ready
   const blogPosts = [
     {
-      title: '5 Tips for Safe Online Trading',
-      excerpt: 'Learn how to protect yourself from scams and fraudulent sellers when trading online. Essential security practices every trader should know.',
-      date: 'March 15, 2025',
+      title: '5 Tips for Safe Escrow Transactions',
+      excerpt: 'Learn how to protect yourself from scams and fraudulent parties when transacting online. Essential security practices every escrow user should know.',
+      date: 'March 1, 2026',
       readTime: '5 min read',
       category: 'Security',
-      link: '/blog/safe-online-trading',
+      link: '/blog/safe-escrow-transactions',
       color: '#1e3a5f'
     },
     {
       title: 'Understanding Escrow Services',
-      excerpt: 'A complete guide to how escrow services work and why they are essential for secure transactions in the digital age.',
-      date: 'March 10, 2025',
+      excerpt: 'A complete guide to how escrow services work and why they are essential for secure transactions — for goods, services, digital assets, and beyond.',
+      date: 'February 20, 2026',
       readTime: '8 min read',
       category: 'Education',
       link: '/blog/understanding-escrow',
       color: '#2d4a7c'
     },
     {
-      title: 'Cryptocurrency Payments Explained',
-      excerpt: 'Everything you need to know about accepting Bitcoin, Ethereum, and other cryptocurrencies for your business.',
-      date: 'March 5, 2025',
+      title: 'Accepting Crypto Payments via Escrow',
+      excerpt: 'Everything you need to know about using Bitcoin, Ethereum, and USDT within an escrow framework — so both parties are protected.',
+      date: 'February 10, 2026',
       readTime: '6 min read',
       category: 'Crypto',
-      link: '/blog/cryptocurrency-payments',
+      link: '/blog/crypto-escrow-payments',
       color: '#10b981'
     }
   ];
@@ -41,20 +43,17 @@ const BlogPreviewList = () => {
   return (
     <section className="py-20 bg-[#f8fafc] dark:bg-[#0f1419] transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
         <div className="text-center mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <div className="inline-flex items-center gap-2 bg-[#10b981] px-4 py-2 rounded-lg mb-4">
               <span className="text-sm font-semibold text-white">📚 Blog</span>
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-300">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
               Latest from Our Blog
             </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400 transition-colors duration-300">
-              Tips, guides, and industry insights to help you succeed
+            <p className="text-xl text-gray-600 dark:text-gray-400">
+              Tips, guides, and insights to help you transact safely
             </p>
           </motion.div>
         </div>
@@ -69,15 +68,15 @@ const BlogPreviewList = () => {
             >
               <Link
                 to={post.link}
-                className="group block bg-white dark:bg-[#1e2936] rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-2xl hover:border-[#1e3a5f] dark:hover:border-[#2d4a7c] transition-all duration-300 h-full"
+                className="group flex flex-col bg-white dark:bg-[#1e2936] rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-2xl hover:border-[#1e3a5f] dark:hover:border-blue-600 transition-all duration-300 h-full"
               >
-                {/* Category Badge */}
-                <div className="h-2" style={{ backgroundColor: post.color }}></div>
-                
-                <div className="p-8">
-                  {/* Category & Date */}
+                {/* Color accent bar */}
+                <div className="h-2 flex-shrink-0" style={{ backgroundColor: post.color }} />
+
+                <div className="p-8 flex flex-col flex-grow">
+                  {/* Category & read time */}
                   <div className="flex items-center justify-between mb-4">
-                    <span 
+                    <span
                       className="px-3 py-1 text-white text-xs font-semibold rounded-lg"
                       style={{ backgroundColor: post.color }}
                     >
@@ -90,22 +89,22 @@ const BlogPreviewList = () => {
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-[#1e3a5f] dark:group-hover:text-[#2d4a7c] transition-colors duration-200">
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-[#1e3a5f] dark:group-hover:text-blue-300 transition-colors duration-200">
                     {post.title}
                   </h3>
 
                   {/* Excerpt */}
-                  <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
+                  <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed flex-grow">
                     {post.excerpt}
                   </p>
 
-                  {/* Meta Info */}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  {/* Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
                     <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                       <Calendar className="w-4 h-4" />
                       <span>{post.date}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-[#1e3a5f] dark:text-[#2d4a7c] font-semibold group-hover:gap-3 transition-all duration-200">
+                    <div className="flex items-center gap-2 text-[#1e3a5f] dark:text-blue-400 font-semibold group-hover:gap-3 transition-all duration-200">
                       <span>Read More</span>
                       <ArrowRight className="w-4 h-4" />
                     </div>
@@ -116,7 +115,7 @@ const BlogPreviewList = () => {
           ))}
         </div>
 
-        {/* View All Button */}
+        {/* View All */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
@@ -125,7 +124,7 @@ const BlogPreviewList = () => {
         >
           <Link
             to="/blog"
-            className="inline-flex items-center gap-3 px-8 py-4 bg-[#1e3a5f] dark:bg-[#2d4a7c] text-white rounded-xl font-semibold hover:bg-[#2d4a7c] dark:hover:bg-[#3d5a8c] transition-all duration-200 shadow-lg hover:shadow-xl"
+            className="inline-flex items-center gap-3 px-8 py-4 bg-[#1e3a5f] dark:bg-blue-700 text-white rounded-xl font-semibold hover:bg-[#2d4a7c] dark:hover:bg-blue-600 transition-all duration-200 shadow-lg hover:shadow-xl"
           >
             View All Posts
             <ArrowRight className="w-5 h-5" />

@@ -1,12 +1,11 @@
 // File: src/components/FastPayouts.jsx
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 
 const FastPayouts = () => {
-  const navigate = useNavigate();
   const [ref, inView] = useInView({ triggerOnce: true, threshold: 0.1 });
 
   const pricing = [
@@ -21,7 +20,8 @@ const FastPayouts = () => {
         'Standard processing'
       ],
       highlight: false,
-      buttonColor: 'bg-gray-600 hover:bg-gray-700'
+      // ✅ kept gray — makes sense as the "starter / inactive" tier visually
+      buttonClass: 'bg-gray-600 hover:bg-gray-700'
     },
     {
       name: 'Basic',
@@ -35,7 +35,7 @@ const FastPayouts = () => {
         'API access'
       ],
       highlight: false,
-      buttonColor: 'bg-blue-600 hover:bg-blue-700'
+      buttonClass: 'bg-blue-600 hover:bg-blue-700'
     },
     {
       name: 'Pro',
@@ -50,7 +50,7 @@ const FastPayouts = () => {
         'Custom integration'
       ],
       highlight: true,
-      buttonColor: 'bg-green-600 hover:bg-green-700'
+      buttonClass: 'bg-green-600 hover:bg-green-700'
     },
     {
       name: 'Enterprise',
@@ -65,24 +65,26 @@ const FastPayouts = () => {
         'SLA guarantees'
       ],
       highlight: false,
-      buttonColor: 'bg-purple-600 hover:bg-purple-700'
+      // ✅ FIXED: was bg-purple-600 hover:bg-purple-700 → blue-700
+      buttonClass: 'bg-blue-700 hover:bg-blue-800'
     }
   ];
 
   return (
     <section id="pricing" className="py-20 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
         <div className="text-center mb-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4 transition-colors duration-300">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
               Simple, Transparent Pricing
             </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400 transition-colors duration-300">
-              Choose the plan that fits your business needs
+            <p className="text-xl text-gray-600 dark:text-gray-400">
+              Choose the plan that fits your business — pay only for what you need
             </p>
           </motion.div>
         </div>
@@ -97,37 +99,28 @@ const FastPayouts = () => {
               className="relative"
             >
               {plan.highlight && (
-                <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 z-10">
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-10">
                   <span className="bg-green-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold shadow-lg">
                     Most Popular
                   </span>
                 </div>
               )}
 
-              <div className={`bg-white dark:bg-gray-950 rounded-2xl p-8 border-2 ${
-                plan.highlight 
-                  ? 'border-green-500 dark:border-green-400 shadow-2xl scale-105' 
+              <div className={`bg-white dark:bg-gray-950 rounded-2xl p-8 border-2 h-full flex flex-col transition-all duration-300 hover:shadow-xl ${
+                plan.highlight
+                  ? 'border-green-500 dark:border-green-400 shadow-2xl scale-105'
                   : 'border-gray-200 dark:border-gray-800 shadow-lg'
-              } transition-all duration-300 hover:shadow-xl h-full flex flex-col`}>
-                
+              }`}>
                 <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 transition-colors duration-300">
-                    {plan.name}
-                  </h3>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
                   <div className="flex items-baseline gap-1">
                     {typeof plan.price === 'number' ? (
                       <>
-                        <span className="text-5xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                          ${plan.price}
-                        </span>
-                        <span className="text-gray-600 dark:text-gray-400 transition-colors duration-300">
-                          /{plan.period}
-                        </span>
+                        <span className="text-5xl font-bold text-gray-900 dark:text-white">${plan.price}</span>
+                        <span className="text-gray-600 dark:text-gray-400">/{plan.period}</span>
                       </>
                     ) : (
-                      <span className="text-4xl font-bold text-gray-900 dark:text-white transition-colors duration-300">
-                        {plan.price}
-                      </span>
+                      <span className="text-4xl font-bold text-gray-900 dark:text-white">{plan.price}</span>
                     )}
                   </div>
                 </div>
@@ -138,36 +131,35 @@ const FastPayouts = () => {
                       <div className="flex-shrink-0 w-5 h-5 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mt-0.5">
                         <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                       </div>
-                      <span className="text-gray-600 dark:text-gray-400 transition-colors duration-300 text-sm">
-                        {feature}
-                      </span>
+                      <span className="text-gray-600 dark:text-gray-400 text-sm">{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                <button
-                  onClick={() => navigate('/signup')}
-                  className={`w-full py-3.5 rounded-xl font-semibold transition-all duration-200 shadow-lg text-white ${plan.buttonColor}`}
+                {/* ✅ FIXED: bare <button onClick={navigate}> → <Link> */}
+                <Link
+                  to={plan.name === 'Enterprise' ? '/contact' : '/signup'}
+                  className={`w-full py-3.5 rounded-xl font-semibold transition-all duration-200 shadow-lg text-white text-center block ${plan.buttonClass}`}
                 >
                   {plan.name === 'Enterprise' ? 'Contact Sales' : 'Get Started'}
-                </button>
+                </Link>
               </div>
             </motion.div>
           ))}
         </div>
 
-        {/* Additional Info */}
+        {/* Footer note */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, delay: 0.5 }}
           className="text-center mt-12"
         >
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            All plans include: Secure escrow • 2FA security • Email support • Transaction history
+          <p className="text-gray-600 dark:text-gray-400 mb-2">
+            All plans include: Secure escrow · 2FA security · Email support · Transaction history
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-500">
-            No hidden fees • Cancel anytime • 30-day money-back guarantee
+            No hidden fees · Cancel anytime · 30-day money-back guarantee
           </p>
         </motion.div>
       </div>

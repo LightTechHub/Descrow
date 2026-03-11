@@ -236,6 +236,11 @@ app.use('/api/disputes', disputeRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/wallet', require('./routes/wallet.routes'));
 
+// Fund escrow from wallet balance — POST /api/escrow/:id/fund-from-wallet
+const { authenticate } = require('./middleware/auth.middleware');
+const walletCtrl = require('./controllers/wallet.controller');
+app.post('/api/escrow/:id/fund-from-wallet', authenticate, walletCtrl.fundEscrowFromWallet);
+
 // Notifications
 app.use('/api/notifications', notificationRoutes);
 
@@ -252,8 +257,9 @@ app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/bank', bankAccountRoutes);
 
-// Contact
+// Contact & Newsletter (both handled by contact.controller.js / contact.routes.js)
 app.use('/api/contact', contactRoutes);
+app.use('/api/newsletter', contactRoutes); // POST /api/newsletter → contact.routes.js subscribeNewsletter
 
 // Webhooks (Paystack signature verified before routing)
 app.use('/api/webhooks/paystack', verifyPaystackWebhook);

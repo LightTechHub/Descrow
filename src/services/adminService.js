@@ -21,11 +21,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !error.config.url.includes('/admin/login')) {
-  localStorage.removeItem('adminToken');
-  localStorage.removeItem('admin');
-  window.location.href = '/admin/login';
-}
+    if (error.response?.status === 401) {
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('admin');
+      window.location.href = '/admin/login';
+    }
     return Promise.reject(error);
   }
 );
@@ -175,6 +175,92 @@ const adminService = {
 
   resetFeesToDefault: async (tier) => {
     const response = await api.post('/admin/fees/reset', { tier });
+    return response.data;
+  },
+  // ── Wallet & Deposits ────────────────────────────────────────────────────────
+  getWalletDeposits: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const response = await api.get(`/admin/wallet/deposits${query ? '?' + query : ''}`);
+    return response.data;
+  },
+  getUserWallet: async (userId) => {
+    const response = await api.get(`/admin/users/${userId}/wallet`);
+    return response.data;
+  },
+  adminCreditWallet: async (userId, amount, reason) => {
+    const response = await api.post(`/admin/users/${userId}/wallet/credit`, { amount, reason });
+    return response.data;
+  },
+  adminDebitWallet: async (userId, amount, reason) => {
+    const response = await api.post(`/admin/users/${userId}/wallet/debit`, { amount, reason });
+    return response.data;
+  },
+
+  // ── KYC Management ───────────────────────────────────────────────────────────
+  getKYCQueue: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const response = await api.get(`/admin/kyc/queue${query ? '?' + query : ''}`);
+    return response.data;
+  },
+  unlockKYCFields: async (userId, reason) => {
+    const response = await api.post(`/admin/users/${userId}/kyc/unlock-fields`, { reason });
+    return response.data;
+  },
+
+  // ── Referrals ────────────────────────────────────────────────────────────────
+  getReferralStats: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const response = await api.get(`/admin/referrals${query ? '?' + query : ''}`);
+    return response.data;
+  },
+  adjustReferralCredit: async (userId, amount, reason) => {
+    const response = await api.post(`/admin/referrals/${userId}/adjust`, { amount, reason });
+    return response.data;
+  },
+
+  // ── Communications ────────────────────────────────────────────────────────────
+  getNewsletterSubscribers: async () => {
+    const response = await api.get('/admin/newsletter');
+    return response.data;
+  },
+  getContactSubmissions: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const response = await api.get(`/admin/contact-submissions${query ? '?' + query : ''}`);
+    return response.data;
+  },
+  broadcastNotification: async (data) => {
+    const response = await api.post('/admin/broadcast', data);
+    return response.data;
+  },
+
+  // ── Escrow Force Actions ──────────────────────────────────────────────────────
+  forceCompleteEscrow: async (escrowId, reason) => {
+    const response = await api.post(`/admin/escrow/${escrowId}/force-complete`, { reason });
+    return response.data;
+  },
+  forceCancelEscrow: async (escrowId, reason) => {
+    const response = await api.post(`/admin/escrow/${escrowId}/force-cancel`, { reason });
+    return response.data;
+  },
+  banUser: async (userId, reason, duration) => {
+    const response = await api.post(`/admin/users/${userId}/ban`, { reason, duration });
+    return response.data;
+  },
+  unbanUser: async (userId) => {
+    const response = await api.post(`/admin/users/${userId}/unban`);
+    return response.data;
+  },
+  getWithdrawalSettings: async () => {
+    const response = await api.get('/admin/withdrawals/settings');
+    return response.data;
+  },
+  updateWithdrawalSettings: async (settings) => {
+    const response = await api.put('/admin/withdrawals/settings', settings);
+    return response.data;
+  },
+  getRevenueStats: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const response = await api.get(`/admin/revenue${query ? '?' + query : ''}`);
     return response.data;
   }
 };

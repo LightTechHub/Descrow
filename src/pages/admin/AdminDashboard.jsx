@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { path: '/admin/disputes',     label: 'Disputes',     icon: AlertCircle,     permission: 'manageDisputes' },
   { path: '/admin/analytics',    label: 'Analytics',    icon: TrendingUp,      permission: 'viewAnalytics' },
   { path: '/admin/withdrawals',  label: 'Withdrawals',  icon: Banknote,        permission: 'viewTransactions' },
+  { path: '/admin/platform',     label: 'Platform',     icon: Shield,          permission: null },
   { path: '/admin/admins',       label: 'Admins',       icon: UserCog,         masterOnly: true },
   { path: '/admin/fees',         label: 'Fee Settings', icon: Settings,        masterOnly: true },
   { path: '/admin/payments',     label: 'Payments',     icon: CreditCard,      masterOnly: true },
@@ -237,6 +238,7 @@ const AdminDashboard = ({ admin }) => {
               { permission: 'manageDisputes',   path: '/admin/disputes',     icon: AlertCircle, label: 'Disputes',     color: 'text-yellow-400', count: stats?.pendingDisputes },
               { permission: 'verifyUsers',      path: '/admin/users',        icon: Users,       label: 'Users',        color: 'text-green-400',  count: stats?.totalUsers },
               { permission: 'viewTransactions', path: '/admin/withdrawals',  icon: Banknote,    label: 'Withdrawals',  color: 'text-orange-400', count: null },
+              { permission: null,               path: '/admin/platform',     icon: Shield,      label: 'Platform',     color: 'text-cyan-400',   count: null },
               { permission: 'viewAnalytics',    path: '/admin/analytics',    icon: TrendingUp,  label: 'Analytics',    color: 'text-purple-400', count: null }
             ].filter(item => admin?.role === 'master' || admin?.permissions?.[item.permission])
              .map((item) => {

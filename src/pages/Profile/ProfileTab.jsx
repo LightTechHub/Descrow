@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { Lock, User, Phone, Globe, MapPin, FileText, Save, Loader, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import API from '../utils/api.js';
+import API from '../utils/api';
 
 const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
   const isLocked = kycApproved; // Name/business fields locked after KYC

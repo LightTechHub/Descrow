@@ -559,12 +559,12 @@ const PayoutInfo = () => (
 
 const TabContent = ({ activeTab, user, kycStatus, onUpdate, kycVerified }) => {
   switch (activeTab) {
-    case 'profile':       return <ProfileTab user={user} onUpdate={onUpdate} />;
+    case 'profile':       return <ProfileTab user={user} onUpdate={onUpdate} kycApproved={kycStatus?.isKYCVerified === true} />;
     case 'kyc':           return <KYCTab user={user} kycStatus={kycStatus} onUpdate={onUpdate} />;
     case 'bank-accounts': return <BankAccountTab user={user} onUpdate={onUpdate} kycVerified={kycVerified} />;
     case 'security':      return <SecurityTab user={user} onUpdate={onUpdate} />;
     case 'settings':      return <SettingsTab user={user} onUpdate={onUpdate} />;
-    default:              return <ProfileTab user={user} onUpdate={onUpdate} />;
+    default:              return <ProfileTab user={user} onUpdate={onUpdate} kycApproved={kycStatus?.isKYCVerified === true} />;
   }
 };
 

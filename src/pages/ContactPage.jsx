@@ -1,7 +1,11 @@
 // File: src/pages/ContactPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, Send, CheckCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, Send, CheckCircle, MessageSquare, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import SEOHead from '../components/SEOHead';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
 const ContactPage = () => {
   const [formData, setFormData] = useState({
@@ -12,53 +16,68 @@ const ContactPage = () => {
   });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (error) setError('');
   };
 
+  // ✅ FIXED: Actually calls the backend instead of fake setTimeout
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await axios.post(`${API_URL}/contact`, formData);
       setSubmitted(true);
-      setLoading(false);
       setFormData({ name: '', email: '', subject: '', message: '' });
-    }, 1500);
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+        'Failed to send message. Please try emailing us directly at support@dealcross.net'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
       <SEOHead
-        title="Contact Us - Dealcross | Get in Touch"
-        description="Contact Dealcross for support, inquiries, or partnership opportunities. Our team is here to help with your secure escrow transactions."
-        keywords="contact dealcross, customer support, escrow help, transaction support, contact us"
+        title="Contact Us — Dealcross | Universal Escrow Support"
+        description="Contact Dealcross for support with your escrow transactions, partnership inquiries, or general questions. We respond within 24 hours."
+        keywords="contact dealcross, escrow support, transaction help, customer service, dealcross help"
       />
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+
+        {/* Header */}
+        <div className="bg-blue-700 dark:bg-blue-900 py-16 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-800 rounded-full text-sm text-blue-100 mb-6">
+              <MessageSquare className="w-4 h-4" />
+              <span>We typically respond within 24 hours</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Get in Touch
             </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-              Have questions about our escrow services? We're here to help you with secure transactions.
+            <p className="text-lg text-blue-100 max-w-2xl mx-auto">
+              Have questions about our escrow services? Need help with a transaction? Our team is here for you.
             </p>
           </div>
+        </div>
 
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+
             {/* Contact Form */}
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-8">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6 sm:p-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
                 Send us a Message
               </h2>
@@ -72,17 +91,23 @@ const ContactPage = () => {
                     Message Sent!
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    Thank you for contacting us. We'll get back to you within 24 hours.
+                    Thank you for reaching out. We'll get back to you within 24 hours.
                   </p>
                   <button
                     onClick={() => setSubmitted(false)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
                   >
                     Send Another Message
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {error && (
+                    <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                      {error}
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Full Name
@@ -94,7 +119,7 @@ const ContactPage = () => {
                       onChange={handleChange}
                       required
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white text-base"
-                      placeholder="John Doe"
+                      placeholder="Your full name"
                     />
                   </div>
 
@@ -117,15 +142,23 @@ const ContactPage = () => {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Subject
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="subject"
                       value={formData.subject}
                       onChange={handleChange}
                       required
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white text-base"
-                      placeholder="How can we help?"
-                    />
+                    >
+                      <option value="">Select a topic</option>
+                      <option value="Transaction Support">Transaction Support</option>
+                      <option value="Dispute Assistance">Dispute Assistance</option>
+                      <option value="Account Issue">Account Issue</option>
+                      <option value="Payment / Withdrawal">Payment / Withdrawal</option>
+                      <option value="KYC Verification">KYC Verification</option>
+                      <option value="API / Integration">API / Integration</option>
+                      <option value="Partnership">Partnership Inquiry</option>
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
 
                   <div>
@@ -137,10 +170,10 @@ const ContactPage = () => {
                       value={formData.message}
                       onChange={handleChange}
                       required
-                      rows="6"
+                      rows="5"
                       className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white resize-none text-base"
-                      placeholder="Tell us more about your inquiry..."
-                    ></textarea>
+                      placeholder="Describe your issue or question in detail..."
+                    />
                   </div>
 
                   <button
@@ -150,7 +183,7 @@ const ContactPage = () => {
                   >
                     {loading ? (
                       <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
                         Sending...
                       </>
                     ) : (
@@ -164,84 +197,113 @@ const ContactPage = () => {
               )}
             </div>
 
-            {/* Contact Information */}
-            <div className="space-y-8">
-              <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-8">
+            {/* Contact Info */}
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6 sm:p-8">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
                   Contact Information
                 </h2>
                 <div className="space-y-6">
+
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Mail className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Email</h3>
-                      <a 
+                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Email Support</h3>
+                      <a
                         href="mailto:support@dealcross.net"
-                        className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition"
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         support@dealcross.net
                       </a>
+                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                        For general support and transaction inquiries
+                      </p>
                     </div>
                   </div>
 
+                  {/* ⚠️ COMPANY INFO NEEDED: Replace with real phone number or remove this block */}
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Phone className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Phone</h3>
-                      <p className="text-gray-600 dark:text-gray-400">
-                        +1 (555) 123-4567
-                      </p>
+                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Phone Support</h3>
+                      {/* ⚠️ REPLACE: +1 (555) 123-4567 is a placeholder */}
+                      <p className="text-gray-600 dark:text-gray-400">+1 (555) 123-4567</p>
                       <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-                        Mon-Fri: 9:00 AM - 6:00 PM EST
+                        Mon–Fri: 9:00 AM – 6:00 PM WAT
                       </p>
                     </div>
                   </div>
 
+                  {/* ⚠️ COMPANY INFO NEEDED: Replace with real office address or remove */}
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                       <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Address</h3>
+                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Office</h3>
+                      {/* ⚠️ REPLACE: placeholder address */}
                       <p className="text-gray-600 dark:text-gray-400">
-                        123 Escrow Street<br />
-                        New York, NY 10001<br />
-                        United States
+                        Lagos, Nigeria<br />
+                        {/* Add full address when available */}
                       </p>
                     </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Response Time */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-6 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-3 mb-3">
+                  <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    Response Times
+                  </h3>
+                </div>
+                <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                  <div className="flex justify-between">
+                    <span>General inquiries</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Within 24 hours</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Transaction disputes</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Within 4 hours</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Account issues</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Within 12 hours</span>
                   </div>
                 </div>
               </div>
 
-              {/* FAQ Quick Link */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-8 border border-blue-200 dark:border-blue-800">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+              {/* FAQ Quick Link — fixed from href="/#faq" to proper route */}
+              <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 shadow">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
                   Need Quick Answers?
                 </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Check out our FAQ section for instant answers to common questions.
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                  Browse our documentation for instant answers to common questions.
                 </p>
-                <a
-                  href="/#faq"
-                  className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-                >
-                  View FAQ
-                </a>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link
+                    to="/docs"
+                    className="flex-1 text-center px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm"
+                  >
+                    View Docs
+                  </Link>
+                  <Link
+                    to="/docs/troubleshooting/common-issues"
+                    className="flex-1 text-center px-5 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition font-medium text-sm border border-gray-300 dark:border-gray-700"
+                  >
+                    Troubleshooting
+                  </Link>
+                </div>
               </div>
 
-              {/* Response Time */}
-              <div className="bg-green-50 dark:bg-green-900/20 rounded-2xl p-8 border border-green-200 dark:border-green-800">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                  ⚡ Fast Response Time
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  We typically respond to all inquiries within <strong>24 hours</strong> during business days.
-                </p>
-              </div>
             </div>
           </div>
         </div>

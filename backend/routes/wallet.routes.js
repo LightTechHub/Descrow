@@ -13,4 +13,8 @@ router.post('/withdraw', walletController.requestWithdrawal);
 router.get('/banks', walletController.getBankList);
 router.post('/verify-account', walletController.verifyBankAccount);
 
+// Wallet deposit (top-up)
+router.post('/deposit/initiate', walletController.initiateDeposit);
+router.post('/deposit/verify', walletController.verifyDeposit);
+
 module.exports = router;

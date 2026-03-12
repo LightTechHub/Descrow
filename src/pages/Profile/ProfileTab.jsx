@@ -30,7 +30,7 @@ import {
   ShieldCheck, Eye, EyeOff, KeyRound, AlertCircle, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import API from '../../utils/api';
+import API from '../utils/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -117,7 +117,7 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
         <div className="flex items-start gap-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-5">
           <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-            For your security, all profile changes require your current password — even small ones.
+            For your security, all profile changes require your current password - even small ones.
             This prevents someone with access to your session from modifying your details silently.
           </p>
         </div>
@@ -196,7 +196,7 @@ const Field = ({ label, children, hint, required: req }) => (
   </div>
 );
 
-// Frozen field — dashed border, lock icon, tooltip, "Verified" badge on label
+// Frozen field - dashed border, lock icon, tooltip, "Verified" badge on label
 // Communicates clearly: this is intentionally locked, not broken
 const FrozenField = ({ label, value, reason }) => (
   <div className="group relative">
@@ -270,6 +270,36 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef(null);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await API.post('/users/upload-avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data.success) {
+        set('avatar', res.data.data?.url || res.data.url);
+        toast.success('Photo uploaded');
+      } else {
+        toast.error(res.data.message || 'Upload failed');
+      }
+    } catch {
+      // Fallback: use object URL locally (works even without upload endpoint)
+      const objectUrl = URL.createObjectURL(file);
+      set('avatar', objectUrl);
+      toast.success('Photo selected - save to apply');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const isDirty = useMemo(() => !deepEqual(form, initial), [form, initial]);
 
@@ -293,7 +323,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     setShowPasswordModal(false);
     setSaving(true);
     try {
-      // Build payload — frozen fields are excluded entirely.
+      // Build payload - frozen fields are excluded entirely.
       // Backend enforces the same rules, but excluding them means
       // no false 403 errors from unchanged-but-still-sent fields.
       const payload = {
@@ -309,12 +339,15 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         payload.address = form.address;
         payload.businessInfo = form.businessInfo;
       } else {
-        // Only non-locked business fields go through after KYC
-        payload.businessInfo = {
-          website: form.businessInfo.website,
-          // companyName, businessType, registrationNo all excluded — locked
-        };
-        // name, phone, address all excluded — locked
+        // After KYC: name, phone, address are locked.
+        // Business fields are locked only if they already have a saved value.
+        // If a field was empty at KYC approval time, the user can still set it once.
+        const biz = { website: form.businessInfo.website };
+        if (!initial.businessInfo.businessType)   biz.businessType   = form.businessInfo.businessType;
+        if (!initial.businessInfo.registrationNo) biz.registrationNo = form.businessInfo.registrationNo;
+        if (!initial.businessInfo.companyName)    biz.companyName    = form.businessInfo.companyName;
+        payload.businessInfo = biz;
+        // name, phone, address remain locked regardless
       }
 
       const res = await API.put('/users/profile', payload);
@@ -331,13 +364,13 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     }
   };
 
-  // Reasons shown in tooltips — specific per field
+  // Reasons shown in tooltips - specific per field
   const lockReasons = {
     name:           'Your legal name was verified against your government ID during KYC.',
     phone:          'Your phone number was registered and verified during KYC. It is used for 2FA and dispute contact.',
     address:        'Your residential or business address was verified as part of your identity documents.',
     companyName:    'Your business name was verified against your CAC registration documents.',
-    businessType:   'Your business category determines your regulatory and fee treatment — set during KYC.',
+    businessType:   'Your business category determines your regulatory and fee treatment - set during KYC.',
     registrationNo: 'Your CAC / registration number is a legal identifier and cannot be changed after verification.',
   };
 
@@ -359,7 +392,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-bold text-green-800 dark:text-green-300 mb-1">
-                ✓ Identity Verified — Your account is fully trusted
+                ✓ Identity Verified - Your account is fully trusted
               </p>
               <p className="text-xs text-green-700 dark:text-green-400 leading-relaxed">
                 Core identity fields (name, phone, address{isBusinessAccount ? ', business name, type & registration number' : ''}) are
@@ -391,7 +424,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         <SectionCard
           icon={ImageIcon}
           title="Profile Picture"
-          subtitle="Freely editable — no KYC restriction"
+          subtitle="Freely editable - no KYC restriction"
         >
           <div className="flex items-center gap-4 sm:gap-6">
             {/* Live preview */}
@@ -412,18 +445,36 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
 
             <div className="flex-1 min-w-0">
-              <Field label="Avatar Image URL" hint="Optional — paste any public photo URL">
-                <input
-                  type="url"
-                  value={form.avatar}
-                  onChange={e => set('avatar', e.target.value)}
-                  className={inputBase}
-                  placeholder="https://example.com/your-photo.jpg"
-                />
-              </Field>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 leading-relaxed">
-                The preview updates instantly. Use a publicly accessible image URL (from your website, Gravatar, LinkedIn, etc).
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl text-blue-600 dark:text-blue-400 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading
+                  ? <><Loader className="w-4 h-4 animate-spin" /> Uploading...</>
+                  : <><ImageIcon className="w-4 h-4" /> {form.avatar ? 'Change Photo' : 'Upload Photo'}</>
+                }
+              </button>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
+                JPG, PNG or WebP, max 5MB. Tap to open your camera roll or file browser.
               </p>
+              {form.avatar && (
+                <button
+                  type="button"
+                  onClick={() => set('avatar', '')}
+                  className="mt-2 w-full text-xs text-red-500 dark:text-red-400 hover:underline text-center"
+                >
+                  Remove photo
+                </button>
+              )}
             </div>
           </div>
         </SectionCard>
@@ -475,9 +526,9 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               </Field>
             )}
 
-            {/* Bio — always editable */}
+            {/* Bio - always editable */}
             <div className="sm:col-span-2">
-              <Field label="Bio / Description" hint={`${form.bio.length}/300 — always editable`}>
+              <Field label="Bio / Description" hint={`${form.bio.length}/300 - always editable`}>
                 <div className="relative">
                   <FileText className="absolute left-3 top-3.5 w-4 h-4 text-gray-400 pointer-events-none" />
                   <textarea
@@ -540,7 +591,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         <SectionCard
           icon={LinkIcon}
           title="Social Links"
-          subtitle="Always editable — no KYC restriction"
+          subtitle="Always editable - no KYC restriction"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
             <Field label="Twitter / X">
@@ -577,46 +628,46 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           <SectionCard
             icon={Globe}
             title="Business Information"
-            subtitle={kycApproved ? 'Most fields locked — website still editable' : 'Will be locked after KYC'}
+            subtitle={kycApproved ? 'Most fields locked - website still editable' : 'Will be locked after KYC'}
             badge={kycApproved ? <VerifiedBadge /> : null}
             accent={kycApproved}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
 
-              {/* Business Name — locked after KYC */}
-              {kycApproved ? (
+              {/* Business Name - locked after KYC */}
+              {kycApproved && initial.businessInfo.companyName ? (
                 <FrozenField label="Business / Company Name" value={form.businessInfo.companyName} reason={lockReasons.companyName} />
               ) : (
-                <Field label="Business / Company Name">
+                <Field label="Business / Company Name" hint={kycApproved && !initial.businessInfo.companyName ? "Set once - locked after saving" : ""}>
                   <input type="text" value={form.businessInfo.companyName}
                     onChange={e => set('businessInfo.companyName', e.target.value)}
                     className={inputBase} placeholder="Acme Ltd" />
                 </Field>
               )}
 
-              {/* Business Type — locked after KYC */}
-              {kycApproved ? (
+              {/* Business Type - locked after KYC */}
+              {kycApproved && initial.businessInfo.businessType ? (
                 <FrozenField label="Business Type / Category" value={form.businessInfo.businessType} reason={lockReasons.businessType} />
               ) : (
-                <Field label="Business Type / Category">
+                <Field label="Business Type / Category" hint={kycApproved && !initial.businessInfo.businessType ? "Set once - locked after saving" : ""}>
                   <input type="text" value={form.businessInfo.businessType}
                     onChange={e => set('businessInfo.businessType', e.target.value)}
                     className={inputBase} placeholder="e.g. E-commerce, Technology" />
                 </Field>
               )}
 
-              {/* CAC Registration Number — locked after KYC */}
-              {kycApproved ? (
+              {/* CAC Registration Number - locked after KYC */}
+              {kycApproved && initial.businessInfo.registrationNo ? (
                 <FrozenField label="CAC / Registration Number" value={form.businessInfo.registrationNo} reason={lockReasons.registrationNo} />
               ) : (
-                <Field label="CAC / Registration Number">
+                <Field label="CAC / Registration Number" hint={kycApproved && !initial.businessInfo.registrationNo ? "Set once - locked after saving" : ""}>
                   <input type="text" value={form.businessInfo.registrationNo}
                     onChange={e => set('businessInfo.registrationNo', e.target.value)}
                     className={inputBase} placeholder="RC 1234567" />
                 </Field>
               )}
 
-              {/* Business Website — always editable even after KYC */}
+              {/* Business Website - always editable even after KYC */}
               <Field label="Business Website" hint="Always editable">
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -651,7 +702,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               isDirty ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'
             }`}>
               {isDirty
-                ? '⚠ You have unsaved changes — password required to save'
+                ? '⚠ You have unsaved changes - password required to save'
                 : 'No pending changes'}
             </p>
             <button

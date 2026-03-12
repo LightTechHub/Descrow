@@ -11,25 +11,25 @@ const mockDeals = [
     itemName: 'iPhone 14 Pro Purchase',
     location: 'Lagos, Nigeria',
     condition: 'Fairly used',
-    amount: '$1,200',
+    amount: '₦1,800,000',
     status: 'In Escrow 🔒',
   },
   {
-    buyer: 'Helena Schmidt',
+    buyer: 'Amina Bello',
     seller: 'Web Dev Agency',
     itemName: 'Web Development Services',
-    location: 'Berlin, Germany',
+    location: 'Abuja, Nigeria',
     condition: 'Service',
-    amount: '$4,200',
+    amount: '₦6,300,000',
     status: 'Locked 🔒',
   },
   {
-    buyer: 'Thomas Chen',
-    seller: 'Amazon Global',
+    buyer: 'Emeka Okafor',
+    seller: 'Chukwudi Imports',
     itemName: 'Amazon International Order',
-    location: 'Shanghai, China',
+    location: 'Lagos, Nigeria',
     condition: 'New',
-    amount: '$850',
+    amount: '₦1,275,000',
     status: 'Pending ⏳',
   },
   {
@@ -38,7 +38,7 @@ const mockDeals = [
     itemName: 'Design Contract',
     location: 'Mexico City, Mexico',
     condition: 'Service',
-    amount: '$1,500',
+    amount: '₦2,250,000',
     status: 'Secured 🔒',
   },
   {
@@ -47,7 +47,7 @@ const mockDeals = [
     itemName: 'Crypto Asset Exchange',
     location: 'Dubai, UAE',
     condition: 'Digital',
-    amount: '$7,500',
+    amount: '₦11,250,000',
     status: 'Locked 🔒',
   },
   {
@@ -56,7 +56,7 @@ const mockDeals = [
     itemName: 'Used Car Purchase',
     location: 'London, UK',
     condition: 'Good',
-    amount: '$12,800',
+    amount: '₦19,200,000',
     status: 'In Progress ⏳',
   },
   {
@@ -65,7 +65,7 @@ const mockDeals = [
     itemName: 'Furniture Delivery',
     location: 'Mumbai, India',
     condition: 'New',
-    amount: '$2,100',
+    amount: '₦3,150,000',
     status: 'Completed ✅',
   },
   {
@@ -74,7 +74,7 @@ const mockDeals = [
     itemName: 'Freelance Video Edit',
     location: 'Seoul, South Korea',
     condition: 'Service',
-    amount: '$600',
+    amount: '₦900,000',
     status: 'In Escrow 🔒',
   },
   {
@@ -83,7 +83,7 @@ const mockDeals = [
     itemName: 'International School Payment',
     location: 'São Paulo, Brazil',
     condition: 'Service',
-    amount: '$3,500',
+    amount: '₦5,250,000',
     status: 'Active 🔵',
   },
   {
@@ -92,7 +92,7 @@ const mockDeals = [
     itemName: 'Consulting Payment',
     location: 'Paris, France',
     condition: 'Service',
-    amount: '$2,800',
+    amount: '₦4,200,000',
     status: 'Escrowed 🔒',
   },
   {
@@ -101,7 +101,7 @@ const mockDeals = [
     itemName: 'Software License',
     location: 'Toronto, Canada',
     condition: 'Digital',
-    amount: '$1,200',
+    amount: '₦1,800,000',
     status: 'Processing 🔄',
   },
   {
@@ -110,7 +110,7 @@ const mockDeals = [
     itemName: 'Luxury Handbag',
     location: 'Madrid, Spain',
     condition: 'Brand New',
-    amount: '$2,300',
+    amount: '₦3,450,000',
     status: 'Shipped 📦',
   },
   {
@@ -119,7 +119,7 @@ const mockDeals = [
     itemName: 'Gaming Laptop',
     location: 'Sydney, Australia',
     condition: 'Refurbished',
-    amount: '$1,800',
+    amount: '₦2,700,000',
     status: 'Delivered ✅',
   },
   {
@@ -128,7 +128,7 @@ const mockDeals = [
     itemName: 'Original Painting',
     location: 'Rome, Italy',
     condition: 'Antique',
-    amount: '$5,600',
+    amount: '₦8,400,000',
     status: 'Verified ✅',
   },
   {
@@ -137,7 +137,7 @@ const mockDeals = [
     itemName: 'Property Deposit',
     location: 'Singapore',
     condition: 'N/A',
-    amount: '$25,000',
+    amount: '₦37,500,000',
     status: 'Secured 🔒',
   }
 ];
@@ -266,21 +266,7 @@ const DealsInProgress = () => {
           </div>
         </div>
 
-        {/* Progress Dots */}
-        <div className="flex justify-center gap-2 mt-8 flex-wrap">
-          {allDeals.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentIndex(index)}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                index === currentIndex
-                  ? 'w-8 bg-blue-600 dark:bg-blue-400'
-                  : 'w-2 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600'
-              }`}
-              aria-label={`Go to transaction ${index + 1}`}
-            />
-          ))}
-        </div>
+
 
         {/* Live Stats */}
         <div className="mt-8 text-center">

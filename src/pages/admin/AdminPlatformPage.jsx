@@ -112,7 +112,7 @@ const WalletDepositsTab = () => {
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">No deposits found</td></tr>
               ) : filtered.map((d, i) => (
                 <tr key={i} className="border-t border-gray-700/50 hover:bg-gray-700/30 transition">
-                  <td className="px-4 py-3 text-white">{d.userId?.email || d.userId?.name || '—'}</td>
+                  <td className="px-4 py-3"><div className="text-white text-xs font-medium">{d.userEmail || '—'}</div><div className="text-gray-500 text-xs">{d.userName || ''}</div></td>
                   <td className="px-4 py-3 font-bold text-green-300">₦{(d.amount || 0).toLocaleString()}</td>
                   <td className="px-4 py-3 text-gray-400 hidden sm:table-cell font-mono text-xs">{d.reference?.slice(-12) || '—'}</td>
                   <td className="px-4 py-3 text-gray-400 hidden md:table-cell capitalize">{d.method || 'paystack'}</td>
@@ -135,6 +135,7 @@ const WalletDepositsTab = () => {
 // ── Tab: KYC Queue & Field Unlock ─────────────────────────────────────────────
 const KYCTab = () => {
   const [queue, setQueue] = useState([]);
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [loading, setLoading] = useState(true);
   const [unlockModal, setUnlockModal] = useState(null); // userId
   const [unlockReason, setUnlockReason] = useState('');
@@ -143,7 +144,12 @@ const KYCTab = () => {
   const fetchQueue = useCallback(() => {
     setLoading(true);
     adminService.getKYCQueue()
-      .then(r => { if (r.success) setQueue(r.data?.queue || r.data || []); })
+      .then(r => {
+        if (r.success) {
+          setQueue(r.data?.users || []);
+          if (r.data?.counts) setCounts(r.data.counts);
+        }
+      })
       .catch(() => toast.error('Failed to load KYC queue'))
       .finally(() => setLoading(false));
   }, []);
@@ -181,9 +187,9 @@ const KYCTab = () => {
     <div>
       <div className="grid grid-cols-3 gap-3 mb-6">
         {[
-          { label: 'Pending Review', value: queue.filter(u => u.kycStatus?.status === 'pending').length, color: 'yellow', icon: AlertTriangle },
-          { label: 'Approved',       value: queue.filter(u => u.kycStatus?.status === 'approved').length, color: 'green',  icon: CheckCircle },
-          { label: 'Rejected',       value: queue.filter(u => u.kycStatus?.status === 'rejected').length, color: 'red',    icon: XCircle },
+          { label: 'Pending Review', value: counts.pending,  color: 'yellow', icon: AlertTriangle },
+          { label: 'Approved',       value: counts.approved, color: 'green',  icon: CheckCircle },
+          { label: 'Rejected',       value: counts.rejected, color: 'red',    icon: XCircle },
         ].map(s => <StatCard key={s.label} {...s} />)}
       </div>
 
@@ -303,7 +309,7 @@ const ReferralsTab = () => {
     }
   };
 
-  const topReferrers = data?.topReferrers || [];
+  const topReferrers = data?.referrers || data?.topReferrers || [];
 
   if (loading) return <div className="flex justify-center py-16"><Loader className="w-8 h-8 text-blue-400 animate-spin" /></div>;
 

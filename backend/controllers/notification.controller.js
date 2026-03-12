@@ -176,3 +176,17 @@ exports.updateNotificationSettings = async (req, res) => {
     res.status(500).json({ success: false, message: error.message || 'Failed to update notification settings' });
   }
 };
+
+/**
+ * GET /api/notifications/unread-count
+ * Returns just the unread count — used by Navbar badge (polls every 60s)
+ */
+exports.getUnreadCount = async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({ user: req.user.id, isRead: false });
+    res.json({ success: true, data: { count } });
+  } catch (error) {
+    console.error('Unread count error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch unread count' });
+  }
+};

@@ -12,8 +12,8 @@ const ContactSection = () => {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // ✅ FIXED: wired to real POST /api/contact instead of fake setTimeout
-  // ⚠️ BACKEND NEEDED: POST /api/contact route must be created (see pending items)
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -33,8 +33,8 @@ const ContactSection = () => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // ✅ FIXED: removed fake phone (+1 555) and "San Francisco, CA"
-  // ⚠️ COMPANY INFO NEEDED: Add real phone number and full office address
+
+
   const contactInfo = [
     {
       icon: Mail,
@@ -46,14 +46,13 @@ const ContactSection = () => {
     {
       icon: MapPin,
       title: 'Location',
-      // ⚠️ TODO: Replace with full registered business address
-      content: 'Lagos, Nigeria',
+      content: '204 Ikot Ekpene Road, Aba, Abia State, Nigeria',
       link: '#',
       color: '#2d4a7c'
     }
   ];
 
-  // ✅ FIXED: social links now use absolute Dealcross URLs (consistent with Footer)
+
   const socials = [
     { id: 'twitter',   href: 'https://twitter.com/dealcross',          label: '𝕏',   ariaLabel: 'Twitter / X' },
     { id: 'linkedin',  href: 'https://linkedin.com/company/dealcross', label: 'in',  ariaLabel: 'LinkedIn' },

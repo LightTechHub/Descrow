@@ -1330,7 +1330,7 @@ const getWalletDeposits = async (req, res) => {
       { $skip: skip },
       { $limit: parseInt(limit) },
       { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'userInfo' } },
-      { $unwind: { path: '$userInfo', includeArrayIndex: null, preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$userInfo', preserveNullAndEmptyArrays: true } },
       { $project: {
         _id: '$transactions._id',
         amount: '$transactions.amount',

@@ -1325,12 +1325,12 @@ const getWalletDeposits = async (req, res) => {
     const Wallet = require('../models/Wallet.model');
     const deposits = await Wallet.aggregate([
       { $unwind: '$transactions' },
-      { $match: { 'transactions.type': 'credit', 'transactions.description': /deposit|top.up|wallet fund/i } },
+      { $match: { 'transactions.type': 'credit', 'transactions.description': { $regex: 'deposit|top.up|wallet fund|topup|top_up', $options: 'i' } } },
       { $sort: { 'transactions.createdAt': -1 } },
       { $skip: skip },
       { $limit: parseInt(limit) },
       { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'userInfo' } },
-      { $unwind: { path: '$userInfo', preserveNullAndEmpty: true } },
+      { $unwind: { path: '$userInfo', includeArrayIndex: null, preserveNullAndEmptyArrays: true } },
       { $project: {
         _id: '$transactions._id',
         amount: '$transactions.amount',
@@ -1345,7 +1345,7 @@ const getWalletDeposits = async (req, res) => {
 
     const total = await Wallet.aggregate([
       { $unwind: '$transactions' },
-      { $match: { 'transactions.type': 'credit', 'transactions.description': /deposit|top.up|wallet fund/i } },
+      { $match: { 'transactions.type': 'credit', 'transactions.description': { $regex: 'deposit|top.up|wallet fund|topup|top_up', $options: 'i' } } },
       { $count: 'total' }
     ]);
 
@@ -1436,19 +1436,26 @@ const getKYCQueue = async (req, res) => {
     const validStatuses = ['pending', 'pending_documents', 'under_review', 'in_progress'];
     const statusFilter = validStatuses.includes(status) ? status : { $in: validStatuses };
 
-    const [users, total] = await Promise.all([
+    const [users, total, counts] = await Promise.all([
       User.find({ 'kycStatus.status': statusFilter })
         .select('name email accountType kycStatus createdAt')
         .sort({ 'kycStatus.submittedAt': 1 }) // oldest first
         .skip(skip)
         .limit(parseInt(limit)),
-      User.countDocuments({ 'kycStatus.status': statusFilter })
+      User.countDocuments({ 'kycStatus.status': statusFilter }),
+      // Counts for all statuses for the stats cards in the UI
+      Promise.all([
+        User.countDocuments({ 'kycStatus.status': { $in: ['pending', 'pending_documents', 'under_review', 'in_progress'] } }),
+        User.countDocuments({ 'kycStatus.status': 'approved' }),
+        User.countDocuments({ 'kycStatus.status': 'rejected' }),
+      ])
     ]);
 
     res.json({
       success: true,
       data: {
         users,
+        counts: { pending: counts[0], approved: counts[1], rejected: counts[2] },
         pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) }
       }
     });

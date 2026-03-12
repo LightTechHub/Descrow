@@ -1,19 +1,29 @@
+// backend/routes/notification.routes.js
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
-const notificationController = require('../controllers/notification.controller');
+const {
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  deleteAllRead,
+  getNotificationSettings,
+  updateNotificationSettings,
+} = require('../controllers/notification.controller');
 
-// All routes require authentication
 router.use(authenticate);
 
-router.get('/', notificationController.getNotifications);
-router.put('/:id/read', notificationController.markAsRead);
-router.put('/read-all', notificationController.markAllAsRead);
-router.delete('/:id', notificationController.deleteNotification);
-router.delete('/read/clear', notificationController.deleteAllRead);
-
-// Settings
-router.get('/settings', notificationController.getNotificationSettings);
-router.put('/settings', notificationController.updateNotificationSettings);
+router.get('/',                   getNotifications);
+router.get('/unread-count',       getUnreadCount);
+router.put('/read-all',           markAllAsRead);
+router.patch('/read-all',         markAllAsRead);
+router.put('/:id/read',           markAsRead);
+router.patch('/:id/read',         markAsRead);
+router.delete('/read/clear',      deleteAllRead);
+router.delete('/:id',             deleteNotification);
+router.get('/settings',           getNotificationSettings);
+router.put('/settings',           updateNotificationSettings);
 
 module.exports = router;

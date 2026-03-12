@@ -1,7 +1,7 @@
 // File: src/components/Footer.jsx
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Mail, MapPin } from 'lucide-react';
+import { Shield, Mail, MapPin, Phone } from 'lucide-react';
 import { FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn, FaGithub } from 'react-icons/fa';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -11,8 +11,8 @@ const Footer = () => {
   const [email, setEmail] = useState('');
   const [subscribing, setSubscribing] = useState(false);
 
-  // ✅ FIXED: Newsletter form now calls real API instead of bare e.preventDefault()
-  // ⚠️ BACKEND NEEDED: POST /api/newsletter route must exist, or wire to Mailchimp/Resend
+
+
   const handleNewsletterSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim()) return;
@@ -23,7 +23,7 @@ const Footer = () => {
       setEmail('');
     } catch {
       // Graceful fallback if route doesn't exist yet
-      toast('Newsletter coming soon — thank you for your interest!', { icon: '📬' });
+      toast('Newsletter coming soon - thank you for your interest!', { icon: '📬' });
       setEmail('');
     } finally {
       setSubscribing(false);
@@ -75,7 +75,6 @@ const Footer = () => {
 
   return (
     <>
-      {/* Structured Data — ⚠️ COMPANY INFO NEEDED: Update address, phone, and sameAs URLs */}
       <script type="application/ld+json">
         {JSON.stringify({
           '@context': 'https://schema.org',
@@ -86,10 +85,12 @@ const Footer = () => {
           description: 'Universal escrow platform for secure online transactions',
           address: {
             '@type': 'PostalAddress',
-            // ⚠️ TODO: Replace with real registered business address
-            addressLocality: 'Lagos',
+            streetAddress: '204 Ikot Ekpene Road',
+            addressLocality: 'Aba',
+            addressRegion: 'Abia State',
             addressCountry: 'NG'
           },
+          telephone: '+2349063980422',
           contactPoint: {
             '@type': 'ContactPoint',
             contactType: 'Customer Support',
@@ -117,11 +118,11 @@ const Footer = () => {
           {/* Main Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-8 mb-12">
 
-            {/* Brand — 2 columns */}
+            {/* Brand - 2 columns */}
             <div className="lg:col-span-2">
               <Link
                 to="/"
-                aria-label="Dealcross — Universal Escrow Platform"
+                aria-label="Dealcross - Universal Escrow Platform"
                 className="flex items-center mb-4 group"
               >
                 <Shield className="w-8 h-8 text-[#1e3a5f] dark:text-blue-400 mr-2 group-hover:scale-110 transition-transform" aria-hidden="true" />
@@ -129,11 +130,9 @@ const Footer = () => {
               </Link>
 
               <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-sm leading-relaxed text-sm">
-                Universal escrow platform protecting transactions worldwide — goods, services, digital assets,
+                Universal escrow platform protecting transactions worldwide - goods, services, digital assets,
                 and more. Buy and sell with total confidence.
               </p>
-
-              {/* Contact — ⚠️ COMPANY INFO NEEDED: replace placeholder address and remove fake phone */}
               <address className="space-y-3 mb-6 not-italic">
                 <a
                   href="mailto:support@dealcross.net"
@@ -142,10 +141,9 @@ const Footer = () => {
                   <Mail className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" aria-hidden="true" />
                   <span className="text-sm">support@dealcross.net</span>
                 </a>
-                {/* ⚠️ COMPANY INFO NEEDED: Replace with real registered address */}
                 <div className="flex items-start gap-3 text-gray-600 dark:text-gray-400">
                   <MapPin className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                  <span className="text-sm">Lagos, Nigeria {/* TODO: full address */}</span>
+                  <span className="text-sm">204 Ikot Ekpene Road, Aba, Abia State, Nigeria</span>
                 </div>
               </address>
 
@@ -234,7 +232,7 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Newsletter — ✅ FIXED: wired to POST /api/newsletter with toast feedback */}
+          {/* Newsletter - ✅ FIXED: wired to POST /api/newsletter with toast feedback */}
           <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
             <div className="max-w-md mx-auto text-center">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Stay Updated</h3>

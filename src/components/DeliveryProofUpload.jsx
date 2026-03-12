@@ -153,27 +153,38 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
         return (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Courier Company <span className="text-red-500">*</span>
               </label>
               <select name="courierName" value={formData.courierName} onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${stepErrors.courierName ? 'border-red-500' : 'border-gray-300'}`}>
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white dark:border-gray-600 ${stepErrors.courierName ? 'border-red-500 dark:border-red-500' : 'border-gray-300'}`}>
                 <option value="">Select courier...</option>
-                <option value="DHL">DHL Express</option>
-                <option value="FedEx">FedEx</option>
-                <option value="UPS">UPS</option>
-                <option value="USPS">USPS</option>
-                <option value="EMS">EMS / China Post</option>
-                <option value="SF Express">SF Express</option>
-                <option value="4PX">4PX Express</option>
-                <option value="Yanwen">Yanwen</option>
-                <option value="Other">Other</option>
+                <optgroup label="Nigerian Logistics">
+                  <option value="GIG Logistics">GIG Logistics (GIGL)</option>
+                  <option value="Kwik Delivery">Kwik Delivery</option>
+                  <option value="Sendbox">Sendbox</option>
+                  <option value="Kobo360">Kobo360</option>
+                  <option value="Max.ng">Max.ng Delivery</option>
+                  <option value="Gokada">Gokada</option>
+                  <option value="Bolt Food Courier">Bolt Courier</option>
+                  <option value="Chisco Transport">Chisco Transport</option>
+                  <option value="ABC Transport">ABC Transport</option>
+                  <option value="Peace Mass Transit">Peace Mass Transit</option>
+                </optgroup>
+                <optgroup label="International (Nigeria)">
+                  <option value="DHL Nigeria">DHL Express Nigeria</option>
+                  <option value="FedEx Nigeria">FedEx Nigeria</option>
+                  <option value="UPS Nigeria">UPS Nigeria</option>
+                  <option value="Aramex Nigeria">Aramex Nigeria</option>
+                  <option value="EMS Speed Post">EMS / NIPOST Speed Post</option>
+                </optgroup>
+                <option value="Other">Other / Custom</option>
               </select>
               <FieldError field="courierName" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Tracking Number <span className="text-red-500">*</span>
               </label>
               <input type="text" name="trackingNumber" value={formData.trackingNumber}
@@ -189,11 +200,11 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
         return (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Vehicle Type <span className="text-red-500">*</span>
               </label>
               <select name="vehicleType" value={formData.vehicleType} onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${stepErrors.vehicleType ? 'border-red-500' : 'border-gray-300'}`}>
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white dark:border-gray-600 ${stepErrors.vehicleType ? 'border-red-500' : 'border-gray-300'}`}>
                 <option value="">Select vehicle type...</option>
                 <option value="car">Car</option>
                 <option value="motorcycle">Motorcycle</option>
@@ -205,7 +216,7 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Vehicle Plate Number <span className="text-red-500">*</span>
               </label>
               <input type="text" name="plateNumber" value={formData.plateNumber}
@@ -216,7 +227,7 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Driver Name <span className="text-red-500">*</span>
               </label>
               <input type="text" name="driverName" value={formData.driverName}
@@ -227,40 +238,40 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Driver Photo <span className="text-gray-500 font-normal">Optional</span>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Driver Photo <span className="text-gray-500 dark:text-gray-400 font-normal">Optional</span>
               </label>
               <input type="file" accept="image/*"
                 onChange={(e) => handleFileUpload(e, 'driverPhoto')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg" />
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-gray-100 dark:file:bg-gray-700 file:text-gray-700 dark:file:text-gray-300" />
               {formData.driverPhoto && (
                 <p className="text-sm text-green-600 mt-1.5">✓ {formData.driverPhoto.name}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Vehicle Photo <span className="text-gray-500 font-normal">Optional</span>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Vehicle Photo <span className="text-gray-500 dark:text-gray-400 font-normal">Optional</span>
               </label>
               <input type="file" accept="image/*"
                 onChange={(e) => handleFileUpload(e, 'vehiclePhoto')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg" />
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-gray-100 dark:file:bg-gray-700 file:text-gray-700 dark:file:text-gray-300" />
               {formData.vehiclePhoto && (
                 <p className="text-sm text-green-600 mt-1.5">✓ {formData.vehiclePhoto.name}</p>
               )}
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input type="checkbox" name="enableGPS" checked={formData.enableGPS}
                   onChange={handleChange} className="mt-1" />
                 <div>
-                  <p className="font-medium text-blue-900 flex items-center gap-2">
+                  <p className="font-medium text-blue-900 dark:text-blue-300 flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
                     Enable Live GPS Tracking
-                    <span className="text-gray-500 font-normal text-sm">Optional</span>
+                    <span className="text-gray-500 dark:text-gray-400 font-normal text-sm">Optional</span>
                   </p>
-                  <p className="text-sm text-blue-700 mt-1">
+                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
                     Allow buyer to track your location in real-time during delivery
                   </p>
                 </div>
@@ -272,13 +283,13 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
       case 'other':
         return (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Delivery Method Description <span className="text-red-500">*</span>
             </label>
             <textarea name="methodDescription" value={formData.methodDescription}
               onChange={handleChange} rows="3"
               placeholder="e.g., Bus service, Cargo company, Pickup..."
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${stepErrors.methodDescription ? 'border-red-500' : 'border-gray-300'}`}
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white dark:border-gray-600 ${stepErrors.methodDescription ? 'border-red-500' : 'border-gray-300'}`}
             />
             <FieldError field="methodDescription" />
           </div>
@@ -290,14 +301,14 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Upload Delivery Proof</h2>
-            <p className="text-sm text-gray-600 mt-1">Step {step} of 2</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Upload Delivery Proof</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Step {step} of 2</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition" disabled={loading}>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition" disabled={loading}>
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -307,7 +318,7 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
             <div className="space-y-6">
               {/* Method selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Delivery Method <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -316,13 +327,13 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
                     { value: 'personal', Icon: MapPin, label: 'Personal', sub: 'Car, bike, etc.' },
                     { value: 'other', Icon: Camera, label: 'Other', sub: 'Custom method' }
                   ].map(({ value, Icon, label, sub }) => (
-                    <label key={value} className={`border-2 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition ${formData.method === value ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}>
+                    <label key={value} className={`border-2 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition ${formData.method === value ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300 dark:border-gray-600'}`}>
                       <input type="radio" name="method" value={value}
                         checked={formData.method === value} onChange={handleChange} className="sr-only" />
-                      <div className={`text-center ${formData.method === value ? 'text-blue-600' : 'text-gray-600'}`}>
+                      <div className={`text-center ${formData.method === value ? 'text-blue-600' : 'text-gray-600 dark:text-gray-400'}`}>
                         <Icon className="w-8 h-8 mx-auto mb-2" />
                         <p className="font-semibold">{label}</p>
-                        <p className="text-xs mt-1">{sub}</p>
+                        <p className="text-xs mt-1 opacity-75">{sub}</p>
                       </div>
                     </label>
                   ))}
@@ -332,7 +343,7 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
               {renderMethodFields()}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Expected Delivery Date <span className="text-red-500">*</span>
                 </label>
                 <input type="date" name="estimatedDelivery" value={formData.estimatedDelivery}
@@ -345,7 +356,7 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
 
               <div className="flex gap-3">
                 <button type="button" onClick={onClose} disabled={loading}
-                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition disabled:opacity-50">
+                  className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50">
                   Cancel
                 </button>
                 {/* FIX: validateStep1() runs before advancing — type="button" won't trigger HTML required */}
@@ -360,11 +371,11 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Package Photos <span className="text-red-500">* (At least 1 required)</span>
                 </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                  <Camera className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center bg-gray-50 dark:bg-gray-800/50">
+                  <Camera className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
                   <input type="file" accept="image/*" multiple
                     onChange={(e) => handleFileUpload(e, 'packagePhotos')}
                     className="hidden" id="package-photos" />
@@ -372,14 +383,14 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
                     className="cursor-pointer text-blue-600 hover:text-blue-700 font-semibold">
                     Click to upload package photos
                   </label>
-                  <p className="text-sm text-gray-500 mt-2">PNG, JPG up to 10MB each</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">PNG, JPG up to 10MB each</p>
                 </div>
 
                 {formData.packagePhotos.length > 0 && (
                   <div className="mt-3 space-y-2">
                     {formData.packagePhotos.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-green-50 px-3 py-2 rounded">
-                        <p className="text-sm text-green-600">✓ {file.name}</p>
+                      <div key={index} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded border border-green-200 dark:border-green-800">
+                        <p className="text-sm text-green-600 dark:text-green-400">✓ {file.name}</p>
                         <button type="button" onClick={() => removePackagePhoto(index)}
                           className="text-red-500 hover:text-red-700">
                           <X className="w-4 h-4" />
@@ -391,17 +402,17 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Additional Notes <span className="text-gray-500 font-normal">Optional</span>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Additional Notes <span className="text-gray-500 dark:text-gray-400 font-normal">Optional</span>
                 </label>
                 <textarea name="additionalNotes" value={formData.additionalNotes}
                   onChange={handleChange} rows="3"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white dark:placeholder-gray-500"
                   placeholder="Any additional information about the delivery..." />
               </div>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <p className="text-sm text-yellow-800 dark:text-yellow-300">
                   <strong>Important:</strong> After marking as shipped, the buyer will have 3 days
                   after the expected delivery date to confirm receipt. If no action is taken,
                   payment will be automatically released to you.
@@ -410,7 +421,7 @@ const DeliveryProofUpload = ({ escrowId, onClose, onSuccess }) => {
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(1)} disabled={loading}
-                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition disabled:opacity-50">
+                  className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50">
                   Back
                 </button>
                 <button type="submit"

@@ -27,7 +27,7 @@ const ContactPage = () => {
     if (error) setError('');
   };
 
-  // ✅ FIXED: Actually calls the backend instead of fake setTimeout
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -50,7 +50,7 @@ const ContactPage = () => {
   return (
     <>
       <SEOHead
-        title="Contact Us — Dealcross | Universal Escrow Support"
+        title="Contact Us - Dealcross | Universal Escrow Support"
         description="Contact Dealcross for support with your escrow transactions, partnership inquiries, or general questions. We respond within 24 hours."
         keywords="contact dealcross, escrow support, transaction help, customer service, dealcross help"
       />
@@ -223,32 +223,27 @@ const ContactPage = () => {
                     </div>
                   </div>
 
-                  {/* ⚠️ COMPANY INFO NEEDED: Replace with real phone number or remove this block */}
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Phone className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Phone Support</h3>
-                      {/* ⚠️ REPLACE: +1 (555) 123-4567 is a placeholder */}
-                      <p className="text-gray-600 dark:text-gray-400">+1 (555) 123-4567</p>
+                      <a href="tel:+2349063980422" className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition font-medium">+2349063980422</a>
                       <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-                        Mon–Fri: 9:00 AM – 6:00 PM WAT
+                        Mon-Fri, 9:00 AM - 6:00 PM WAT
                       </p>
                     </div>
                   </div>
 
-                  {/* ⚠️ COMPANY INFO NEEDED: Replace with real office address or remove */}
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                       <MapPin className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Office</h3>
-                      {/* ⚠️ REPLACE: placeholder address */}
                       <p className="text-gray-600 dark:text-gray-400">
-                        Lagos, Nigeria<br />
-                        {/* Add full address when available */}
+                        204 Ikot Ekpene Road<br />Aba, Abia State, Nigeria
                       </p>
                     </div>
                   </div>
@@ -280,7 +275,7 @@ const ContactPage = () => {
                 </div>
               </div>
 
-              {/* FAQ Quick Link — fixed from href="/#faq" to proper route */}
+              {/* FAQ Quick Link - fixed from href="/#faq" to proper route */}
               <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 shadow">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
                   Need Quick Answers?

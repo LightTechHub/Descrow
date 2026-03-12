@@ -30,7 +30,7 @@ import {
   ShieldCheck, Eye, EyeOff, KeyRound, AlertCircle, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import API from '../utils/api';
+import API from '../../utils/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

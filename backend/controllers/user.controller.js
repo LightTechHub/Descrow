@@ -10,9 +10,9 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
 // ✅ FIXED: Import models used in deleteAccount
-const APIKey      = require('../models/APIKey.model');
+const APIKey      = require('../models/ApiKey.model');
 const BankAccount = require('../models/BankAccount.model');
-const Notification = require('../models/Notification');
+const Notification = require('../models/Notification.model');
 
 // ======================================================
 // ======================= KYC ==========================
@@ -49,7 +49,7 @@ exports.startKYCVerification = async (req, res) => {
           }
         });
       }
-      // Session expired — clear it
+      // Session expired - clear it
       user.kycStatus.status = 'unverified';
       user.kycStatus.diditSessionId = undefined;
       user.kycStatus.diditVerificationUrl = undefined;
@@ -355,12 +355,14 @@ exports.updateProfile = async (req, res) => {
             (a.country && a.country !== ua.country))
           attemptedLocked.push('Address');
       }
-      if (businessInfo?.companyName !== undefined && businessInfo.companyName !== user.businessInfo?.companyName)
-        attemptedLocked.push('Business Name');
-      if (businessInfo?.businessType !== undefined && businessInfo.businessType !== user.businessInfo?.businessType)
+
+      // Only block businessType/registrationNo if they already have a saved value
+      if (businessInfo?.businessType !== undefined && user.businessInfo?.businessType && businessInfo.businessType !== user.businessInfo.businessType)
         attemptedLocked.push('Business Type');
-      if (businessInfo?.registrationNo !== undefined && businessInfo.registrationNo !== user.businessInfo?.registrationNo)
+      if (businessInfo?.registrationNo !== undefined && user.businessInfo?.registrationNo && businessInfo.registrationNo !== user.businessInfo.registrationNo)
         attemptedLocked.push('Registration Number');
+      if (businessInfo?.companyName !== undefined && user.businessInfo?.companyName && businessInfo.companyName !== user.businessInfo.companyName)
+        attemptedLocked.push('Business Name');
 
       if (attemptedLocked.length > 0) {
         return res.status(403).json({
@@ -874,7 +876,7 @@ exports.exportUserData = async (req, res) => {
   }
 };
 
-// ✅ FIXED deleteAccount — models properly imported at top of file
+// ✅ FIXED deleteAccount - models properly imported at top of file
 exports.deleteAccount = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -898,7 +900,7 @@ exports.deleteAccount = async (req, res) => {
       return res.status(400).json({ success: false, message: `Cannot delete account. You have ${activeEscrows} active transaction(s). Please complete or cancel them first.`, activeEscrows });
     }
 
-    // ✅ Cleanup related data — models imported at top
+    // ✅ Cleanup related data - models imported at top
     await Promise.allSettled([
       APIKey.deleteMany({ userId }),
       BankAccount.deleteMany({ userId }),

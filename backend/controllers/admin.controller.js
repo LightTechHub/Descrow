@@ -1,4 +1,4 @@
-// backend/controllers/admin.controller.js - COMPLETE FIXED VERSION
+// backend/controllers/admin.controller.js
 const Admin = require('../models/Admin.model');
 const User = require('../models/User.model');
 const Escrow = require('../models/Escrow.model');
@@ -129,7 +129,6 @@ const getTransactions = async (req, res) => {
 
     const count = await Escrow.countDocuments(query);
 
-    // Normalize Decimal128 amount fields so frontend gets plain numbers
     const normalizedEscrows = escrows.map(e => ({
       ...e.toObject(),
       amount: e.amount ? parseFloat(e.amount.toString()) : 0,
@@ -219,9 +218,9 @@ const resolveDispute = async (req, res) => {
     }
     await escrow.save();
 
-    const admin = await Admin.findById(req.admin._id);
-    admin.actionsCount += 1;
-    await admin.save();
+    const adminDoc = await Admin.findById(req.admin._id);
+    adminDoc.actionsCount += 1;
+    await adminDoc.save();
 
     res.status(200).json({ success: true, message: 'Dispute resolved successfully', dispute });
   } catch (error) {
@@ -270,7 +269,6 @@ const getUsers = async (req, res) => {
         }
       }
     });
-
   } catch (error) {
     console.error('Get all users error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch users', error: error.message });
@@ -314,7 +312,7 @@ const changeUserTier = async (req, res) => {
   try {
     const crypto = require('crypto');
     const { userId } = req.params;
-    const { newTier, reason } = req.body;
+    const { newTier } = req.body;
 
     const validTiers = ['starter', 'growth', 'enterprise', 'api'];
     if (!validTiers.includes(newTier))
@@ -326,7 +324,6 @@ const changeUserTier = async (req, res) => {
     const oldTier = user.tier;
     user.tier = newTier;
 
-    // Activate subscription for paid tiers
     if (newTier !== 'starter') {
       user.subscription = {
         status: 'active',
@@ -337,13 +334,10 @@ const changeUserTier = async (req, res) => {
       };
     }
 
-    // Auto-generate API keys when upgrading to api tier
     if (newTier === 'api') {
-      // Only generate if not already generated
       if (!user.apiAccess?.apiKey) {
         const apiKey    = 'dc_live_' + crypto.randomBytes(24).toString('hex');
         const apiSecret = 'dc_secret_' + crypto.randomBytes(32).toString('hex');
-
         user.apiAccess = {
           enabled:      true,
           apiKey,
@@ -351,15 +345,13 @@ const changeUserTier = async (req, res) => {
           createdAt:    new Date(),
           requestCount: 0
         };
-        console.log(`🔑 API keys generated for user ${user.email}`);
+        console.log(`API keys generated for user ${user.email}`);
       } else {
-        // Already has keys — just enable access
         user.apiAccess.enabled = true;
-        console.log(`✅ API access re-enabled for user ${user.email}`);
+        console.log(`API access re-enabled for user ${user.email}`);
       }
     }
 
-    // Disable API access if downgrading away from api tier
     if (oldTier === 'api' && newTier !== 'api') {
       if (user.apiAccess) {
         user.apiAccess.enabled = false;
@@ -368,20 +360,20 @@ const changeUserTier = async (req, res) => {
 
     await user.save();
 
-    console.log(`✅ Tier changed: ${user.email} — ${oldTier} → ${newTier}`);
+    console.log(`Tier changed: ${user.email} — ${oldTier} → ${newTier}`);
 
     res.status(200).json({
       success: true,
       message: `User tier changed from ${oldTier} to ${newTier}`,
       data: {
         user: {
-          id:      user._id,
-          name:    user.name,
-          email:   user.email,
-          tier:    user.tier,
+          id:        user._id,
+          name:      user.name,
+          email:     user.email,
+          tier:      user.tier,
           apiAccess: newTier === 'api' ? {
-            enabled:  user.apiAccess.enabled,
-            apiKey:   user.apiAccess.apiKey,
+            enabled:   user.apiAccess.enabled,
+            apiKey:    user.apiAccess.apiKey,
             createdAt: user.apiAccess.createdAt
           } : undefined
         }
@@ -399,7 +391,7 @@ const changeUserTier = async (req, res) => {
 const toggleUserStatus = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { action, reason } = req.body;
+    const { action } = req.body;
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -428,7 +420,7 @@ const toggleUserStatus = async (req, res) => {
 };
 
 /* =========================================================
-   REVIEW KYC  ← FIXED
+   REVIEW KYC
 ========================================================= */
 const reviewKYC = async (req, res) => {
   try {
@@ -555,10 +547,10 @@ const getAnalytics = async (req, res) => {
     const { period = '30d' } = req.query;
 
     const startDate = new Date();
-    if (period === '7d') startDate.setDate(startDate.getDate() - 7);
+    if (period === '7d')  startDate.setDate(startDate.getDate() - 7);
     if (period === '30d') startDate.setDate(startDate.getDate() - 30);
     if (period === '90d') startDate.setDate(startDate.getDate() - 90);
-    if (period === '1y') startDate.setFullYear(startDate.getFullYear() - 1);
+    if (period === '1y')  startDate.setFullYear(startDate.getFullYear() - 1);
 
     const transactionsOverTime = await Escrow.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
@@ -655,15 +647,15 @@ const updateSubAdminPermissions = async (req, res) => {
     const { adminId } = req.params;
     const { permissions } = req.body;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
-    if (admin.role === 'master')
+    const adminDoc = await Admin.findById(adminId);
+    if (!adminDoc) return res.status(404).json({ success: false, message: 'Admin not found' });
+    if (adminDoc.role === 'master')
       return res.status(400).json({ success: false, message: 'Cannot modify master admin permissions' });
 
-    admin.permissions = permissions;
-    await admin.save();
+    adminDoc.permissions = permissions;
+    await adminDoc.save();
 
-    res.status(200).json({ success: true, message: 'Permissions updated successfully', admin });
+    res.status(200).json({ success: true, message: 'Permissions updated successfully', admin: adminDoc });
   } catch (error) {
     console.error('Update permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to update permissions', error: error.message });
@@ -673,15 +665,19 @@ const updateSubAdminPermissions = async (req, res) => {
 const toggleAdminStatus = async (req, res) => {
   try {
     const { adminId } = req.params;
-    const admin = await Admin.findById(adminId);
-    if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
-    if (admin.role === 'master')
+    const adminDoc = await Admin.findById(adminId);
+    if (!adminDoc) return res.status(404).json({ success: false, message: 'Admin not found' });
+    if (adminDoc.role === 'master')
       return res.status(400).json({ success: false, message: 'Cannot suspend master admin' });
 
-    admin.status = admin.status === 'active' ? 'suspended' : 'active';
-    await admin.save();
+    adminDoc.status = adminDoc.status === 'active' ? 'suspended' : 'active';
+    await adminDoc.save();
 
-    res.status(200).json({ success: true, message: `Admin ${admin.status === 'active' ? 'activated' : 'suspended'} successfully`, admin });
+    res.status(200).json({
+      success: true,
+      message: `Admin ${adminDoc.status === 'active' ? 'activated' : 'suspended'} successfully`,
+      admin: adminDoc
+    });
   } catch (error) {
     console.error('Toggle admin status error:', error);
     res.status(500).json({ success: false, message: 'Failed to update admin status', error: error.message });
@@ -691,9 +687,9 @@ const toggleAdminStatus = async (req, res) => {
 const deleteSubAdmin = async (req, res) => {
   try {
     const { adminId } = req.params;
-    const admin = await Admin.findById(adminId);
-    if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
-    if (admin.role === 'master')
+    const adminDoc = await Admin.findById(adminId);
+    if (!adminDoc) return res.status(404).json({ success: false, message: 'Admin not found' });
+    if (adminDoc.role === 'master')
       return res.status(400).json({ success: false, message: 'Cannot delete master admin' });
 
     await Admin.findByIdAndDelete(adminId);
@@ -781,8 +777,8 @@ const bulkUpdateTierFees = async (req, res) => {
       if (!feeSettings.tiers[tier].fees) feeSettings.tiers[tier].fees = {};
       Object.keys(updates.fees).forEach(currency => {
         if (!feeSettings.tiers[tier].fees[currency]) feeSettings.tiers[tier].fees[currency] = {};
-        Object.keys(updates.fees[currency]).forEach(field => {
-          feeSettings.tiers[tier].fees[currency][field] = parseFloat(updates.fees[currency][field]);
+        Object.keys(updates.fees[currency]).forEach(f => {
+          feeSettings.tiers[tier].fees[currency][f] = parseFloat(updates.fees[currency][f]);
         });
       });
     }
@@ -858,7 +854,15 @@ const getFeeSettingsHistory = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: { history, pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) } }
+      data: {
+        history,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
     });
   } catch (error) {
     console.error('Get fee settings history error:', error);
@@ -936,8 +940,8 @@ const assignDispute = async (req, res) => {
     const dispute = await Dispute.findById(disputeId);
     if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
 
-    const admin = await Admin.findById(adminId);
-    if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
+    const adminDoc = await Admin.findById(adminId);
+    if (!adminDoc) return res.status(404).json({ success: false, message: 'Admin not found' });
 
     dispute.assignedTo = adminId;
     dispute.status = 'under_review';
@@ -952,13 +956,12 @@ const assignDispute = async (req, res) => {
 };
 
 /* =========================================================
-   FORCE-COMPLETE / FORCE-CANCEL ESCROW (Admin intervention)
+   FORCE-COMPLETE ESCROW
 ========================================================= */
 const forceCompleteEscrow = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    const Escrow = require('../models/Escrow.model');
 
     const escrow = await Escrow.findById(id).populate('buyer seller', 'name email');
     if (!escrow) return res.status(404).json({ success: false, message: 'Escrow not found' });
@@ -968,7 +971,7 @@ const forceCompleteEscrow = async (req, res) => {
     escrow.delivery = escrow.delivery || {};
     escrow.delivery.confirmedAt = new Date();
     escrow.payment = escrow.payment || {};
-    escrow.payment.payoutAvailableAt = new Date(); // immediate — admin override
+    escrow.payment.payoutAvailableAt = new Date();
     escrow.timeline.push({
       status: 'completed',
       timestamp: new Date(),
@@ -976,13 +979,13 @@ const forceCompleteEscrow = async (req, res) => {
     });
     await escrow.save();
 
-    // Credit wallet
     try {
       const { creditWalletOnCompletion } = require('./wallet.controller');
       await creditWalletOnCompletion(escrow.seller._id, escrow);
-    } catch (e) { console.error('wallet credit failed:', e.message); }
+    } catch (e) {
+      console.error('wallet credit failed:', e.message);
+    }
 
-    // Notify both parties
     try {
       const { createNotification } = require('../utils/notificationHelper');
       await createNotification(escrow.seller._id, 'escrow_completed', 'Escrow Completed by Admin', `"${escrow.title}" was completed by an admin. Funds added to your wallet.`, '/wallet', { escrowId: escrow._id });
@@ -996,11 +999,13 @@ const forceCompleteEscrow = async (req, res) => {
   }
 };
 
+/* =========================================================
+   FORCE-CANCEL ESCROW
+========================================================= */
 const forceCancelEscrow = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason, refundBuyer = true } = req.body;
-    const Escrow = require('../models/Escrow.model');
 
     const escrow = await Escrow.findById(id).populate('buyer seller', 'name email');
     if (!escrow) return res.status(404).json({ success: false, message: 'Escrow not found' });
@@ -1014,7 +1019,6 @@ const forceCancelEscrow = async (req, res) => {
     escrow.timeline.push({ status: 'cancelled', timestamp: new Date(), note: `Force-cancelled by admin: ${reason || ''}` });
     await escrow.save();
 
-    // Refund buyer wallet if funded and requested
     if (refundBuyer && escrow.payment?.buyerPaid) {
       try {
         const Wallet = require('../models/Wallet.model');
@@ -1031,11 +1035,14 @@ const forceCancelEscrow = async (req, res) => {
           reference: `REFUND_CANCEL_${escrow.escrowId}`
         });
         await wallet.save();
-      } catch (e) { console.error('refund wallet failed:', e.message); }
+      } catch (e) {
+        console.error('refund wallet failed:', e.message);
+      }
     }
 
-    const { createNotification } = require('../utils/notificationHelper').catch ? {} : require('../utils/notificationHelper');
+    // FIXED: removed broken .catch chained on require()
     try {
+      const { createNotification } = require('../utils/notificationHelper');
       await createNotification(escrow.buyer._id, 'escrow_cancelled', 'Escrow Cancelled by Admin', `"${escrow.title}" was cancelled by an admin. ${refundBuyer ? 'Refund added to your wallet.' : ''}`, '/wallet', { escrowId: escrow._id });
       await createNotification(escrow.seller._id, 'escrow_cancelled', 'Escrow Cancelled by Admin', `"${escrow.title}" was cancelled by an admin.`, '/dashboard', { escrowId: escrow._id });
     } catch (e) { /* non-fatal */ }
@@ -1048,12 +1055,12 @@ const forceCancelEscrow = async (req, res) => {
 };
 
 /* =========================================================
-   BAN / SUSPEND USERS
+   BAN / UNBAN USERS
 ========================================================= */
 const banUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason, duration } = req.body; // duration in days, null = permanent
+    const { reason, duration } = req.body;
 
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -1074,7 +1081,6 @@ const banUser = async (req, res) => {
       timestamp: new Date(),
       metadata: { adminId: req.admin._id, reason, duration }
     });
-
     await user.save();
 
     try {
@@ -1084,7 +1090,11 @@ const banUser = async (req, res) => {
         '/contact', { reason });
     } catch (e) { /* non-fatal */ }
 
-    res.json({ success: true, message: `User ${duration ? `suspended for ${duration} days` : 'permanently banned'}`, data: { userId: user._id, status: user.status } });
+    res.json({
+      success: true,
+      message: `User ${duration ? `suspended for ${duration} days` : 'permanently banned'}`,
+      data: { userId: user._id, status: user.status }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1147,7 +1157,7 @@ const broadcastNotification = async (req, res) => {
 };
 
 /* =========================================================
-   ADMIN WALLET MANAGEMENT (view/credit/debit any user)
+   ADMIN WALLET MANAGEMENT
 ========================================================= */
 const getUserWallet = async (req, res) => {
   try {
@@ -1162,7 +1172,18 @@ const getUserWallet = async (req, res) => {
 
     const recentTx = [...wallet.transactions].reverse().slice(0, 20);
 
-    res.json({ success: true, data: { user, balance: wallet.balance, pendingBalance: wallet.pendingBalance, totalEarned: wallet.totalEarned, totalWithdrawn: wallet.totalWithdrawn, currency: wallet.currency, recentTransactions: recentTx } });
+    res.json({
+      success: true,
+      data: {
+        user,
+        balance: wallet.balance,
+        pendingBalance: wallet.pendingBalance,
+        totalEarned: wallet.totalEarned,
+        totalWithdrawn: wallet.totalWithdrawn,
+        currency: wallet.currency,
+        recentTransactions: recentTx
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1181,8 +1202,9 @@ const adminCreditWallet = async (req, res) => {
 
     await wallet.credit(parseFloat(amount), `Admin credit: ${reason}`, null, null, `ADMIN_CREDIT_${Date.now()}`);
 
-    // Audit log on user
-    await User.findByIdAndUpdate(userId, { $push: { auditLog: { action: 'ADMIN_WALLET_CREDIT', description: `Admin ${req.admin._id} credited ₦${amount}: ${reason}`, timestamp: new Date() } } });
+    await User.findByIdAndUpdate(userId, {
+      $push: { auditLog: { action: 'ADMIN_WALLET_CREDIT', description: `Admin ${req.admin._id} credited ₦${amount}: ${reason}`, timestamp: new Date() } }
+    });
 
     res.json({ success: true, message: `₦${amount} credited to user wallet`, data: { newBalance: wallet.balance + parseFloat(amount) } });
   } catch (err) {
@@ -1204,7 +1226,9 @@ const adminDebitWallet = async (req, res) => {
     }
 
     await wallet.debit(parseFloat(amount), `Admin debit: ${reason}`, null, `ADMIN_DEBIT_${Date.now()}`);
-    await User.findByIdAndUpdate(userId, { $push: { auditLog: { action: 'ADMIN_WALLET_DEBIT', description: `Admin ${req.admin._id} debited ₦${amount}: ${reason}`, timestamp: new Date() } } });
+    await User.findByIdAndUpdate(userId, {
+      $push: { auditLog: { action: 'ADMIN_WALLET_DEBIT', description: `Admin ${req.admin._id} debited ₦${amount}: ${reason}`, timestamp: new Date() } }
+    });
 
     res.json({ success: true, message: `₦${amount} debited from user wallet`, data: { newBalance: wallet.balance - parseFloat(amount) } });
   } catch (err) {
@@ -1218,7 +1242,6 @@ const adminDebitWallet = async (req, res) => {
 const getRevenueStats = async (req, res) => {
   try {
     const { period = '30d' } = req.query;
-    const Escrow = require('../models/Escrow.model');
     const Withdrawal = require('../models/Withdrawal.model');
 
     const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365;
@@ -1235,7 +1258,6 @@ const getRevenueStats = async (req, res) => {
       Escrow.countDocuments({ status: { $in: ['pending', 'accepted', 'funded', 'delivered'] } })
     ]);
 
-    // Calculate fees earned (transaction volume × fee rate)
     let totalVolume = 0;
     let totalFees = 0;
     for (const escrow of completedEscrows) {
@@ -1246,7 +1268,6 @@ const getRevenueStats = async (req, res) => {
       if (buyerPaid && sellerReceives) totalFees += buyerPaid - sellerReceives;
     }
 
-    // Daily breakdown for chart
     const dailyMap = {};
     for (const escrow of completedEscrows) {
       const day = escrow.updatedAt.toISOString().slice(0, 10);
@@ -1284,7 +1305,7 @@ const getRevenueStats = async (req, res) => {
 };
 
 /* =========================================================
-   WITHDRAWAL AUTO-APPROVAL THRESHOLD
+   WITHDRAWAL SETTINGS
 ========================================================= */
 const getWithdrawalSettings = async (req, res) => {
   res.json({
@@ -1299,9 +1320,42 @@ const getWithdrawalSettings = async (req, res) => {
 };
 
 const updateWithdrawalSettings = async (req, res) => {
-  // In production this would persist to DB / env management
-  // For now returns confirmation — set via Render env vars
-  res.json({ success: true, message: 'Update WITHDRAWAL_AUTO_APPROVE_THRESHOLD in Render environment variables', data: req.body });
+  res.json({
+    success: true,
+    message: 'Update WITHDRAWAL_AUTO_APPROVE_THRESHOLD in Render environment variables',
+    data: req.body
+  });
+};
+
+/* =========================================================
+   STUB FUNCTIONS (not yet implemented)
+========================================================= */
+const getWalletDeposits = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+};
+
+const getKYCQueue = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+};
+
+const unlockKYCFields = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+};
+
+const getReferralStats = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+};
+
+const adjustReferralCredit = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+};
+
+const getNewsletterSubscribers = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+};
+
+const getContactSubmissions = async (req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
 };
 
 /* =========================================================
@@ -1333,21 +1387,23 @@ module.exports = {
   updateGatewayCosts,
   getFeeSettingsHistory,
   resetFeesToDefault,
-  // Admin escrow intervention
   forceCompleteEscrow,
   forceCancelEscrow,
-  // User management
   banUser,
   unbanUser,
-  // Broadcast
   broadcastNotification,
-  // Wallet management
   getUserWallet,
   adminCreditWallet,
   adminDebitWallet,
-  // Revenue
   getRevenueStats,
-  // Withdrawal settings
   getWithdrawalSettings,
-  updateWithdrawalSettings
+  updateWithdrawalSettings,
+  // Previously missing — stubs added
+  getWalletDeposits,
+  getKYCQueue,
+  unlockKYCFields,
+  getReferralStats,
+  adjustReferralCredit,
+  getNewsletterSubscribers,
+  getContactSubmissions
 };

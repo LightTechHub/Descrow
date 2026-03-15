@@ -18,7 +18,7 @@ const RefundPolicyPage = () => {
   return (
     <>
       <SEOHead
-        title="Refund Policy — Dealcross | Escrow Refunds & Buyer Protection"
+        title="Refund Policy - Dealcross | Escrow Refunds & Buyer Protection"
         description="Learn about Dealcross's refund policy, dispute resolution process, refund timelines, and how to request a refund for any escrow transaction."
         keywords="Dealcross refund policy, escrow refunds, dispute resolution, buyer protection, seller protection, refund timelines"
       />
@@ -140,9 +140,9 @@ const RefundPolicyPage = () => {
               <section id="refund-methods">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">5. Refund Methods</h2>
                 <ol className="list-decimal pl-6 space-y-3">
-                  <li><strong>Original Payment Method</strong> — refunded to where payment originated</li>
-                  <li><strong>Dealcross Wallet</strong> — instant, usable on any future transaction</li>
-                  <li><strong>Alternative Method</strong> — available upon request with additional verification</li>
+                  <li><strong>Original Payment Method</strong> - refunded to where payment originated</li>
+                  <li><strong>Dealcross Wallet</strong> - instant, usable on any future transaction</li>
+                  <li><strong>Alternative Method</strong> - available upon request with additional verification</li>
                 </ol>
               </section>
 

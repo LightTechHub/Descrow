@@ -160,7 +160,7 @@ const TrustLevels = () => {
             <div className="relative z-10 max-w-4xl">
               <h3 className="text-3xl font-bold mb-4">Start Your First Escrow Today</h3>
               <p className="text-blue-100 text-lg mb-6">
-                Protect any deal — physical goods, freelance work, digital assets, property deposits and more.
+                Protect any deal - physical goods, freelance work, digital assets, property deposits and more.
               </p>
               {/* ✅ FIXED: was bare <button> with no navigation - now uses Link */}
               <Link

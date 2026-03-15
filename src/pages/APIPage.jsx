@@ -72,7 +72,7 @@ console.log('Escrow created:', escrow.escrowId);`;
     <>
       <SEOHead
         title="Dealcross Escrow API | Universal Escrow Integration"
-        description="Integrate Dealcross universal escrow API into your marketplace, SaaS, or app. Protect any transaction type — goods, services, digital assets — with one API."
+        description="Integrate Dealcross universal escrow API into your marketplace, SaaS, or app. Protect any transaction type - goods, services, digital assets - with one API."
         keywords="escrow api, universal escrow api, payment protection api, dealcross api, marketplace escrow, transaction protection, rest api"
         canonical="https://dealcross.net/api"
       />
@@ -146,7 +146,7 @@ console.log('Escrow created:', escrow.escrowId);`;
               </div>
             </div>
 
-            {/* Right — Code Block */}
+            {/* Right - Code Block */}
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-2xl">
               <div className="flex items-center gap-2 mb-4">
                 <span className="w-3 h-3 bg-red-500 rounded-full" />

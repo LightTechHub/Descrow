@@ -17,25 +17,25 @@ const BlogPreviewList = () => {
       date: 'March 1, 2026',
       readTime: '5 min read',
       category: 'Security',
-      link: '/blog/safe-escrow-transactions',
+      link: '/blog',
       color: '#1e3a5f'
     },
     {
       title: 'Understanding Escrow Services',
-      excerpt: 'A complete guide to how escrow services work and why they are essential for secure transactions — for goods, services, digital assets, and beyond.',
+      excerpt: 'A complete guide to how escrow services work and why they are essential for secure transactions - for goods, services, digital assets, and beyond.',
       date: 'February 20, 2026',
       readTime: '8 min read',
       category: 'Education',
-      link: '/blog/understanding-escrow',
+      link: '/blog',
       color: '#2d4a7c'
     },
     {
       title: 'Accepting Crypto Payments via Escrow',
-      excerpt: 'Everything you need to know about using Bitcoin, Ethereum, and USDT within an escrow framework — so both parties are protected.',
+      excerpt: 'Everything you need to know about using Bitcoin, Ethereum, and USDT within an escrow framework - so both parties are protected.',
       date: 'February 10, 2026',
       readTime: '6 min read',
       category: 'Crypto',
-      link: '/blog/crypto-escrow-payments',
+      link: '/blog',
       color: '#10b981'
     }
   ];

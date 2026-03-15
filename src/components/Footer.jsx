@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, MapPin, Phone } from 'lucide-react';
 import { FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn, FaGithub } from 'react-icons/fa';
-import axios from 'axios';
+import API from '../../utils/api';
 import toast from 'react-hot-toast';
 
 const Footer = () => {
@@ -18,7 +18,7 @@ const Footer = () => {
     if (!email.trim()) return;
     setSubscribing(true);
     try {
-      await axios.post('/api/newsletter', { email });
+      await API.post('/newsletter', { email });
       toast.success('Subscribed! Thank you.');
       setEmail('');
     } catch {

@@ -28,34 +28,6 @@ router.put('/change-password', userController.changePassword);
 router.post('/verify-password', userController.verifyPassword);
 router.delete('/account', authenticate, userController.deleteAccount);
 
-// ✅ NEW: 2FA Status Route
-router.get('/profile/2fa-status', async (req, res) => {
-  try {
-    const User = require('../models/User.model');
-    const user = await User.findById(req.user._id);
-    
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        enabled: user.twoFactorEnabled || false
-      }
-    });
-  } catch (error) {
-    console.error('2FA status error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch 2FA status' 
-    });
-  }
-});
-
 // ✅ NEW: Sessions Route
 router.get('/profile/sessions', userController.getActiveSessions);
 
@@ -129,6 +101,7 @@ router.get('/statistics', userController.getUserStatistics);
 // ======================== 2FA =========================
 // ======================================================
 
+router.get('/2fa/status', userController.get2FAStatus);
 router.post('/2fa/enable', userController.enable2FA);
 router.post('/2fa/verify', userController.verify2FA);
 router.post('/2fa/disable', userController.disable2FA);

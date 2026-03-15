@@ -310,8 +310,17 @@ exports.getProfile = async (req, res) => {
           kycStatus: user.kycStatus?.status || 'unverified',
           tier: user.tier,
           role: user.role,
+          accountType: user.accountType || 'individual',
           profilePicture: user.profilePicture,
-          phone: user.phone
+          avatar: user.avatar,
+          phone: user.phone,
+          bio: user.bio || '',
+          country: user.country || user.address?.country || '',
+          address: user.address || {},
+          socialLinks: user.socialLinks || {},
+          businessInfo: user.businessInfo || {},
+          twoFactorEnabled: user.twoFactorEnabled || false,
+          preferences: user.preferences || {}
         },
         tierLimits
       }

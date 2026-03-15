@@ -17,7 +17,7 @@ const HowItWorks = () => {
             How Dealcross Works
           </h2>
           <p className="text-xl text-gray-600 dark:text-gray-400">
-            Simple, secure, and transparent — for any type of deal
+            Simple, secure, and transparent for any type of deal
           </p>
         </div>
 

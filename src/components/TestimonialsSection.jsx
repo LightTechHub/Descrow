@@ -120,7 +120,7 @@ const TestimonialsSection = () => {
       verified: true
     },
     {
-      name: 'David Chen',
+      name: 'Emilly Chen',
       role: 'Marketplace Owner, Singapore',
       image: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&crop=face',
       quote: 'I integrated the Dealcross API in less than a day. Transaction disputes on my platform dropped to nearly zero. This is exactly what global e-commerce needed.',

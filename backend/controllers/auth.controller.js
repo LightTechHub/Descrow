@@ -1,18 +1,21 @@
 // backend/controllers/auth.controller.js
-// ADDED: login lockout (5 attempts → 30min), device/IP tracking, new device alert email
+// ADDED: login lockout (5 attempts -> 30min), device/IP tracking, new device alert email
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
+const speakeasy = require('speakeasy');
 
 // Generate JWT
-const generateToken = (userId, email = null) => {
+// scope: 'full' (default) = normal auth token; '2fa_pending' = temp token only valid for completing 2FA
+const generateToken = (userId, email = null, scope = 'full', expiresIn = null) => {
+  const expiry = expiresIn || (scope === '2fa_pending' ? '5m' : (process.env.JWT_EXPIRE || '7d'));
   return jwt.sign(
-    { id: userId, email },
+    { id: userId, email, scope },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+    { expiresIn: expiry }
   );
 };
 
@@ -88,18 +91,18 @@ exports.register = async (req, res) => {
     emailService.sendVerificationEmail(user.email, user.name, verificationToken)
       .catch(err => console.error('Failed to send verification email:', err));
 
-    console.log('✅ User registered:', user.email);
+    console.log('User registered:', user.email);
     res.status(201).json({ success: true, message: 'Registration successful! Please check your email to verify your account.', requiresVerification: true, email: user.email });
 
   } catch (error) {
-    console.error('❌ Register error:', error);
+    console.error('Register error:', error);
     if (error.code === 11000) return res.status(400).json({ success: false, message: 'Email already registered' });
     res.status(500).json({ success: false, message: 'Registration failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
 /* ============================================================
-   LOGIN — with lockout + device tracking
+   LOGIN - with lockout, device tracking, and 2FA gate
 ============================================================ */
 exports.login = async (req, res) => {
   try {
@@ -109,13 +112,14 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase(), status: { $ne: 'deleted' } }).select('+password +loginAttempts +lockUntil +loginSessions');
+    const user = await User.findOne({ email: email.toLowerCase(), status: { $ne: 'deleted' } })
+      .select('+password +loginAttempts +lockUntil +loginSessions +twoFactorSecret +twoFactorEnabled');
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // ── Check if account is locked ──────────────────────────────────────────
+    // Check if account is locked
     if (user.isLocked) {
       const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
       return res.status(423).json({
@@ -126,12 +130,12 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ── Email verification check ─────────────────────────────────────────────
+    // Email verification check
     if (!user.verified) {
       return res.status(403).json({ success: false, message: 'Please verify your email before logging in', code: 'EMAIL_NOT_VERIFIED', requiresVerification: true, email: user.email });
     }
 
-    // ── Password check ────────────────────────────────────────────────────────
+    // Password check
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       await user.incLoginAttempts();
@@ -142,45 +146,52 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message });
     }
 
-    // ── Account status ────────────────────────────────────────────────────────
+    // Account status
     if (!user.isActive || user.status === 'suspended') {
       return res.status(403).json({ success: false, message: 'Account is suspended. Please contact support.' });
     }
 
-    // ── Reset lockout on success ──────────────────────────────────────────────
+    // Reset lockout on success
     await user.resetLoginAttempts();
 
-    // ── Device tracking ───────────────────────────────────────────────────────
+    // 2FA gate - if enabled, issue a short-lived temp token and stop here
+    if (user.twoFactorEnabled) {
+      const tempToken = generateToken(user._id, user.email, '2fa_pending');
+      return res.json({
+        success: true,
+        requires2FA: true,
+        tempToken,
+        message: 'Enter your 2FA code to complete login'
+      });
+    }
+
+    // Device tracking
     const device = parseDeviceInfo(req);
     const sessionId = crypto.randomBytes(16).toString('hex');
 
-    // Check if this is a new/unseen device (compare by IP+browser+OS)
     const knownDevice = user.loginSessions?.find(
       s => s.isActive && s.ipAddress === device.ip && s.browser === device.browser && s.os === device.os
     );
 
     if (!knownDevice) {
-      // New device — send alert email (fire-and-forget)
       emailService.sendNewDeviceAlertEmail(user.email, user.name, {
-        browser: device.browser,
-        os: device.os,
-        ip: device.ip,
-        deviceType: device.deviceType,
-        time: new Date().toLocaleString()
+        browser: device.browser, os: device.os, ip: device.ip,
+        deviceType: device.deviceType, time: new Date().toLocaleString()
       }).catch(err => console.error('Failed to send new device alert:', err));
     }
 
-    // Add this session (cap at 10 sessions)
-    const newSession = { sessionId, ipAddress: device.ip, userAgent: device.userAgent, deviceType: device.deviceType, browser: device.browser, os: device.os, createdAt: new Date(), lastActivity: new Date(), isActive: true };
+    const newSession = {
+      sessionId, ipAddress: device.ip, userAgent: device.userAgent,
+      deviceType: device.deviceType, browser: device.browser, os: device.os,
+      createdAt: new Date(), lastActivity: new Date(), isActive: true
+    };
     user.loginSessions = [...(user.loginSessions || []).slice(-9), newSession];
-
-    // Update last login
     user.lastLogin = new Date();
     await user.save();
 
     const token = generateToken(user._id, user.email);
 
-    console.log('✅ User logged in:', user.email);
+    console.log('User logged in:', user.email);
 
     res.json({
       success: true,
@@ -195,8 +206,98 @@ exports.login = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Login error:', error);
+    console.error('Login error:', error);
     res.status(500).json({ success: false, message: 'Login failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+};
+
+/* ============================================================
+   VERIFY 2FA LOGIN
+   Called after login() returns requires2FA: true.
+   Validates the TOTP code then issues the real JWT.
+============================================================ */
+exports.verify2FALogin = async (req, res) => {
+  try {
+    const { tempToken, code } = req.body;
+
+    if (!tempToken || !code) {
+      return res.status(400).json({ success: false, message: 'Temp token and 2FA code are required' });
+    }
+
+    // Verify the temp token
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: '2FA session expired. Please log in again.', code: 'TOKEN_EXPIRED' });
+    }
+
+    if (decoded.scope !== '2fa_pending') {
+      return res.status(401).json({ success: false, message: 'Invalid token for 2FA verification' });
+    }
+
+    const user = await User.findById(decoded.id)
+      .select('+twoFactorSecret +loginSessions');
+
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({ success: false, message: 'User not found or 2FA not configured' });
+    }
+
+    // Validate TOTP code
+    const isValid = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: code.replace(/\s/g, ''),
+      window: 2
+    });
+
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Invalid 2FA code. Please try again.' });
+    }
+
+    // Code valid - complete login with device tracking
+    const device = parseDeviceInfo(req);
+    const sessionId = crypto.randomBytes(16).toString('hex');
+
+    const knownDevice = user.loginSessions?.find(
+      s => s.isActive && s.ipAddress === device.ip && s.browser === device.browser && s.os === device.os
+    );
+
+    if (!knownDevice) {
+      emailService.sendNewDeviceAlertEmail(user.email, user.name, {
+        browser: device.browser, os: device.os, ip: device.ip,
+        deviceType: device.deviceType, time: new Date().toLocaleString()
+      }).catch(() => {});
+    }
+
+    const newSession = {
+      sessionId, ipAddress: device.ip, userAgent: device.userAgent,
+      deviceType: device.deviceType, browser: device.browser, os: device.os,
+      createdAt: new Date(), lastActivity: new Date(), isActive: true
+    };
+    user.loginSessions = [...(user.loginSessions || []).slice(-9), newSession];
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = generateToken(user._id, user.email);
+
+    console.log('User completed 2FA login:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user: {
+        _id: user._id, name: user.name, email: user.email, role: user.role, tier: user.tier,
+        verified: user.verified, isKYCVerified: user.isKYCVerified, accountType: user.accountType,
+        profilePicture: user.profilePicture,
+        businessInfo: user.accountType === 'business' ? user.businessInfo : undefined
+      }
+    });
+
+  } catch (error) {
+    console.error('2FA login verification error:', error);
+    res.status(500).json({ success: false, message: '2FA verification failed' });
   }
 };
 
@@ -230,7 +331,7 @@ exports.googleAuth = async (req, res) => {
     return res.json({ success: true, requiresProfileCompletion: true, message: 'Please complete your profile', googleData: { googleId, email, name, picture } });
 
   } catch (error) {
-    console.error('❌ Google auth error:', error);
+    console.error('Google auth error:', error);
     res.status(500).json({ success: false, message: 'Google authentication failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
@@ -264,7 +365,7 @@ exports.completeGoogleProfile = async (req, res) => {
     res.json({ success: true, message: 'Profile completed successfully', token, user: { _id: user._id, name: user.name, email: user.email, accountType: user.accountType, verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier, profilePicture: user.profilePicture, businessInfo: accountType === 'business' ? user.businessInfo : undefined } });
 
   } catch (error) {
-    console.error('❌ Complete Google profile error:', error);
+    console.error('Complete Google profile error:', error);
     if (error.code === 11000) return res.status(400).json({ success: false, message: 'This email is already registered' });
     res.status(500).json({ success: false, message: 'Failed to complete profile', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
@@ -287,7 +388,7 @@ exports.verifyEmail = async (req, res) => {
     user.verifiedAt = new Date();
     await user.save();
 
-    console.log('✅ Email verified:', user.email);
+    console.log('Email verified:', user.email);
     res.json({ success: true, message: 'Email verified successfully! You can now login.' });
 
   } catch (error) {
@@ -313,7 +414,7 @@ exports.resendVerification = async (req, res) => {
     res.json({ success: true, message: 'Verification email sent! Please check your inbox.' });
 
   } catch (error) {
-    console.error('❌ Resend verification error:', error);
+    console.error('Resend verification error:', error);
     res.status(500).json({ success: false, message: 'Failed to resend verification email' });
   }
 };
@@ -332,7 +433,7 @@ exports.forgotPassword = async (req, res) => {
     res.json({ success: true, message: 'If that email exists, a reset link has been sent' });
 
   } catch (error) {
-    console.error('❌ Forgot password error:', error);
+    console.error('Forgot password error:', error);
     res.status(500).json({ success: false, message: 'Failed to process password reset' });
   }
 };
@@ -354,7 +455,6 @@ exports.resetPassword = async (req, res) => {
     user.password = password;
     await user.save();
 
-    // Send password changed notification
     emailService.sendPasswordChangedEmail(user.email, user.name)
       .catch(err => console.error('Failed to send password changed email:', err));
 
@@ -366,16 +466,14 @@ exports.resetPassword = async (req, res) => {
 };
 
 /* ============================================================
-   LOGOUT — blacklists the current token
+   LOGOUT
 ============================================================ */
 exports.logout = (req, res) => {
-  // Blacklist the token so it can't be reused even before expiry
   try {
     const { blacklistToken } = require('../middleware/auth.middleware');
     if (req.token) blacklistToken(req.token);
   } catch (e) { /* non-fatal */ }
 
-  // Deactivate the session (non-blocking)
   if (req.user) {
     User.findByIdAndUpdate(req.user._id, {
       $set: { 'loginSessions.$[].isActive': false }
@@ -414,7 +512,7 @@ exports.setPassword = async (req, res) => {
     await user.save();
     res.json({ success: true, message: 'Password set successfully' });
   } catch (error) {
-    console.error('❌ setPassword error:', error);
+    console.error('setPassword error:', error);
     res.status(500).json({ success: false, message: 'Failed to set password' });
   }
 };

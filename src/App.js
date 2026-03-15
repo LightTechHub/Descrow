@@ -26,6 +26,9 @@ import TermsPage from './pages/TermsPage';
 import DocsPage from './pages/DocsPage';
 import FAQPage from './pages/FAQPage';
 import BlogPage from './pages/BlogPage';
+import SafeEscrowTransactionsPage from './pages/Blog/SafeEscrowTransactionsPage';
+import UnderstandingEscrowPage from './pages/Blog/UnderstandingEscrowPage';
+import CryptoEscrowPaymentsPage from './pages/Blog/CryptoEscrowPaymentsPage';
 import ReferralPage from './pages/ReferralPage';
 import RefundPolicyPage from './pages/RefundPolicyPage';
 import CareersPage from './pages/CareersPage';
@@ -101,7 +104,6 @@ function App() {
 
   const location = useLocation();
 
-  // ── Admin auth init ──────────────────────────────────────────────────────────
   useEffect(() => {
     const adminToken = localStorage.getItem('adminToken');
     const adminData = localStorage.getItem('admin');
@@ -116,7 +118,6 @@ function App() {
     setAdminLoading(false);
   }, []);
 
-  // ── Auto-logout on 401 (token expired) ──────────────────────────────────────
   useEffect(() => {
     const handleUnauthorized = (e) => {
       if (e.detail?.status === 401 && isAuthenticated) {
@@ -133,7 +134,6 @@ function App() {
     return <Spinner />;
   }
 
-  // ── Route guards ─────────────────────────────────────────────────────────────
   const ProtectedRoute = ({ children }) => {
     if (!isAuthenticated) return <Navigate to="/login" replace />;
     return children;
@@ -153,7 +153,6 @@ function App() {
     return children;
   };
 
-  // ── Navbar / Footer visibility ────────────────────────────────────────────────
   const path = location.pathname;
 
   const noNavbarPrefixes = [
@@ -176,7 +175,7 @@ function App() {
         {shouldShowNavbar && <Navbar user={user} />}
 
         <Routes>
-          {/* ── Public ─────────────────────────────────────────────────────── */}
+          {/* Public */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
           <Route path="/signup" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <UnifiedSignup />} />
@@ -187,7 +186,7 @@ function App() {
           <Route path="/complete-profile" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <CompleteProfilePage />} />
           <Route path="/kyc-verification" element={<ProtectedRoute><KYCVerificationPage /></ProtectedRoute>} />
 
-          {/* ── Footer pages ────────────────────────────────────────────────── */}
+          {/* Footer pages */}
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
@@ -195,13 +194,16 @@ function App() {
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/blog" element={<BlogPage />} />
+          <Route path="/blog/safe-escrow-transactions" element={<SafeEscrowTransactionsPage />} />
+          <Route path="/blog/understanding-escrow" element={<UnderstandingEscrowPage />} />
+          <Route path="/blog/crypto-escrow-payments" element={<CryptoEscrowPaymentsPage />} />
           <Route path="/referral" element={<ReferralPage />} />
           <Route path="/refund-policy" element={<RefundPolicyPage />} />
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/api" element={<APIPage />} />
           <Route path="/cookies" element={<CookiesPage />} />
 
-          {/* ── User routes ─────────────────────────────────────────────────── */}
+          {/* User routes */}
           <Route path="/dashboard" element={<ProtectedRoute><UnifiedDashboard /></ProtectedRoute>} />
           <Route path="/api-dashboard" element={<Navigate to="/dashboard?tab=api" replace />} />
           <Route path="/escrow/:id" element={<ProtectedRoute><EscrowDetails /></ProtectedRoute>} />
@@ -213,63 +215,26 @@ function App() {
           <Route path="/upgrade/callback" element={<ProtectedRoute><PaymentCallbackPage /></ProtectedRoute>} />
           <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
 
-          {/* ── Legacy redirects ─────────────────────────────────────────────── */}
+          {/* Legacy redirects */}
           <Route path="/buyer-dashboard" element={<Navigate to="/dashboard" replace />} />
           <Route path="/seller-dashboard" element={<Navigate to="/dashboard" replace />} />
           <Route path="/unified-dashboard" element={<Navigate to="/dashboard" replace />} />
 
-          {/* ── Admin routes ─────────────────────────────────────────────────── */}
-          <Route
-            path="/admin/login"
-            element={admin ? <Navigate to="/admin/dashboard" replace /> : <AdminLogin setAdmin={setAdmin} />}
-          />
-          <Route path="/admin/dashboard" element={
-            <AdminProtectedRoute><AdminDashboard admin={admin} /></AdminProtectedRoute>
-          } />
-          <Route path="/admin/transactions" element={
-            <AdminProtectedRoute requiredPermission="viewTransactions">
-              <TransactionsPage admin={admin} />
-            </AdminProtectedRoute>
-          } />
-          <Route path="/admin/disputes" element={
-            <AdminProtectedRoute requiredPermission="manageDisputes">
-              <DisputesPage admin={admin} />
-            </AdminProtectedRoute>
-          } />
-          <Route path="/admin/users" element={
-            <AdminProtectedRoute requiredPermission="verifyUsers">
-              <UsersPage admin={admin} />
-            </AdminProtectedRoute>
-          } />
-          <Route path="/admin/analytics" element={
-            <AdminProtectedRoute requiredPermission="viewAnalytics">
-              <AnalyticsPage admin={admin} />
-            </AdminProtectedRoute>
-          } />
-          <Route path="/admin/payments" element={
-            <AdminProtectedRoute><PaymentGatewaysPage admin={admin} /></AdminProtectedRoute>
-          } />
-          <Route path="/admin/api" element={
-            <AdminProtectedRoute><APIManagementPage admin={admin} /></AdminProtectedRoute>
-          } />
-          <Route path="/admin/admins" element={
-            <AdminProtectedRoute><AdminManagementPage admin={admin} /></AdminProtectedRoute>
-          } />
-          <Route path="/admin/fees" element={
-            <AdminProtectedRoute><FeeManagementPage admin={admin} /></AdminProtectedRoute>
-          } />
-          <Route path="/admin/withdrawals" element={
-            <AdminProtectedRoute requiredPermission="viewTransactions">
-              <WithdrawalsPage admin={admin} />
-            </AdminProtectedRoute>
-          } />
-          <Route path="/admin/platform" element={
-            <AdminProtectedRoute>
-              <AdminPlatformPage admin={admin} />
-            </AdminProtectedRoute>
-          } />
+          {/* Admin routes */}
+          <Route path="/admin/login" element={admin ? <Navigate to="/admin/dashboard" replace /> : <AdminLogin setAdmin={setAdmin} />} />
+          <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminDashboard admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/transactions" element={<AdminProtectedRoute requiredPermission="viewTransactions"><TransactionsPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/disputes" element={<AdminProtectedRoute requiredPermission="manageDisputes"><DisputesPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/users" element={<AdminProtectedRoute requiredPermission="verifyUsers"><UsersPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/analytics" element={<AdminProtectedRoute requiredPermission="viewAnalytics"><AnalyticsPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/payments" element={<AdminProtectedRoute><PaymentGatewaysPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/api" element={<AdminProtectedRoute><APIManagementPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/admins" element={<AdminProtectedRoute><AdminManagementPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/fees" element={<AdminProtectedRoute><FeeManagementPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/withdrawals" element={<AdminProtectedRoute requiredPermission="viewTransactions"><WithdrawalsPage admin={admin} /></AdminProtectedRoute>} />
+          <Route path="/admin/platform" element={<AdminProtectedRoute><AdminPlatformPage admin={admin} /></AdminProtectedRoute>} />
 
-          {/* ── 404 ──────────────────────────────────────────────────────────── */}
+          {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
 

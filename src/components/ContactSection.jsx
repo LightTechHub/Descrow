@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Mail, MapPin, Send, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
-import axios from 'axios';
+import API from '../utils/api';
 import toast from 'react-hot-toast';
 
 const ContactSection = () => {
@@ -18,7 +18,7 @@ const ContactSection = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post('/api/contact', formData);
+      await API.post('/contact', formData);
       setSubmitted(true);
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (err) {

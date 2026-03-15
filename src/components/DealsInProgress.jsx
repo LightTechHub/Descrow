@@ -7,29 +7,29 @@ import API from '../utils/api';
 const mockDeals = [
   {
     buyer: 'Sarah Johnson',
-    seller: 'Kelvin Ugo',
+    seller: 'Marcus Webb',
     itemName: 'iPhone 14 Pro Purchase',
-    location: 'Lagos, Nigeria',
-    condition: 'Fairly used',
-    amount: '₦1,800,000',
+    location: 'Toronto, Canada',
+    condition: 'Fairly Used',
+    amount: '$1,200',
     status: 'In Escrow 🔒',
   },
   {
-    buyer: 'Amina Bello',
+    buyer: 'Emma Laurent',
     seller: 'Web Dev Agency',
     itemName: 'Web Development Services',
-    location: 'Abuja, Nigeria',
+    location: 'London, UK',
     condition: 'Service',
-    amount: '₦6,300,000',
+    amount: '$4,200',
     status: 'Locked 🔒',
   },
   {
     buyer: 'Emeka Okafor',
     seller: 'Chukwudi Imports',
     itemName: 'Amazon International Order',
-    location: 'Lagos, Nigeria',
+    location: 'Sydney, Australia',
     condition: 'New',
-    amount: '₦1,275,000',
+    amount: '$850',
     status: 'Pending ⏳',
   },
   {
@@ -38,7 +38,7 @@ const mockDeals = [
     itemName: 'Design Contract',
     location: 'Mexico City, Mexico',
     condition: 'Service',
-    amount: '₦2,250,000',
+    amount: '$1,500',
     status: 'Secured 🔒',
   },
   {
@@ -47,7 +47,7 @@ const mockDeals = [
     itemName: 'Crypto Asset Exchange',
     location: 'Dubai, UAE',
     condition: 'Digital',
-    amount: '₦11,250,000',
+    amount: '$7,500',
     status: 'Locked 🔒',
   },
   {
@@ -56,7 +56,7 @@ const mockDeals = [
     itemName: 'Used Car Purchase',
     location: 'London, UK',
     condition: 'Good',
-    amount: '₦19,200,000',
+    amount: '$12,800',
     status: 'In Progress ⏳',
   },
   {
@@ -65,7 +65,7 @@ const mockDeals = [
     itemName: 'Furniture Delivery',
     location: 'Mumbai, India',
     condition: 'New',
-    amount: '₦3,150,000',
+    amount: '$2,100',
     status: 'Completed ✅',
   },
   {
@@ -74,7 +74,7 @@ const mockDeals = [
     itemName: 'Freelance Video Edit',
     location: 'Seoul, South Korea',
     condition: 'Service',
-    amount: '₦900,000',
+    amount: '$600',
     status: 'In Escrow 🔒',
   },
   {
@@ -83,7 +83,7 @@ const mockDeals = [
     itemName: 'International School Payment',
     location: 'São Paulo, Brazil',
     condition: 'Service',
-    amount: '₦5,250,000',
+    amount: '$3,500',
     status: 'Active 🔵',
   },
   {
@@ -92,7 +92,7 @@ const mockDeals = [
     itemName: 'Consulting Payment',
     location: 'Paris, France',
     condition: 'Service',
-    amount: '₦4,200,000',
+    amount: '$2,800',
     status: 'Escrowed 🔒',
   },
   {
@@ -101,7 +101,7 @@ const mockDeals = [
     itemName: 'Software License',
     location: 'Toronto, Canada',
     condition: 'Digital',
-    amount: '₦1,800,000',
+    amount: '$1,200',
     status: 'Processing 🔄',
   },
   {
@@ -110,7 +110,7 @@ const mockDeals = [
     itemName: 'Luxury Handbag',
     location: 'Madrid, Spain',
     condition: 'Brand New',
-    amount: '₦3,450,000',
+    amount: '$2,300',
     status: 'Shipped 📦',
   },
   {
@@ -119,7 +119,7 @@ const mockDeals = [
     itemName: 'Gaming Laptop',
     location: 'Sydney, Australia',
     condition: 'Refurbished',
-    amount: '₦2,700,000',
+    amount: '$1,800',
     status: 'Delivered ✅',
   },
   {
@@ -128,7 +128,7 @@ const mockDeals = [
     itemName: 'Original Painting',
     location: 'Rome, Italy',
     condition: 'Antique',
-    amount: '₦8,400,000',
+    amount: '$5,600',
     status: 'Verified ✅',
   },
   {
@@ -137,7 +137,7 @@ const mockDeals = [
     itemName: 'Property Deposit',
     location: 'Singapore',
     condition: 'N/A',
-    amount: '₦37,500,000',
+    amount: '$25,000',
     status: 'Secured 🔒',
   }
 ];
@@ -196,7 +196,7 @@ const DealsInProgress = () => {
             </h2>
           </div>
           <p className="text-gray-600 dark:text-gray-400">
-            Real-time escrow transactions happening right now on Dealcross — any deal type, anywhere in the world
+            Real-time escrow transactions happening right now on Dealcross - any deal type, anywhere in the world
           </p>
         </div>
 

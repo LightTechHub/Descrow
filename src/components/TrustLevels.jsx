@@ -162,7 +162,7 @@ const TrustLevels = () => {
               <p className="text-blue-100 text-lg mb-6">
                 Protect any deal — physical goods, freelance work, digital assets, property deposits and more.
               </p>
-              {/* ✅ FIXED: was bare <button> with no navigation — now uses Link */}
+              {/* ✅ FIXED: was bare <button> with no navigation - now uses Link */}
               <Link
                 to="/signup"
                 className="inline-block px-8 py-3 bg-white text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg"

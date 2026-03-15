@@ -14,7 +14,6 @@ exports.getProfile = async (req, res) => {
 
     const userData = user.toObject();
 
-    // Guarantee kycStatus always has a full shape so frontend never crashes
     if (!userData.kycStatus) {
       userData.kycStatus = {
         status: 'unverified',
@@ -37,15 +36,12 @@ exports.updateProfile = async (req, res) => {
   try {
     const { name, phone, bio, address, socialLinks, businessInfo, preferences } = req.body;
 
-    // Use dot-notation keys so $set MERGES nested fields instead of replacing
-    // the entire sub-document. e.g. "address.city" won't wipe address.street.
     const updates = {};
 
     if (name !== undefined)  updates.name  = name.trim();
     if (phone !== undefined) updates.phone = phone.trim();
     if (bio !== undefined)   updates.bio   = bio.trim();
 
-    // Address — only set fields that were actually sent
     if (address && typeof address === 'object') {
       const allowed = ['street', 'city', 'state', 'country', 'zipCode', 'postalCode', 'formatted'];
       allowed.forEach(field => {
@@ -55,7 +51,6 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
-    // Social links — only set fields that were actually sent
     if (socialLinks && typeof socialLinks === 'object') {
       ['twitter', 'linkedin', 'website'].forEach(field => {
         if (socialLinks[field] !== undefined) {
@@ -64,10 +59,11 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
-    // Business info — only set fields that were actually sent
     if (businessInfo && typeof businessInfo === 'object') {
+      // FIXED: added businessType and registrationNo to the allowed list
       const allowedBusiness = [
-        'companyName', 'companyType', 'taxId', 'registrationNumber',
+        'companyName', 'companyType', 'businessType', 'taxId',
+        'registrationNumber', 'registrationNo',
         'industry', 'businessEmail', 'businessPhone', 'website',
       ];
       allowedBusiness.forEach(field => {
@@ -76,7 +72,6 @@ exports.updateProfile = async (req, res) => {
         }
       });
 
-      // Nested business address
       if (businessInfo.businessAddress && typeof businessInfo.businessAddress === 'object') {
         ['street', 'city', 'state', 'country', 'zipCode'].forEach(field => {
           if (businessInfo.businessAddress[field] !== undefined) {
@@ -86,7 +81,6 @@ exports.updateProfile = async (req, res) => {
       }
     }
 
-    // Preferences
     if (preferences && typeof preferences === 'object') {
       ['language', 'timezone', 'defaultCurrency', 'theme'].forEach(field => {
         if (preferences[field] !== undefined) {
@@ -102,13 +96,7 @@ exports.updateProfile = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
-      {
-        new: true,
-        // runValidators: false prevents the country enum on the model from
-        // blocking saves when a user selects a country not in the old list.
-        // Validation of user-facing inputs is handled at the form/route level.
-        runValidators: false,
-      }
+      { new: true, runValidators: false }
     ).select('-password -twoFactorSecret -apiAccess.apiSecret');
 
     if (!user) {
@@ -118,7 +106,7 @@ exports.updateProfile = async (req, res) => {
     res.json({
       success: true,
       message: 'Profile updated successfully',
-      data: user.toObject(), // Full user returned so frontend can sync context
+      data: user.toObject(),
     });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -146,15 +134,26 @@ exports.uploadAvatar = async (req, res) => {
       deleteOldAvatar(user.profilePicture);
     }
 
-    user.profilePicture = req.avatarUrl || `/${req.file.path.replace(/\\/g, '/')}`;
+    // FIXED: store full backend URL so frontend can render it from any domain
+    // Without this, /uploads/avatars/filename.png resolves to the FRONTEND domain
+    const backendUrl = process.env.BACKEND_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      `https://descrow-backend-5ykg.onrender.com`;
+
+    const relativePath = req.avatarUrl || `/${req.file.path.replace(/\\/g, '/')}`;
+    const fullUrl = relativePath.startsWith('http')
+      ? relativePath
+      : `${backendUrl}${relativePath}`;
+
+    user.profilePicture = fullUrl;
     await user.save();
 
     res.json({
       success: true,
       message: 'Avatar uploaded successfully',
       data: {
-        avatarUrl: user.profilePicture,
-        profilePicture: user.profilePicture,
+        avatarUrl: fullUrl,
+        profilePicture: fullUrl,
       },
     });
   } catch (error) {

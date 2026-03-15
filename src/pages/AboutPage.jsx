@@ -23,7 +23,7 @@ const AboutPage = () => {
     {
       icon: Globe,
       title: 'Universal Coverage',
-      description: 'From physical goods to digital services, freelance work to real estate — our escrow works for any transaction type, any currency, anywhere.'
+      description: 'From physical goods to digital services, freelance work to real estate - our escrow works for any transaction type, any currency, anywhere.'
     },
     {
       icon: Award,
@@ -54,7 +54,7 @@ const AboutPage = () => {
     <>
       <SEOHead
         title="About Dealcross | Universal Escrow Platform"
-        description="Dealcross is a universal escrow platform protecting buyers and sellers across every transaction type — goods, services, digital assets, and more. Learn about our mission."
+        description="Dealcross is a universal escrow platform protecting buyers and sellers across every transaction type - goods, services, digital assets, and more. Learn about our mission."
         keywords="about dealcross, universal escrow platform, secure transactions, buyer seller protection, escrow service"
       />
 
@@ -85,7 +85,7 @@ const AboutPage = () => {
             <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed text-center max-w-4xl mx-auto">
               At Dealcross, we believe that anyone should be able to transact online without fear.
               Whether you're a buyer purchasing goods from a stranger, a freelancer awaiting payment for your work,
-              or a business closing a major deal — our universal escrow platform holds funds securely until
+              or a business closing a major deal - our universal escrow platform holds funds securely until
               both parties are satisfied. No more fraud. No more disputes left unresolved. Just safe, transparent,
               and fair transactions for everyone.
             </p>
@@ -173,8 +173,8 @@ const AboutPage = () => {
                 'Real-time tracking and status notifications',
                 '24/7 customer support',
                 'Dispute resolution within 48 hours',
-                'Multi-currency support — NGN, USD, crypto & more',
-                'No hidden fees — transparent pricing',
+                'Multi-currency support - NGN, USD, crypto & more',
+                'No hidden fees - transparent pricing',
                 'KYC-verified users for maximum safety',
                 'Mobile-friendly on every screen size'
               ].map((feature, index) => (

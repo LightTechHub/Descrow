@@ -129,7 +129,7 @@ const CareersPage = () => {
               Build the Future of Trust
             </h1>
             <p className="text-xl md:text-2xl text-blue-100 mb-8 max-w-3xl mx-auto">
-              Join our mission to make every online transaction safe, transparent, and protected — for anyone, anywhere.
+              Join our mission to make every online transaction safe, transparent, and protected - for anyone, anywhere.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
@@ -169,7 +169,7 @@ const CareersPage = () => {
         <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6">Our Mission</h2>
           <p className="text-xl text-gray-600 dark:text-gray-400 leading-relaxed">
-            Dealcross is building the universal infrastructure for trust in online commerce —
+            Dealcross is building the universal infrastructure for trust in online commerce -
             making every transaction safe, transparent, and protected regardless of what's being bought or sold.
           </p>
         </section>
@@ -313,7 +313,7 @@ const CareersPage = () => {
               {
                 image: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=600&h=400&fit=crop',
                 title: 'Shared Mission',
-                description: 'Everyone here is working toward the same goal — safer commerce for all.'
+                description: 'Everyone here is working toward the same goal - safer commerce for all.'
               }
             ].map((item, idx) => (
               <article

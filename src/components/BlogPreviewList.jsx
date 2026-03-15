@@ -17,7 +17,7 @@ const BlogPreviewList = () => {
       date: 'March 1, 2026',
       readTime: '5 min read',
       category: 'Security',
-      link: '/blog',
+      link: '/blog/safe-escrow-transactions',
       color: '#1e3a5f'
     },
     {
@@ -26,7 +26,7 @@ const BlogPreviewList = () => {
       date: 'February 20, 2026',
       readTime: '8 min read',
       category: 'Education',
-      link: '/blog',
+      link: '/blog/understanding-escrow',
       color: '#2d4a7c'
     },
     {
@@ -35,7 +35,7 @@ const BlogPreviewList = () => {
       date: 'February 10, 2026',
       readTime: '6 min read',
       category: 'Crypto',
-      link: '/blog',
+      link: '/blog/crypto-escrow-payments',
       color: '#10b981'
     }
   ];

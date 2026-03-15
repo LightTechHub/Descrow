@@ -5,7 +5,7 @@ import { ArrowRight, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 
-// ✅ FIXED: Avatar fallback for user trust badges — renders coloured circle when image fails
+// ✅ FIXED: Avatar fallback for user trust badges - renders coloured circle when image fails
 // ⚠️ COMPANY INFO NEEDED: Replace with real user photos stored at /public/images/users/
 const UserAvatar = ({ src, fallbackColor, label }) => {
   const [errored, setErrored] = React.useState(false);
@@ -43,19 +43,19 @@ const HeroSection = () => {
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    // ✅ FIXED: removed console.warn — silently does nothing if section not found
+    // ✅ FIXED: removed console.warn - silently does nothing if section not found
   };
 
   // ⚠️ COMPANY INFO NEEDED: Replace with real user photos (external URLs or /public/images/users/)
   const userAvatars = [
-    { src: null, fallbackColor: 'bg-blue-400', label: 'User 1' },
-    { src: null, fallbackColor: 'bg-blue-500', label: 'User 2' },
-    { src: null, fallbackColor: 'bg-blue-600', label: 'User 3' },
+    { src: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop&crop=face', fallbackColor: 'bg-blue-400', label: 'User 1' },
+    { src: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&h=80&fit=crop&crop=face', fallbackColor: 'bg-blue-500', label: 'User 2' },
+    { src: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=80&h=80&fit=crop&crop=face', fallbackColor: 'bg-blue-600', label: 'User 3' },
   ];
 
   return (
     <section className="relative bg-white dark:bg-[#1e3a5f] py-12 sm:py-16 md:py-20 lg:py-24 overflow-hidden transition-colors duration-300">
-      {/* Background glows — ✅ FIXED: purple-400 orb → blue-400 */}
+      {/* Background glows - ✅ FIXED: purple-400 orb → blue-400 */}
       <div className="absolute inset-0 overflow-hidden opacity-0 dark:opacity-10 transition-opacity duration-300 pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
@@ -74,7 +74,7 @@ const HeroSection = () => {
               {t('welcome_to_dealcross') || 'Universal Escrow for Every Transaction'}
             </h1>
             <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-blue-200 mb-6 sm:mb-8 max-w-2xl">
-              {t('your_trusted_escrow') || 'Protect buyers and sellers in any deal — goods, services, digital assets, real estate, and more. Trusted by thousands worldwide.'}
+              {t('your_trusted_escrow') || 'Protect buyers and sellers in any deal - goods, services, digital assets, real estate, and more. Trusted by thousands worldwide.'}
             </p>
 
             {/* CTA Buttons */}
@@ -117,7 +117,7 @@ const HeroSection = () => {
             </div>
           </motion.div>
 
-          {/* Right Content — Phone Mockup */}
+          {/* Right Content - Phone Mockup */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}

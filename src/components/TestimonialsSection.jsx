@@ -104,27 +104,26 @@ const TestimonialsSection = () => {
 
   const testimonials = [
     {
-      name: 'Chidera Okonkwo',
-      role: 'E-commerce Merchant, Lagos',
-      // ⚠️ REPLACE: set real photo URL - e.g. 'https://yourcdn.com/photos/chidera.jpg'
+      name: 'Michael Torres',
+      role: 'E-commerce Merchant, Miami',
       image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face',
       quote: 'Dealcross has completely changed how I do business online. I used to lose money every week to fraud - now every transaction is protected and both sides trust the process.',
       rating: 5,
       verified: true
     },
     {
-      name: 'Amina Bello',
-      role: 'Freelance Designer, Abuja',
+      name: 'Sophie Müller',
+      role: 'Freelance Designer, Berlin',
       image: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=80&h=80&fit=crop&crop=face',
       quote: 'As a freelancer, getting paid was always stressful. With Dealcross, the client funds escrow before I start, and I receive payment immediately on delivery. Zero disputes.',
       rating: 5,
       verified: true
     },
     {
-      name: 'James Adeleke',
-      role: 'Marketplace Owner, Port Harcourt',
+      name: 'David Chen',
+      role: 'Marketplace Owner, Singapore',
       image: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&crop=face',
-      quote: 'I integrated the Dealcross API in less than a day. Transaction disputes on my platform dropped to nearly zero. This is exactly what Nigerian e-commerce needed.',
+      quote: 'I integrated the Dealcross API in less than a day. Transaction disputes on my platform dropped to nearly zero. This is exactly what global e-commerce needed.',
       rating: 5,
       verified: true
     }

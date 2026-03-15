@@ -286,8 +286,11 @@ const ProfilePage = () => {
                   src={(() => {
                     const url = user.profilePicture;
                     if (url.startsWith('http')) return url;
-                    if (url.startsWith('/')) return `${process.env.REACT_APP_API_URL || ''}${url}`;
-                    return `${process.env.REACT_APP_API_URL || ''}/uploads/avatars/${url}`;
+                    // Static files served at /uploads - strip /api from base URL
+                    const base = (process.env.REACT_APP_API_URL || '').replace(/\/api$/, '');
+                    if (url.startsWith('/uploads')) return `${base}${url}`;
+                    if (url.startsWith('/')) return `${base}${url}`;
+                    return `${base}/uploads/avatars/${url}`;
                   })()}
                   alt={getDisplayName()}
                   className="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-lg"

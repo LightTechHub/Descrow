@@ -80,7 +80,7 @@ const ContactSection = () => {
 
         <div ref={ref} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* Left — contact cards */}
+          {/* Left - contact cards */}
           <div className="space-y-6">
             {contactInfo.map((info, index) => {
               const Icon = info.icon;
@@ -140,7 +140,7 @@ const ContactSection = () => {
             </motion.div>
           </div>
 
-          {/* Right — Contact Form */}
+          {/* Right - Contact Form */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={inView ? { opacity: 1, x: 0 } : {}}

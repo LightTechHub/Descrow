@@ -12,7 +12,7 @@ import ActionButtons from '../components/Escrow/ActionButtons';
 import DeliveryModal from '../components/Escrow/DeliveryModal';
 import DisputeModal from '../components/Escrow/DisputeModal';
 import ChatBox from '../components/Escrow/ChatBox';
-import DeliveryTracking from '../components/DeliveryTracking';
+import DeliveryTracking from '../components/Escrow/DeliveryTracking';
 
 import escrowService from '../services/escrowService';
 import { authService } from '../services/authService';

@@ -621,19 +621,56 @@ exports.getUserStatistics = async (req, res) => {
 // =================== 2FA MANAGEMENT ===================
 // ======================================================
 
+// Generate cryptographically random backup codes (8 codes, format: XXXX-XXXX)
+const _generateBackupCodes = () => {
+  const crypto = require('crypto');
+  return Array.from({ length: 8 }, () => {
+    const part1 = crypto.randomBytes(2).toString('hex').toUpperCase();
+    const part2 = crypto.randomBytes(2).toString('hex').toUpperCase();
+    return `${part1}-${part2}`;
+  });
+};
+
+exports.get2FAStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({
+      success: true,
+      data: {
+        enabled: user.twoFactorEnabled || false,
+        lastVerified: user.twoFactorLastVerified || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to get 2FA status' });
+  }
+};
+
 exports.enable2FA = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     if (user.twoFactorEnabled) return res.status(400).json({ success: false, message: '2FA is already enabled' });
 
-    const secret = speakeasy.generateSecret({ name: `Dealcross (${user.email})` });
+    const secret = speakeasy.generateSecret({ name: `Dealcross (${user.email})`, issuer: 'Dealcross' });
     const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+    const backupCodes = _generateBackupCodes();
 
     user.twoFactorSecret = secret.base32;
+    user.twoFactorBackupCodes = backupCodes;
     await user.save();
 
-    res.json({ success: true, message: '2FA setup initiated', data: { qrCode: qrCodeUrl, secret: secret.base32, instructions: 'Scan the QR code with Google Authenticator or enter the secret manually, then verify with a code to complete setup' } });
+    res.json({
+      success: true,
+      message: '2FA setup initiated',
+      data: {
+        qrCode: qrCodeUrl,
+        manualEntry: secret.base32,
+        backupCodes,
+        instructions: 'Scan the QR code with Google Authenticator or Authy, then verify with a 6-digit code to complete setup'
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to enable 2FA' });
   }
@@ -652,6 +689,7 @@ exports.verify2FA = async (req, res) => {
     if (!verified) return res.status(400).json({ success: false, message: 'Invalid verification code' });
 
     user.twoFactorEnabled = true;
+    user.twoFactorLastVerified = new Date();
     await user.save();
 
     res.json({ success: true, message: '2FA enabled successfully' });
@@ -674,6 +712,7 @@ exports.disable2FA = async (req, res) => {
 
     user.twoFactorEnabled = false;
     user.twoFactorSecret = undefined;
+    user.twoFactorBackupCodes = undefined;
     await user.save();
 
     res.json({ success: true, message: '2FA disabled successfully' });

@@ -17,7 +17,7 @@ const TrustLevels = () => {
             Universal Escrow You Can Trust
           </h2>
           <p className="text-xl text-gray-600 dark:text-gray-400 transition-colors duration-300">
-            Built for every transaction type — goods, services, digital assets, and more.
+            Built for every transaction type - goods, services, digital assets, and more.
             Dealcross protects both sides of every deal.
           </p>
         </div>
@@ -141,7 +141,7 @@ const TrustLevels = () => {
                   </div>
                 </div>
                 <div className="text-sm opacity-90">
-                  Thousands of escrow deals in progress right now — goods, services, digital assets & more.
+                  Thousands of escrow deals in progress right now - goods, services, digital assets & more.
                 </div>
               </div>
             </motion.div>

@@ -76,7 +76,7 @@ const HowItWorks = () => {
                 Funds Held Securely
               </h3>
               <p className="text-gray-600 dark:text-gray-400 leading-relaxed mb-6 flex-grow">
-                The buyer deposits funds. Dealcross holds them in a protected escrow account — the seller receives nothing until you confirm delivery.
+                The buyer deposits funds. Dealcross holds them in a protected escrow account - the seller receives nothing until you confirm delivery.
               </p>
               <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-4 border border-green-200 dark:border-green-800">
                 <div className="flex items-center justify-between mb-2">

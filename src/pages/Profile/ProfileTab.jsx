@@ -26,11 +26,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   Lock, User, Phone, Globe, MapPin, FileText, Save, Loader,
-  CheckCircle, Twitter, Linkedin, Link as LinkIcon, ImageIcon,
+  CheckCircle, Twitter, Linkedin, Link as LinkIcon,
   ShieldCheck, Eye, EyeOff, KeyRound, AlertCircle, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import API from '../../utils/api';
+import API from '../utils/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -39,12 +39,12 @@ const buildInitialForm = (user) => ({
   name:   user?.name   || '',
   phone:  user?.phone  || '',
   bio:    user?.bio    || '',
-  avatar: user?.avatar || '',
+  avatar: user?.avatar || user?.profilePicture || '',
   address: {
     street:  user?.address?.street  || '',
     city:    user?.address?.city    || '',
     state:   user?.address?.state   || '',
-    country: user?.address?.country || '',
+    country: user?.address?.country || user?.country || '',
   },
   socialLinks: {
     twitter:  user?.socialLinks?.twitter  || '',
@@ -55,7 +55,7 @@ const buildInitialForm = (user) => ({
     companyName:    user?.businessInfo?.companyName    || '',
     businessType:   user?.businessInfo?.businessType   || '',
     website:        user?.businessInfo?.website        || '',
-    registrationNo: user?.businessInfo?.registrationNo || '',
+    registrationNo: user?.businessInfo?.registrationNo || user?.businessInfo?.registrationNumber || '',
   },
 });
 
@@ -270,36 +270,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = React.useRef(null);
-
-  const handleAvatarUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await API.post('/users/upload-avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      if (res.data.success) {
-        set('avatar', res.data.data?.url || res.data.url);
-        toast.success('Photo uploaded');
-      } else {
-        toast.error(res.data.message || 'Upload failed');
-      }
-    } catch {
-      // Fallback: use object URL locally (works even without upload endpoint)
-      const objectUrl = URL.createObjectURL(file);
-      set('avatar', objectUrl);
-      toast.success('Photo selected - save to apply');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const isDirty = useMemo(() => !deepEqual(form, initial), [form, initial]);
 
@@ -353,7 +323,12 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
       const res = await API.put('/users/profile', payload);
       if (res.data.success) {
         toast.success('Profile updated successfully');
-        if (onUpdate) onUpdate(res.data.data?.user || res.data.data);
+        // Merge the returned fields with the full user object so no fields blank out
+        const updatedUser = {
+          ...user,
+          ...(res.data.data?.user || res.data.data || {}),
+        };
+        if (onUpdate) onUpdate(updatedUser);
       } else {
         toast.error(res.data.message || 'Failed to update profile');
       }
@@ -419,65 +394,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
           </div>
         )}
-
-        {/* ── Profile Picture ────────────────────────────────────────────────── */}
-        <SectionCard
-          icon={ImageIcon}
-          title="Profile Picture"
-          subtitle="Freely editable - no KYC restriction"
-        >
-          <div className="flex items-center gap-4 sm:gap-6">
-            {/* Live preview */}
-            <div className="flex-shrink-0">
-              {form.avatar ? (
-                <img
-                  src={form.avatar}
-                  alt="Avatar preview"
-                  className="w-16 h-16 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-blue-100 dark:ring-blue-900/50 bg-gray-100 dark:bg-gray-800"
-                  onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                />
-              ) : null}
-              <div
-                className={`${form.avatar ? 'hidden' : 'flex'} w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center text-white text-2xl sm:text-3xl font-extrabold ring-4 ring-blue-100 dark:ring-blue-900/50`}
-              >
-                {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
-              </div>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl text-blue-600 dark:text-blue-400 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading
-                  ? <><Loader className="w-4 h-4 animate-spin" /> Uploading...</>
-                  : <><ImageIcon className="w-4 h-4" /> {form.avatar ? 'Change Photo' : 'Upload Photo'}</>
-                }
-              </button>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">
-                JPG, PNG or WebP, max 5MB. Tap to open your camera roll or file browser.
-              </p>
-              {form.avatar && (
-                <button
-                  type="button"
-                  onClick={() => set('avatar', '')}
-                  className="mt-2 w-full text-xs text-red-500 dark:text-red-400 hover:underline text-center"
-                >
-                  Remove photo
-                </button>
-              )}
-            </div>
-          </div>
-        </SectionCard>
 
         {/* ── Personal Information ───────────────────────────────────────────── */}
         <SectionCard
@@ -650,9 +566,26 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                 <FrozenField label="Business Type / Category" value={form.businessInfo.businessType} reason={lockReasons.businessType} />
               ) : (
                 <Field label="Business Type / Category" hint={kycApproved && !initial.businessInfo.businessType ? "Set once - locked after saving" : ""}>
-                  <input type="text" value={form.businessInfo.businessType}
+                  <select value={form.businessInfo.businessType}
                     onChange={e => set('businessInfo.businessType', e.target.value)}
-                    className={inputBase} placeholder="e.g. E-commerce, Technology" />
+                    className={inputBase}>
+                    <option value="">Select business type...</option>
+                    <option value="sole_proprietor">Sole Proprietor</option>
+                    <option value="partnership">Partnership</option>
+                    <option value="llc">LLC / Limited Liability Company</option>
+                    <option value="corporation">Corporation</option>
+                    <option value="ngo">NGO / Non-Profit</option>
+                    <option value="ecommerce">E-commerce</option>
+                    <option value="freelance">Freelance / Consulting</option>
+                    <option value="technology">Technology / Software</option>
+                    <option value="logistics">Logistics / Delivery</option>
+                    <option value="real_estate">Real Estate</option>
+                    <option value="finance">Finance / Fintech</option>
+                    <option value="education">Education</option>
+                    <option value="healthcare">Healthcare</option>
+                    <option value="retail">Retail</option>
+                    <option value="other">Other</option>
+                  </select>
                 </Field>
               )}
 

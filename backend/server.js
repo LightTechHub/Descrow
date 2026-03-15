@@ -49,7 +49,7 @@ const verifyRoutes = require('./routes/verify.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const platformSettingsRoutes = require('./routes/platformSettings.routes');
 const paymentRoutes = require('./routes/payment.routes');
-const contactRoutes = require('./routes/contact.routes');
+const { contactRouter, newsletterRouter } = require('./routes/contact.routes');
 const apiV1Routes = require('./routes/api.v1.routes');
 const businessRoutes = require('./routes/business.routes');
 const bankAccountRoutes = require('./routes/bankAccount.routes');
@@ -127,7 +127,7 @@ const verifyPaystackWebhook = (req, res, next) => {
     .digest('hex');
 
   if (signature !== expectedSig) {
-    console.warn('⚠️ Invalid Paystack webhook signature — possible forgery attempt');
+    console.warn('⚠️ Invalid Paystack webhook signature - possible forgery attempt');
     return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
   }
 
@@ -236,7 +236,7 @@ app.use('/api/disputes', disputeRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/wallet', require('./routes/wallet.routes'));
 
-// Fund escrow from wallet balance — POST /api/escrow/:id/fund-from-wallet
+// Fund escrow from wallet balance - POST /api/escrow/:id/fund-from-wallet
 const { authenticate } = require('./middleware/auth.middleware');
 const walletCtrl = require('./controllers/wallet.controller');
 app.post('/api/escrow/:id/fund-from-wallet', authenticate, walletCtrl.fundEscrowFromWallet);
@@ -257,9 +257,9 @@ app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/bank', bankAccountRoutes);
 
-// Contact & Newsletter (both handled by contact.controller.js / contact.routes.js)
-app.use('/api/contact', contactRoutes);
-app.use('/api/newsletter', contactRoutes); // POST /api/newsletter → contact.routes.js subscribeNewsletter
+// Contact & Newsletter
+app.use('/api/contact',    contactRouter);
+app.use('/api/newsletter', newsletterRouter);
 
 // Webhooks (Paystack signature verified before routing)
 app.use('/api/webhooks/paystack', verifyPaystackWebhook);

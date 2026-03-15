@@ -9,6 +9,7 @@ import { Menu, X, ChevronDown, Bell, Settings, User, LogOut, LayoutDashboard, Sh
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import ThemeToggle from './ThemeToggle';
+import LanguageSwitcher from './LanguageSwitcher';
 import { authService } from '../services/authService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
@@ -52,7 +53,7 @@ export default function Navbar({ user: propUser }) {
         setUnreadCount(data?.data?.count ?? data?.count ?? 0);
       }
     } catch {
-      // Silent fail — navbar should not break if this fails
+      // Silent fail - navbar should not break if this fails
     }
   }, []);
 
@@ -74,7 +75,7 @@ export default function Navbar({ user: propUser }) {
 
   const handleNotificationClick = useCallback(() => {
     navigate('/notifications');
-    setUnreadCount(0); // Optimistic clear — real count will refresh on next poll
+    setUnreadCount(0); // Optimistic clear - real count will refresh on next poll
   }, [navigate]);
 
   const isAdmin = user?.role === 'admin' || user?.isAdmin;
@@ -135,7 +136,7 @@ export default function Navbar({ user: propUser }) {
             )}
           </div>
 
-          {/* Desktop Right — Auth / User */}
+          {/* Desktop Right - Auth / User */}
           <div className="hidden md:flex items-center space-x-2">
             {!user ? (
               <>
@@ -159,7 +160,7 @@ export default function Navbar({ user: propUser }) {
                   type="button"
                 >
                   <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-                  {/* Live unread badge — only shows when count > 0 */}
+                  {/* Live unread badge - only shows when count > 0 */}
                   {unreadCount > 0 && (
                     <span
                       className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none"
@@ -254,10 +255,11 @@ export default function Navbar({ user: propUser }) {
                 </div>
               </>
             )}
+            <LanguageSwitcher />
             <ThemeToggle />
           </div>
 
-          {/* Mobile — Notification + Hamburger */}
+          {/* Mobile - Notification + Hamburger */}
           <div className="flex items-center md:hidden gap-1">
             {user && (
               <button
@@ -406,6 +408,12 @@ export default function Navbar({ user: propUser }) {
                     )}
                   </>
                 )}
+              </div>
+
+              {/* Language Switcher */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 pb-3">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1 mb-2">Language</p>
+                <LanguageSwitcher />
               </div>
 
               {/* Auth Section */}

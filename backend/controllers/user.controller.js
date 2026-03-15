@@ -10,9 +10,9 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
 // ✅ FIXED: Import models used in deleteAccount
-const APIKey      = require('../models/APIKey.model');
+const APIKey      = require('../models/ApiKey.model');
 const BankAccount = require('../models/BankAccount.model');
-const Notification = require('../models/Notification');
+const Notification = require('../models/Notification.model');
 
 // ======================================================
 // ======================= KYC ==========================
@@ -373,16 +373,35 @@ exports.updateProfile = async (req, res) => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const updates = {
-      name,
-      phone,
-      avatar,
-      bio,
-      address: address ? { ...user.address, ...address } : user.address,
-      socialLinks: socialLinks ? { ...user.socialLinks, ...socialLinks } : user.socialLinks,
-      businessInfo: businessInfo ? { ...user.businessInfo, ...businessInfo } : user.businessInfo
-    };
-    Object.keys(updates).forEach(key => { if (updates[key] !== undefined) user[key] = updates[key]; });
+    // Apply simple scalar fields
+    if (name        !== undefined) user.name        = name;
+    if (phone       !== undefined) user.phone       = phone;
+    if (avatar      !== undefined) user.avatar      = avatar;
+    if (bio         !== undefined) user.bio         = bio;
+
+    // Merge address - only update keys that are explicitly provided
+    if (address && typeof address === 'object') {
+      if (!user.address) user.address = {};
+      const safeAddressKeys = ['street', 'city', 'state', 'country', 'zipCode', 'postalCode', 'formatted'];
+      safeAddressKeys.forEach(k => { if (address[k] !== undefined) user.address[k] = address[k]; });
+      user.markModified('address');
+    }
+
+    // Merge socialLinks
+    if (socialLinks && typeof socialLinks === 'object') {
+      if (!user.socialLinks) user.socialLinks = {};
+      const safeSocialKeys = ['twitter', 'linkedin', 'website'];
+      safeSocialKeys.forEach(k => { if (socialLinks[k] !== undefined) user.socialLinks[k] = socialLinks[k]; });
+      user.markModified('socialLinks');
+    }
+
+    // Merge businessInfo - ONLY scalar fields, never touch nested Objects (businessAddress, businessStats)
+    if (businessInfo && typeof businessInfo === 'object') {
+      if (!user.businessInfo) user.businessInfo = {};
+      const safeBusinessKeys = ['companyName', 'companyType', 'taxId', 'registrationNumber', 'registrationNo', 'industry', 'businessEmail', 'businessPhone', 'website', 'businessType'];
+      safeBusinessKeys.forEach(k => { if (businessInfo[k] !== undefined) user.businessInfo[k] = businessInfo[k]; });
+      user.markModified('businessInfo');
+    }
     await user.save();
 
     res.json({

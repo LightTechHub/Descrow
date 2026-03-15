@@ -17,7 +17,7 @@ const TermsPage = () => {
   return (
     <>
       <SEOHead
-        title="Terms of Service — Dealcross | Universal Escrow User Agreement"
+        title="Terms of Service - Dealcross | Universal Escrow User Agreement"
         description="Read Dealcross's Terms of Service. Understand the rules, rights, and responsibilities for using our universal escrow platform."
         keywords="terms of service, user agreement, dealcross terms, escrow legal terms"
       />
@@ -49,7 +49,7 @@ const TermsPage = () => {
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
                   By accessing or using Dealcross ("Platform," "Service," "we," "us," or "our"), you agree to be bound
                   by these Terms of Service ("Terms"). If you do not agree, you may not access or use our services.
-                  These Terms apply to all users — buyers, sellers, API developers, and visitors.
+                  These Terms apply to all users - buyers, sellers, API developers, and visitors.
                 </p>
               </section>
 
@@ -153,7 +153,7 @@ const TermsPage = () => {
               <section>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">8. Intellectual Property</h2>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                  All content on the Platform — including text, graphics, logos, images, and software — is the property
+                  All content on the Platform - including text, graphics, logos, images, and software - is the property
                   of Dealcross or its licensors, protected by copyright, trademark, and other intellectual property laws.
                   You may not reproduce, distribute, or create derivative works without express written permission.
                 </p>

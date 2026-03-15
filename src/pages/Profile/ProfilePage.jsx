@@ -286,11 +286,9 @@ const ProfilePage = () => {
                   src={(() => {
                     const url = user.profilePicture;
                     if (url.startsWith('http')) return url;
-                    // Static files served at /uploads - strip /api from base URL
+                    // Fallback for any legacy relative paths still in DB
                     const base = (process.env.REACT_APP_API_URL || '').replace(/\/api$/, '');
-                    if (url.startsWith('/uploads')) return `${base}${url}`;
-                    if (url.startsWith('/')) return `${base}${url}`;
-                    return `${base}/uploads/avatars/${url}`;
+                    return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
                   })()}
                   alt={getDisplayName()}
                   className="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-lg"

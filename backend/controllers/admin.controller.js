@@ -353,7 +353,7 @@ const changeUserTier = async (req, res) => {
         };
         console.log(`🔑 API keys generated for user ${user.email}`);
       } else {
-        // Already has keys — just enable access
+        // Already has keys - just enable access
         user.apiAccess.enabled = true;
         console.log(`✅ API access re-enabled for user ${user.email}`);
       }
@@ -368,7 +368,7 @@ const changeUserTier = async (req, res) => {
 
     await user.save();
 
-    console.log(`✅ Tier changed: ${user.email} — ${oldTier} → ${newTier}`);
+    console.log(`✅ Tier changed: ${user.email} - ${oldTier} → ${newTier}`);
 
     res.status(200).json({
       success: true,
@@ -968,7 +968,7 @@ const forceCompleteEscrow = async (req, res) => {
     escrow.delivery = escrow.delivery || {};
     escrow.delivery.confirmedAt = new Date();
     escrow.payment = escrow.payment || {};
-    escrow.payment.payoutAvailableAt = new Date(); // immediate — admin override
+    escrow.payment.payoutAvailableAt = new Date(); // immediate - admin override
     escrow.timeline.push({
       status: 'completed',
       timestamp: new Date(),
@@ -1300,12 +1300,12 @@ const getWithdrawalSettings = async (req, res) => {
 
 const updateWithdrawalSettings = async (req, res) => {
   // In production this would persist to DB / env management
-  // For now returns confirmation — set via Render env vars
+  // For now returns confirmation - set via Render env vars
   res.json({ success: true, message: 'Update WITHDRAWAL_AUTO_APPROVE_THRESHOLD in Render environment variables', data: req.body });
 };
 
 /* =========================================================
-   WALLET DEPOSITS — Admin visibility & audit trail
+   WALLET DEPOSITS - Admin visibility & audit trail
 ========================================================= */
 const getWalletDeposits = async (req, res) => {
   try {
@@ -1368,7 +1368,7 @@ const getWalletDeposits = async (req, res) => {
 };
 
 /* =========================================================
-   KYC FIELD UNLOCK — Admin override for locked identity fields
+   KYC FIELD UNLOCK - Admin override for locked identity fields
 ========================================================= */
 const unlockKYCFields = async (req, res) => {
   try {
@@ -1381,7 +1381,7 @@ const unlockKYCFields = async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
     if (!user.isKYCVerified) {
-      return res.status(400).json({ success: false, message: 'User is not KYC verified — fields are not locked.' });
+      return res.status(400).json({ success: false, message: 'User is not KYC verified - fields are not locked.' });
     }
 
     const changes = {};
@@ -1426,7 +1426,7 @@ const unlockKYCFields = async (req, res) => {
 };
 
 /* =========================================================
-   KYC PENDING QUEUE — All users awaiting review
+   KYC PENDING QUEUE - All users awaiting review
 ========================================================= */
 const getKYCQueue = async (req, res) => {
   try {
@@ -1466,7 +1466,7 @@ const getKYCQueue = async (req, res) => {
 };
 
 /* =========================================================
-   REFERRAL STATS — Platform-wide referral overview
+   REFERRAL STATS - Platform-wide referral overview
 ========================================================= */
 const getReferralStats = async (req, res) => {
   try {
@@ -1506,7 +1506,7 @@ const getReferralStats = async (req, res) => {
 };
 
 /* =========================================================
-   REFERRAL — Manually award or adjust referral credit
+   REFERRAL - Manually award or adjust referral credit
 ========================================================= */
 const adjustReferralCredit = async (req, res) => {
   try {
@@ -1554,17 +1554,26 @@ const adjustReferralCredit = async (req, res) => {
 };
 
 /* =========================================================
-   NEWSLETTER SUBSCRIBERS — View & export list
+   NEWSLETTER SUBSCRIBERS - View & export list
 ========================================================= */
 const getNewsletterSubscribers = async (req, res) => {
   try {
-    // If you build a Subscriber model later, query it here.
-    // For now: subscribers are logged to console on backend + emailed to admin.
-    // Return placeholder so admin UI can show the list once model exists.
+    const NewsletterSubscriber = require('../models/NewsletterSubscriber');
+    const { page = 1, limit = 50 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [subscribers, total] = await Promise.all([
+      NewsletterSubscriber.find({ active: true })
+        .sort({ subscribedAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .select('email subscribedAt'),
+      NewsletterSubscriber.countDocuments({ active: true })
+    ]);
+
     res.json({
       success: true,
-      message: 'Newsletter subscribers are currently emailed to support@dealcross.net on signup. Wire to a subscriber model or Resend Audience for full list management.',
-      data: { subscribers: [], total: 0 }
+      data: { subscribers, total, page: parseInt(page), limit: parseInt(limit) }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1572,16 +1581,27 @@ const getNewsletterSubscribers = async (req, res) => {
 };
 
 /* =========================================================
-   CONTACT FORM INBOX — View submissions (if logged to DB)
+   CONTACT FORM INBOX - View submissions (if logged to DB)
 ========================================================= */
 const getContactSubmissions = async (req, res) => {
   try {
-    // Contact submissions currently go directly to email via Resend.
-    // This endpoint is ready for when you add a ContactSubmission model.
+    const ContactSubmission = require('../models/ContactSubmission');
+    const { page = 1, limit = 50, status } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const filter = status ? { status } : {};
+
+    const [submissions, total] = await Promise.all([
+      ContactSubmission.find(filter)
+        .sort({ submittedAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      ContactSubmission.countDocuments(filter)
+    ]);
+
     res.json({
       success: true,
-      message: 'Contact submissions are currently forwarded to support@dealcross.net via Resend. Add a ContactSubmission model to log them to the database.',
-      data: { submissions: [], total: 0 }
+      data: { submissions, total, page: parseInt(page), limit: parseInt(limit) }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

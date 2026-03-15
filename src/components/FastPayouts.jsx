@@ -20,7 +20,7 @@ const FastPayouts = () => {
         'Standard processing'
       ],
       highlight: false,
-      // ✅ kept gray — makes sense as the "starter / inactive" tier visually
+      // ✅ kept gray  makes sense as the "starter / inactive" tier visually
       buttonClass: 'bg-gray-600 hover:bg-gray-700'
     },
     {
@@ -84,7 +84,7 @@ const FastPayouts = () => {
               Simple, Transparent Pricing
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-400">
-              Choose the plan that fits your business — pay only for what you need
+              Choose the plan that fits your business - pay only for what you need
             </p>
           </motion.div>
         </div>

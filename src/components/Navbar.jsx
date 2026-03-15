@@ -12,6 +12,16 @@ import ThemeToggle from './ThemeToggle';
 import LanguageSwitcher from './LanguageSwitcher';
 import { authService } from '../services/authService';
 
+// Build correct URL for backend static files (avatars, uploads)
+// strips /api from REACT_APP_API_URL since static files aren't served under /api
+const getStaticUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  const base = (process.env.REACT_APP_API_URL || '').replace(/\/api$/, '');
+  return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+
 const API_URL = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
 export default function Navbar({ user: propUser }) {
@@ -181,7 +191,7 @@ export default function Navbar({ user: propUser }) {
                     type="button"
                   >
                     {user.profilePicture ? (
-                      <img src={user.profilePicture} alt={user.name}
+                      <img src={getStaticUrl(user.profilePicture)} alt={user.name}
                         className="w-8 h-8 rounded-full object-cover border-2 border-[#1e3a5f] dark:border-[#2d4a7c]"
                         onError={e => { e.target.style.display = 'none'; }}
                       />
@@ -331,7 +341,7 @@ export default function Navbar({ user: propUser }) {
                 <div className="mb-5 p-4 bg-[#f8fafc] dark:bg-[#252f3f] rounded-xl border border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-3">
                     {user.profilePicture ? (
-                      <img src={user.profilePicture} alt={user.name}
+                      <img src={getStaticUrl(user.profilePicture)} alt={user.name}
                         className="w-11 h-11 rounded-full object-cover border-2 border-[#1e3a5f] dark:border-[#2d4a7c] flex-shrink-0"
                         onError={e => { e.target.style.display='none'; }}
                       />

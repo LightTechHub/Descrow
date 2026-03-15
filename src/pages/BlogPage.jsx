@@ -29,7 +29,7 @@ const BlogPage = () => {
     {
       id: 2,
       title: 'Universal Escrow: A Complete Guide',
-      excerpt: "Everything you need to know about how escrow works for any transaction type — goods, services, digital assets, and more.",
+      excerpt: "Everything you need to know about how escrow works for any transaction type - goods, services, digital assets, and more.",
       author: 'Dealcross Team',
       date: 'Nov 8, 2024',
       readTime: '8 min read',
@@ -40,7 +40,7 @@ const BlogPage = () => {
     {
       id: 3,
       title: 'How Freelancers Use Escrow to Get Paid Safely',
-      excerpt: 'Protecting your freelance income with escrow — how to set up milestone payments and ensure you always get paid.',
+      excerpt: 'Protecting your freelance income with escrow - how to set up milestone payments and ensure you always get paid.',
       author: 'Dealcross Team',
       date: 'Nov 5, 2024',
       readTime: '6 min read',
@@ -51,7 +51,7 @@ const BlogPage = () => {
     {
       id: 4,
       title: 'Cross-Border Transactions Made Safe',
-      excerpt: 'How to use escrow for international deals — currencies, regulations, and best practices.',
+      excerpt: 'How to use escrow for international deals - currencies, regulations, and best practices.',
       author: 'Dealcross Team',
       date: 'Nov 2, 2024',
       readTime: '7 min read',
@@ -78,8 +78,8 @@ const BlogPage = () => {
   return (
     <>
       <SEOHead
-        title="Blog — Dealcross | Escrow News, Guides & Updates"
-        description="Latest escrow guides, security tips, platform updates, and industry insights from Dealcross — the universal escrow platform."
+        title="Blog - Dealcross | Escrow News, Guides & Updates"
+        description="Latest escrow guides, security tips, platform updates, and industry insights from Dealcross - the universal escrow platform."
       />
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

@@ -14,27 +14,25 @@ const getAuthHeaders = () => {
 };
 
 const securityService = {
-  // 2FA Methods
+  // ── 2FA Methods ────────────────────────────────────────────────────────────
+
   get2FAStatus: async () => {
     try {
       const response = await axios.get(
-        `${API_URL}/profile/2fa-status`,
+        `${API_URL}/security/2fa/status`,
         getAuthHeaders()
       );
       return response.data;
     } catch (error) {
       console.error('Get 2FA status error:', error);
-      return {
-        success: false,
-        data: { enabled: false }
-      };
+      return { success: false, data: { enabled: false } };
     }
   },
 
   setup2FA: async () => {
     try {
       const response = await axios.post(
-        `${API_URL}/profile/setup-2fa`,
+        `${API_URL}/security/2fa/setup`,
         {},
         getAuthHeaders()
       );
@@ -48,7 +46,7 @@ const securityService = {
   verify2FA: async (code) => {
     try {
       const response = await axios.post(
-        `${API_URL}/profile/verify-2fa`,
+        `${API_URL}/security/2fa/verify`,
         { code },
         getAuthHeaders()
       );
@@ -62,7 +60,7 @@ const securityService = {
   disable2FA: async (code, password) => {
     try {
       const response = await axios.post(
-        `${API_URL}/profile/disable-2fa`,
+        `${API_URL}/security/2fa/disable`,
         { code, password },
         getAuthHeaders()
       );
@@ -73,28 +71,40 @@ const securityService = {
     }
   },
 
-  // Session Methods
+  verifyBackupCode: async (code) => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/security/2fa/backup-verify`,
+        { code },
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Verify backup code error:', error);
+      throw error;
+    }
+  },
+
+  // ── Session Methods ────────────────────────────────────────────────────────
+  // Sessions live at /api/security/sessions (security.routes.js)
+
   getSessions: async () => {
     try {
       const response = await axios.get(
-        `${API_URL}/profile/sessions`,
+        `${API_URL}/security/sessions`,
         getAuthHeaders()
       );
       return response.data;
     } catch (error) {
       console.error('Get sessions error:', error);
-      return {
-        success: false,
-        data: []
-      };
+      return { success: false, data: [] };
     }
   },
 
   revokeSession: async (sessionId) => {
     try {
-      const response = await axios.post(
-        `${API_URL}/profile/revoke-session`,
-        { sessionId },
+      const response = await axios.delete(
+        `${API_URL}/security/sessions/${sessionId}`,
         getAuthHeaders()
       );
       return response.data;
@@ -106,35 +116,14 @@ const securityService = {
 
   revokeAllSessions: async () => {
     try {
-      const response = await axios.post(
-        `${API_URL}/profile/revoke-all-sessions`,
-        {},
+      const response = await axios.delete(
+        `${API_URL}/security/sessions`,
         getAuthHeaders()
       );
       return response.data;
     } catch (error) {
       console.error('Revoke all sessions error:', error);
       throw error;
-    }
-  },
-
-  // Security Logs
-  getSecurityLogs: async (params = {}) => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/profile/security-logs`,
-        {
-          ...getAuthHeaders(),
-          params
-        }
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Get security logs error:', error);
-      return {
-        success: false,
-        data: []
-      };
     }
   }
 };

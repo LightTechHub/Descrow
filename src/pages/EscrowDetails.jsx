@@ -16,8 +16,32 @@ import DeliveryTracking from '../components/Escrow/DeliveryTracking';
 
 import escrowService from '../services/escrowService';
 import { authService } from '../services/authService';
-import { getStatusInfo, formatCurrency, formatDate } from '../utils/escrowHelpers';
+import { formatCurrency, formatDate } from '../utils/escrowHelpers';
 import toast from 'react-hot-toast';
+
+// ── FIX: Safe getStatusInfo that never crashes on unknown/missing status ──────
+const getStatusInfo = (status) => {
+  const map = {
+    pending:             { text: 'Pending',              color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',   icon: Clock },
+    accepted:            { text: 'Accepted',             color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',           icon: CheckCircle },
+    funded:              { text: 'Funded',               color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',   icon: DollarSign },
+    in_escrow:           { text: 'In Escrow',            color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',   icon: ShieldCheck },
+    awaiting_delivery:   { text: 'Awaiting Delivery',   color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',   icon: Package },
+    delivered:           { text: 'Delivered',            color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',           icon: Package },
+    inspection_pending:  { text: 'Inspection Pending',  color: 'bg-yellow-100 text-yellow-700',   icon: Clock },
+    inspection_passed:   { text: 'Inspection Passed',   color: 'bg-green-100 text-green-700',     icon: CheckCircle2 },
+    inspection_failed:   { text: 'Inspection Failed',   color: 'bg-red-100 text-red-700',         icon: XCircle },
+    completed:           { text: 'Completed',            color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',       icon: CheckCircle2 },
+    paid_out:            { text: 'Paid Out',             color: 'bg-emerald-100 text-emerald-700', icon: Award },
+    disputed:            { text: 'Disputed',             color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',               icon: AlertTriangle },
+    cancelled:           { text: 'Cancelled',            color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',              icon: XCircle },
+    expired:             { text: 'Expired',              color: 'bg-gray-100 text-gray-500',       icon: Clock },
+    refunded:            { text: 'Refunded',             color: 'bg-blue-100 text-blue-700',       icon: RefreshCw },
+    milestone_completed: { text: 'Milestone Completed', color: 'bg-teal-100 text-teal-700',        icon: Target },
+  };
+  // FIX: Always return a valid object — never undefined icon
+  return map[status] || { text: status ? status.replace(/_/g, ' ') : 'Unknown', color: 'bg-gray-100 text-gray-700', icon: Clock };
+};
 
 // ── Payment Choice Modal ──────────────────────────────────────────────────────
 const PaymentChoiceModal = ({ escrow, onClose, onDirectPay }) => {
@@ -93,7 +117,6 @@ const PaymentChoiceModal = ({ escrow, onClose, onDirectPay }) => {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Wallet option */}
           <button
             onClick={handleWalletFund}
             disabled={loading || fundingFromWallet || !canPayFromWallet}
@@ -128,7 +151,6 @@ const PaymentChoiceModal = ({ escrow, onClose, onDirectPay }) => {
             )}
           </button>
 
-          {/* Direct payment option */}
           <button
             onClick={onDirectPay}
             className="w-full flex items-center gap-4 p-5 rounded-xl border-2 border-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:border-blue-500 transition text-left cursor-pointer"
@@ -188,6 +210,8 @@ const EscrowDetailsPage = () => {
   const fetchEscrowDetails = async (silent = false) => {
     try {
       silent ? setRefreshing(true) : setLoading(true);
+      setError(null); // FIX: clear previous errors on re-fetch
+
       const res = await escrowService.getEscrowById(id);
 
       if (!res?.success) throw new Error(res?.message || 'Escrow not found');
@@ -197,7 +221,8 @@ const EscrowDetailsPage = () => {
 
       const user = authService.getCurrentUser();
       const userId = user?._id || user?.id;
-      const buyerId = escrowData.buyer?._id || escrowData.buyer;
+      // FIX: safely extract IDs whether buyer/seller is populated or not
+      const buyerId  = escrowData.buyer?._id  || escrowData.buyer;
       const sellerId = escrowData.seller?._id || escrowData.seller;
 
       let derivedRole = null;
@@ -211,8 +236,9 @@ const EscrowDetailsPage = () => {
 
       setUserRole(derivedRole);
     } catch (err) {
-      setError(err.message);
-      toast.error(err.message);
+      const msg = err?.response?.data?.message || err.message || 'Failed to load escrow';
+      setError(msg);
+      if (!silent) toast.error(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -298,7 +324,7 @@ const EscrowDetailsPage = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
         <div className="bg-white dark:bg-gray-900 p-8 rounded-xl shadow text-center">
           <XCircle className="w-14 h-14 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">{error}</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-2">{error}</p>
           <button onClick={() => navigate('/dashboard')} className="mt-4 px-5 py-2 bg-blue-600 text-white rounded-lg">
             Back to Dashboard
           </button>
@@ -307,9 +333,28 @@ const EscrowDetailsPage = () => {
     );
   }
 
+  // FIX: Guard against escrow being null (shouldn't happen here but prevents crash)
+  if (!escrow) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <Loader className="w-10 h-10 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  // FIX: Use the local getStatusInfo above (handles ALL statuses including cancelled/completed)
   const statusInfo = getStatusInfo(escrow.status);
+  // FIX: Always use a fallback icon - never render undefined as a component
+  const StatusIcon = statusInfo.icon || Clock;
+
   const hasMilestones = escrow.milestones && escrow.milestones.length > 0;
   const hasMultipleParticipants = escrow.participants && escrow.participants.length > 2;
+
+  // FIX: Safely check chatUnlocked — treat undefined as false
+  const chatIsUnlocked = escrow.chatUnlocked === true;
+
+  // Show a summary banner for closed deals
+  const isClosedDeal = ['completed', 'cancelled', 'paid_out', 'refunded', 'expired'].includes(escrow.status);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-12">
@@ -327,6 +372,21 @@ const EscrowDetailsPage = () => {
         </div>
       </div>
 
+      {/* Closed deal banner */}
+      {isClosedDeal && (
+        <div className={`w-full py-3 px-4 text-center text-sm font-semibold ${
+          escrow.status === 'completed' || escrow.status === 'paid_out'
+            ? 'bg-green-600 text-white'
+            : 'bg-gray-600 text-white'
+        }`}>
+          {escrow.status === 'completed' && '✅ This deal has been completed successfully.'}
+          {escrow.status === 'paid_out'  && '✅ Payment has been released. This deal is closed.'}
+          {escrow.status === 'cancelled' && '❌ This deal was cancelled.'}
+          {escrow.status === 'refunded'  && '↩️ This deal was refunded.'}
+          {escrow.status === 'expired'   && '⏰ This deal has expired.'}
+        </div>
+      )}
+
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8 grid lg:grid-cols-3 gap-6">
         {/* Main Content */}
@@ -339,16 +399,17 @@ const EscrowDetailsPage = () => {
                 <div className="flex items-center gap-3 flex-wrap">
                   <button onClick={handleCopyId}
                     className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition text-sm">
-                    <span className="font-mono text-gray-700 dark:text-gray-300">#{escrow.escrowId || escrow._id.slice(-6)}</span>
+                    <span className="font-mono text-gray-700 dark:text-gray-300">#{escrow.escrowId || (escrow._id || '').slice(-6)}</span>
                     {copied ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
                   </button>
-                  <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${statusInfo.color}`}>
-                    {statusInfo.icon && <statusInfo.icon className="w-4 h-4 inline mr-1" />}
+                  {/* FIX: Use StatusIcon variable, never statusInfo.icon directly */}
+                  <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1 ${statusInfo.color}`}>
+                    <StatusIcon className="w-4 h-4" />
                     {statusInfo.text}
                   </span>
                   {escrow.transactionType && (
-                    <span className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                      {escrow.transactionType.replace('_', ' ')}
+                    <span className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium capitalize">
+                      {escrow.transactionType.replace(/_/g, ' ')}
                     </span>
                   )}
                 </div>
@@ -367,7 +428,7 @@ const EscrowDetailsPage = () => {
               <div className="space-y-4">
                 {escrow.milestones.map((milestone, index) => {
                   const statusBadge = getMilestoneStatusBadge(milestone.status);
-                  const StatusIcon = statusBadge.icon;
+                  const StatusBadgeIcon = statusBadge.icon;
                   const isCompleted = ['approved', 'paid'].includes(milestone.status);
                   const isCurrent = index === escrow.currentMilestone;
                   return (
@@ -392,7 +453,7 @@ const EscrowDetailsPage = () => {
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <span className={`px-3 py-1 rounded-lg text-sm font-semibold flex items-center gap-1 ${statusBadge.color}`}>
-                            <StatusIcon className="w-4 h-4" />{statusBadge.text}
+                            <StatusBadgeIcon className="w-4 h-4" />{statusBadge.text}
                           </span>
                           <span className="font-bold text-lg text-gray-900 dark:text-white">
                             {formatCurrency(milestone.amount, escrow.currency)}
@@ -435,16 +496,16 @@ const EscrowDetailsPage = () => {
               <div className="space-y-3">
                 {escrow.participants.map((participant, index) => {
                   const roleBadge = getParticipantRoleBadge(participant.role);
-                  const user = participant.user;
+                  const pUser = participant.user;
                   return (
                     <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                          {user?.name?.[0] || '?'}
+                          {pUser?.name?.[0] || '?'}
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{user?.name || 'Unknown'}</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{user?.email || 'N/A'}</p>
+                          <p className="font-semibold text-gray-900 dark:text-white">{pUser?.name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{pUser?.email || 'N/A'}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -483,8 +544,8 @@ const EscrowDetailsPage = () => {
                       <div className="grid grid-cols-2 gap-3">
                         {Object.entries(escrow.metadata).map(([key, value]) => (
                           <div key={key} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                            <p className="text-sm text-gray-600 dark:text-gray-400 capitalize">{key.replace('_', ' ')}:</p>
-                            <p className="font-semibold text-gray-900 dark:text-white">{value}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 capitalize">{key.replace(/_/g, ' ')}:</p>
+                            <p className="font-semibold text-gray-900 dark:text-white">{String(value)}</p>
                           </div>
                         ))}
                       </div>
@@ -496,7 +557,7 @@ const EscrowDetailsPage = () => {
                       <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{escrow.terms.customTerms}</p>
                     </div>
                   )}
-                  {escrow.delivery?.shippingAddress && (
+                  {escrow.delivery?.shippingAddress?.street && (
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
                       <h3 className="font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                         <Package className="w-5 h-5" /> Shipping Address
@@ -510,20 +571,27 @@ const EscrowDetailsPage = () => {
                       </div>
                     </div>
                   )}
+                  {/* FIX: Show cancellation reason for cancelled deals */}
+                  {escrow.status === 'cancelled' && escrow.cancellationReason && (
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                      <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Cancellation Reason</h3>
+                      <p className="text-gray-600 dark:text-gray-400">{escrow.cancellationReason}</p>
+                    </div>
+                  )}
                 </div>
               )}
               {activeTab === 'timeline' && (
                 <div className="space-y-3">
-                  {escrow.timeline?.length > 0 ? escrow.timeline.map((event, index) => (
+                  {escrow.timeline?.length > 0 ? [...escrow.timeline].reverse().map((event, index) => (
                     <div key={index} className="flex gap-4">
                       <div className="flex flex-col items-center">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
                           <Clock className="w-5 h-5 text-blue-600" />
                         </div>
                         {index < escrow.timeline.length - 1 && <div className="w-0.5 h-full bg-gray-200 dark:bg-gray-700 mt-2" />}
                       </div>
                       <div className="flex-1 pb-6">
-                        <p className="font-semibold text-gray-900 dark:text-white capitalize">{event.status.replace(/_/g, ' ')}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white capitalize">{(event.status || '').replace(/_/g, ' ')}</p>
                         {event.note && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{event.note}</p>}
                         <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{formatDate(event.timestamp)}</p>
                       </div>
@@ -538,9 +606,9 @@ const EscrowDetailsPage = () => {
                       {escrow.attachments.map((file, index) => (
                         <a key={index} href={file.url} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-                          <FileText className="w-8 h-8 text-blue-600" />
+                          <FileText className="w-8 h-8 text-blue-600 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 dark:text-white truncate">{file.originalName}</p>
+                            <p className="font-medium text-gray-900 dark:text-white truncate">{file.originalName || file.filename}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-500">{formatDate(file.uploadedAt)}</p>
                           </div>
                         </a>
@@ -550,12 +618,14 @@ const EscrowDetailsPage = () => {
                 </div>
               )}
               {activeTab === 'chat' && (
-                escrow.chatUnlocked
+                chatIsUnlocked
                   ? <ChatBox escrowId={escrow._id} currentUser={currentUser} />
                   : (
                     <div className="text-center py-12">
                       <ShieldCheck className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                      <p className="text-gray-600 dark:text-gray-400 font-medium">Chat will unlock after payment is made</p>
+                      <p className="text-gray-600 dark:text-gray-400 font-medium">
+                        {isClosedDeal ? 'Chat is not available for closed deals.' : 'Chat will unlock after payment is made.'}
+                      </p>
                     </div>
                   )
               )}
@@ -566,7 +636,11 @@ const EscrowDetailsPage = () => {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Amount Card */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-6 rounded-xl shadow-lg">
+          <div className={`text-white p-6 rounded-xl shadow-lg ${
+            isClosedDeal && escrow.status !== 'completed' && escrow.status !== 'paid_out'
+              ? 'bg-gradient-to-br from-gray-500 to-gray-700'
+              : 'bg-gradient-to-br from-blue-600 to-indigo-600'
+          }`}>
             <p className="text-blue-100 text-sm mb-2">Transaction Amount</p>
             <p className="text-4xl font-bold mb-4">{formatCurrency(escrow.amount, escrow.currency)}</p>
             {escrow.currencyType && (
@@ -576,10 +650,12 @@ const EscrowDetailsPage = () => {
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg">
-            <ActionButtons escrow={escrow} userRole={userRole} onAction={handleAction} onRefresh={() => fetchEscrowDetails(true)} />
-          </div>
+          {/* Action Buttons — hide for closed deals */}
+          {!isClosedDeal && (
+            <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg">
+              <ActionButtons escrow={escrow} userRole={userRole} onAction={handleAction} onRefresh={() => fetchEscrowDetails(true)} />
+            </div>
+          )}
 
           {/* Quick Info */}
           <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-lg">
@@ -601,6 +677,18 @@ const EscrowDetailsPage = () => {
                 <span className="text-gray-600 dark:text-gray-400">Created:</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{formatDate(escrow.createdAt)}</span>
               </div>
+              {escrow.status === 'completed' && escrow.delivery?.confirmedAt && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Completed:</span>
+                  <span className="font-semibold text-green-600">{formatDate(escrow.delivery.confirmedAt)}</span>
+                </div>
+              )}
+              {escrow.status === 'cancelled' && escrow.cancelledAt && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Cancelled:</span>
+                  <span className="font-semibold text-gray-600">{formatDate(escrow.cancelledAt)}</span>
+                </div>
+              )}
               {hasMilestones && (
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Milestones:</span>
@@ -623,7 +711,7 @@ const EscrowDetailsPage = () => {
             </div>
           )}
 
-          {/* Delivery Tracking - shown when seller has submitted delivery proof */}
+          {/* Delivery Tracking */}
           {escrow.deliveryProof && (
             <DeliveryTracking deliveryProof={escrow.deliveryProof} />
           )}

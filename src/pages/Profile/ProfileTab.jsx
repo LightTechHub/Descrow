@@ -23,7 +23,7 @@
 //   - Password is verified against POST /api/users/verify-password
 //   - Only on success does the actual profile update call happen
 //
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Lock, User, Phone, Globe, MapPin, FileText, Save, Loader,
   CheckCircle, Twitter, Linkedin, Link as LinkIcon,
@@ -182,7 +182,6 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
 // Reusable Field Components
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Standard editable field wrapper
 const Field = ({ label, children, hint, required: req }) => (
   <div>
     <div className="flex items-center justify-between mb-1.5">
@@ -196,8 +195,6 @@ const Field = ({ label, children, hint, required: req }) => (
   </div>
 );
 
-// Frozen field - dashed border, lock icon, tooltip, "Verified" badge on label
-// Communicates clearly: this is intentionally locked, not broken
 const FrozenField = ({ label, value, reason }) => (
   <div className="group relative">
     <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
@@ -207,7 +204,6 @@ const FrozenField = ({ label, value, reason }) => (
       </span>
     </div>
 
-    {/* The frozen field itself */}
     <div className="relative flex items-center w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-800/40 cursor-not-allowed select-none gap-3">
       <div className="flex-1 min-w-0">
         <span className="text-sm text-gray-700 dark:text-gray-200 font-medium truncate block">
@@ -219,7 +215,6 @@ const FrozenField = ({ label, value, reason }) => (
       </div>
     </div>
 
-    {/* Hover tooltip */}
     <div className="absolute bottom-full left-0 mb-2 z-20 hidden group-hover:block pointer-events-none w-72">
       <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-xl px-3.5 py-2.5 shadow-2xl leading-relaxed">
         <p className="font-semibold mb-1 text-green-300">🔒 Locked after KYC verification</p>
@@ -234,7 +229,6 @@ const FrozenField = ({ label, value, reason }) => (
 const inputBase =
   'w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition';
 
-// Section card wrapper
 const SectionCard = ({ icon: Icon, title, subtitle, badge, children, accent }) => (
   <div className={`rounded-2xl border p-4 sm:p-6 transition ${
     accent
@@ -271,6 +265,11 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
   const [saving, setSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
+  // FIX: Sync form when user prop changes (e.g. after parent re-fetch or onUpdate)
+  useEffect(() => {
+    setForm(buildInitialForm(user));
+  }, [user]);
+
   const isDirty = useMemo(() => !deepEqual(form, initial), [form, initial]);
 
   const set = useCallback((path, value) => {
@@ -293,9 +292,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     setShowPasswordModal(false);
     setSaving(true);
     try {
-      // Build payload - frozen fields are excluded entirely.
-      // Backend enforces the same rules, but excluding them means
-      // no false 403 errors from unchanged-but-still-sent fields.
       const payload = {
         bio:         form.bio,
         avatar:      form.avatar,
@@ -303,32 +299,57 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
       };
 
       if (!kycApproved) {
-        // All fields freely editable before KYC
         payload.name    = form.name;
         payload.phone   = form.phone;
         payload.address = form.address;
         payload.businessInfo = form.businessInfo;
       } else {
-        // After KYC: name, phone, address are locked.
-        // Business fields are locked only if they already have a saved value.
-        // If a field was empty at KYC approval time, the user can still set it once.
+        // After KYC: only unlock fields that were empty at approval time
         const biz = { website: form.businessInfo.website };
         if (!initial.businessInfo.businessType)   biz.businessType   = form.businessInfo.businessType;
         if (!initial.businessInfo.registrationNo) biz.registrationNo = form.businessInfo.registrationNo;
         if (!initial.businessInfo.companyName)    biz.companyName    = form.businessInfo.companyName;
         payload.businessInfo = biz;
-        // name, phone, address remain locked regardless
       }
 
       const res = await API.put('/users/profile', payload);
+
       if (res.data.success) {
         toast.success('Profile updated successfully');
-        // Merge the returned fields with the full user object so no fields blank out
-        const updatedUser = {
-          ...user,
-          ...(res.data.data?.user || res.data.data || {}),
-        };
-        if (onUpdate) onUpdate(updatedUser);
+
+        // FIX: Re-fetch fresh profile data from server instead of relying on
+        // the save response merge. This guarantees the form reflects exactly
+        // what was persisted, including nested fields like businessInfo.businessType.
+        try {
+          const freshRes = await API.get('/profile');
+          let freshUser = null;
+          if (freshRes.data?.data?.user)  freshUser = freshRes.data.data.user;
+          else if (freshRes.data?.data)   freshUser = freshRes.data.data;
+          else if (freshRes.data?.user)   freshUser = freshRes.data.user;
+
+          if (freshUser && onUpdate) {
+            // Update localStorage so it stays in sync
+            const stored = JSON.parse(localStorage.getItem('user') || '{}');
+            const merged = {
+              ...stored,
+              ...freshUser,
+              address:      { ...(stored.address      || {}), ...(freshUser.address      || {}) },
+              businessInfo: { ...(stored.businessInfo || {}), ...(freshUser.businessInfo || {}) },
+            };
+            localStorage.setItem('user', JSON.stringify(merged));
+            onUpdate(merged);
+          }
+        } catch (fetchErr) {
+          // Re-fetch failed — fall back to merging the save response
+          const savedUser = res.data.data?.user || res.data.data || {};
+          const fallback = {
+            ...user,
+            ...savedUser,
+            address:      { ...(user?.address      || {}), ...(savedUser.address      || {}) },
+            businessInfo: { ...(user?.businessInfo || {}), ...(savedUser.businessInfo || {}) },
+          };
+          if (onUpdate) onUpdate(fallback);
+        }
       } else {
         toast.error(res.data.message || 'Failed to update profile');
       }
@@ -339,7 +360,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     }
   };
 
-  // Reasons shown in tooltips - specific per field
   const lockReasons = {
     name:           'Your legal name was verified against your government ID during KYC.',
     phone:          'Your phone number was registered and verified during KYC. It is used for 2FA and dispute contact.',
@@ -351,7 +371,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
 
   return (
     <>
-      {/* Password Confirmation Modal */}
       {showPasswordModal && (
         <PasswordConfirmModal
           onConfirm={handleConfirmedSave}
@@ -404,7 +423,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
 
-            {/* Full Name */}
             {kycApproved ? (
               <FrozenField
                 label={isBusinessAccount ? 'Owner / Director Name' : 'Full Name'}
@@ -424,7 +442,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               </Field>
             )}
 
-            {/* Phone Number */}
             {kycApproved ? (
               <FrozenField label="Phone Number" value={form.phone} reason={lockReasons.phone} />
             ) : (
@@ -442,7 +459,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               </Field>
             )}
 
-            {/* Bio - always editable */}
             <div className="sm:col-span-2">
               <Field label="Bio / Description" hint={`${form.bio.length}/300 - always editable`}>
                 <div className="relative">
@@ -470,7 +486,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           accent={kycApproved}
         >
           {kycApproved ? (
-            // All address fields frozen after KYC
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
               <div className="sm:col-span-2">
                 <FrozenField label="Street Address" value={form.address.street} reason={lockReasons.address} />
@@ -503,7 +518,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           )}
         </SectionCard>
 
-        {/* ── Social Links (always editable) ────────────────────────────────── */}
+        {/* ── Social Links ──────────────────────────────────────────────────── */}
         <SectionCard
           icon={LinkIcon}
           title="Social Links"
@@ -539,7 +554,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           </div>
         </SectionCard>
 
-        {/* ── Business Information (business accounts only) ─────────────────── */}
+        {/* ── Business Information ──────────────────────────────────────────── */}
         {isBusinessAccount && (
           <SectionCard
             icon={Globe}
@@ -550,7 +565,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
 
-              {/* Business Name - locked after KYC */}
               {kycApproved && initial.businessInfo.companyName ? (
                 <FrozenField label="Business / Company Name" value={form.businessInfo.companyName} reason={lockReasons.companyName} />
               ) : (
@@ -561,7 +575,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                 </Field>
               )}
 
-              {/* Business Type - locked after KYC */}
               {kycApproved && initial.businessInfo.businessType ? (
                 <FrozenField label="Business Type / Category" value={form.businessInfo.businessType} reason={lockReasons.businessType} />
               ) : (
@@ -589,7 +602,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                 </Field>
               )}
 
-              {/* CAC Registration Number - locked after KYC */}
               {kycApproved && initial.businessInfo.registrationNo ? (
                 <FrozenField label="CAC / Registration Number" value={form.businessInfo.registrationNo} reason={lockReasons.registrationNo} />
               ) : (
@@ -600,7 +612,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                 </Field>
               )}
 
-              {/* Business Website - always editable even after KYC */}
               <Field label="Business Website" hint="Always editable">
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -611,7 +622,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               </Field>
             </div>
 
-            {/* Locked field explanation (only shown after KYC, only to business accounts) */}
             {kycApproved && (
               <div className="mt-5 flex items-start gap-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3.5">
                 <Lock className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />

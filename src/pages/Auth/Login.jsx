@@ -77,7 +77,7 @@ const Login = () => {
       });
 
       if (response.success && response.requires2FA) {
-        // Backend verified password but 2FA is enabled - show code input
+        // Password correct, 2FA required — store temp token and show code input
         setTempToken(response.tempToken);
         setRequires2FA(true);
         toast('Enter your 2FA code to continue', { icon: '🔐' });
@@ -90,12 +90,14 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      if (error.code === 'EMAIL_NOT_VERIFIED') {
+      const code = error.response?.data?.code || error.code;
+      const msg  = error.response?.data?.message || error.message || 'Login failed';
+      if (code === 'EMAIL_NOT_VERIFIED') {
         toast.error('Please verify your email first');
         setTimeout(() => { window.location.href = '/verify-email'; }, 500);
         return;
       }
-      toast.error(error.message || 'Login failed');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -108,17 +110,39 @@ const Login = () => {
       toast.error('Enter the 6-digit code from your authenticator app');
       return;
     }
+    if (!tempToken) {
+      toast.error('Session expired. Please log in again.');
+      setRequires2FA(false);
+      setTwoFACode('');
+      return;
+    }
     try {
       setLoading(true);
       const response = await API.post('/auth/2fa/verify-login', { tempToken, code });
-      if (response.data.success) {
-        localStorage.setItem('token', response.data.token);
+      const data = response.data;
+
+      if (data.success) {
+        // FIX: Save BOTH token AND user to localStorage so the app
+        // knows who is logged in after redirect to /dashboard.
+        // Without saving user, getCurrentUser() returns null and
+        // every protected page crashes / redirects back to login.
+        localStorage.setItem('token', data.token);
+
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+
         toast.success('Welcome back!');
         setTimeout(() => { window.location.href = '/dashboard'; }, 500);
+      } else {
+        toast.error(data.message || 'Verification failed');
       }
     } catch (error) {
-      const msg = error.response?.data?.message || 'Invalid 2FA code';
-      if (error.response?.data?.code === 'TOKEN_EXPIRED') {
+      const resData = error.response?.data;
+      const msg     = resData?.message || 'Invalid 2FA code';
+      const code    = resData?.code;
+
+      if (code === 'TOKEN_EXPIRED' || error.response?.status === 401) {
         toast.error('Session expired. Please log in again.');
         setRequires2FA(false);
         setTempToken('');
@@ -175,16 +199,17 @@ const Login = () => {
                 <input
                   type="text"
                   inputMode="numeric"
-                  pattern="[0-9 ]*"
-                  maxLength={7}
+                  pattern="[0-9]*"
+                  maxLength={6}
                   value={twoFACode}
-                  onChange={e => setTwoFACode(e.target.value.replace(/[^0-9]/g, ''))}
+                  onChange={e => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
                   autoFocus
+                  autoComplete="one-time-code"
                   className="w-full px-4 py-4 text-center text-2xl font-mono tracking-widest bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                 />
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-                  Open Google Authenticator (or any TOTP app) and enter the current code
+                  Open Google Authenticator (or any TOTP app) and enter the current 6-digit code
                 </p>
               </div>
 
@@ -193,7 +218,10 @@ const Login = () => {
                 disabled={loading || twoFACode.length !== 6}
                 className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {loading ? <><Loader className="w-5 h-5 animate-spin" /> Verifying...</> : 'Verify and Sign In'}
+                {loading
+                  ? <><Loader className="w-5 h-5 animate-spin" /> Verifying...</>
+                  : 'Verify and Sign In'
+                }
               </button>
 
               <button
@@ -201,7 +229,7 @@ const Login = () => {
                 onClick={() => { setRequires2FA(false); setTempToken(''); setTwoFACode(''); }}
                 className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition"
               >
-                Back to login
+                ← Back to login
               </button>
             </form>
 
@@ -268,7 +296,10 @@ const Login = () => {
 
                 <button type="submit" disabled={loading}
                   className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                  {loading ? <><Loader className="w-5 h-5 animate-spin" /> Signing in...</> : 'Sign In'}
+                  {loading
+                    ? <><Loader className="w-5 h-5 animate-spin" /> Signing in...</>
+                    : 'Sign In'
+                  }
                 </button>
               </form>
             </>

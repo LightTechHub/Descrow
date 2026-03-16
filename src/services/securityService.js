@@ -18,7 +18,7 @@ const securityService = {
   get2FAStatus: async () => {
     try {
       const response = await axios.get(
-        `${API_URL}/security/2fa/status`,   // FIX: was /profile/2fa-status
+        `${API_URL}/profile/2fa-status`,
         getAuthHeaders()
       );
       return response.data;
@@ -34,7 +34,7 @@ const securityService = {
   setup2FA: async () => {
     try {
       const response = await axios.post(
-        `${API_URL}/security/2fa/setup`,    // FIX: was /profile/setup-2fa
+        `${API_URL}/profile/setup-2fa`,
         {},
         getAuthHeaders()
       );
@@ -48,7 +48,7 @@ const securityService = {
   verify2FA: async (code) => {
     try {
       const response = await axios.post(
-        `${API_URL}/security/2fa/verify`,   // FIX: was /profile/verify-2fa
+        `${API_URL}/profile/verify-2fa`,
         { code },
         getAuthHeaders()
       );
@@ -62,7 +62,7 @@ const securityService = {
   disable2FA: async (code, password) => {
     try {
       const response = await axios.post(
-        `${API_URL}/security/2fa/disable`,  // FIX: was /profile/disable-2fa
+        `${API_URL}/profile/disable-2fa`,
         { code, password },
         getAuthHeaders()
       );
@@ -77,7 +77,7 @@ const securityService = {
   getSessions: async () => {
     try {
       const response = await axios.get(
-        `${API_URL}/users/sessions`,        // FIX: was /profile/sessions
+        `${API_URL}/profile/sessions`,
         getAuthHeaders()
       );
       return response.data;
@@ -93,7 +93,7 @@ const securityService = {
   revokeSession: async (sessionId) => {
     try {
       const response = await axios.post(
-        `${API_URL}/users/sessions/revoke`,  // FIX: was /profile/revoke-session
+        `${API_URL}/profile/revoke-session`,
         { sessionId },
         getAuthHeaders()
       );
@@ -107,7 +107,7 @@ const securityService = {
   revokeAllSessions: async () => {
     try {
       const response = await axios.post(
-        `${API_URL}/users/sessions/revoke-all`,  // FIX: was /profile/revoke-all-sessions
+        `${API_URL}/profile/revoke-all-sessions`,
         {},
         getAuthHeaders()
       );
@@ -122,7 +122,7 @@ const securityService = {
   getSecurityLogs: async (params = {}) => {
     try {
       const response = await axios.get(
-        `${API_URL}/security/logs`,         // FIX: was /profile/security-logs
+        `${API_URL}/profile/security-logs`,
         {
           ...getAuthHeaders(),
           params

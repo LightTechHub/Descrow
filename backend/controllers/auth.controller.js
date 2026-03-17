@@ -1,5 +1,8 @@
 // backend/controllers/auth.controller.js
-// ADDED: login lockout (5 attempts -> 30min), device/IP tracking, new device alert email
+// FIXED: verify2FALogin now reads twoFactorSecret from the TwoFactor collection
+// (where security.controller.js stores it) instead of User.twoFactorSecret
+// (which was never populated by the setup flow).
+
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -7,9 +10,9 @@ const crypto = require('crypto');
 const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
 const speakeasy = require('speakeasy');
+const TwoFactor = require('../models/TwoFactor'); // FIX: import TwoFactor model
 
 // Generate JWT
-// scope: 'full' (default) = normal auth token; '2fa_pending' = temp token only valid for completing 2FA
 const generateToken = (userId, email = null, scope = 'full', expiresIn = null) => {
   const expiry = expiresIn || (scope === '2fa_pending' ? '5m' : (process.env.JWT_EXPIRE || '7d'));
   return jwt.sign(
@@ -83,7 +86,14 @@ exports.register = async (req, res) => {
 
     if (country) userData.address = { country };
     if (accountType === 'business' && businessInfo) {
-      userData.businessInfo = { companyName: businessInfo.companyName, companyType: businessInfo.companyType, industry: businessInfo.industry, registrationNumber: businessInfo.registrationNumber, taxId: businessInfo.taxId };
+      userData.businessInfo = {
+        companyName: businessInfo.companyName,
+        companyType: businessInfo.companyType,
+        businessType: businessInfo.businessType,
+        industry: businessInfo.industry,
+        registrationNumber: businessInfo.registrationNumber,
+        taxId: businessInfo.taxId
+      };
     }
 
     const user = await User.create(userData);
@@ -92,12 +102,21 @@ exports.register = async (req, res) => {
       .catch(err => console.error('Failed to send verification email:', err));
 
     console.log('User registered:', user.email);
-    res.status(201).json({ success: true, message: 'Registration successful! Please check your email to verify your account.', requiresVerification: true, email: user.email });
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful! Please check your email to verify your account.',
+      requiresVerification: true,
+      email: user.email
+    });
 
   } catch (error) {
     console.error('Register error:', error);
     if (error.code === 11000) return res.status(400).json({ success: false, message: 'Email already registered' });
-    res.status(500).json({ success: false, message: 'Registration failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+    res.status(500).json({
+      success: false,
+      message: 'Registration failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -119,7 +138,6 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // Check if account is locked
     if (user.isLocked) {
       const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
       return res.status(423).json({
@@ -130,12 +148,16 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Email verification check
     if (!user.verified) {
-      return res.status(403).json({ success: false, message: 'Please verify your email before logging in', code: 'EMAIL_NOT_VERIFIED', requiresVerification: true, email: user.email });
+      return res.status(403).json({
+        success: false,
+        message: 'Please verify your email before logging in',
+        code: 'EMAIL_NOT_VERIFIED',
+        requiresVerification: true,
+        email: user.email
+      });
     }
 
-    // Password check
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       await user.incLoginAttempts();
@@ -146,16 +168,19 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message });
     }
 
-    // Account status
     if (!user.isActive || user.status === 'suspended') {
       return res.status(403).json({ success: false, message: 'Account is suspended. Please contact support.' });
     }
 
-    // Reset lockout on success
     await user.resetLoginAttempts();
 
-    // 2FA gate - if enabled, issue a short-lived temp token and stop here
-    if (user.twoFactorEnabled) {
+    // 2FA gate — check BOTH User.twoFactorEnabled AND TwoFactor collection
+    // User.twoFactorEnabled is set by security.controller verify2FA
+    // The actual secret lives in the TwoFactor collection
+    const twoFactorDoc = await TwoFactor.findOne({ user: user._id });
+    const has2FA = user.twoFactorEnabled && twoFactorDoc && twoFactorDoc.enabled;
+
+    if (has2FA) {
       const tempToken = generateToken(user._id, user.email, '2fa_pending');
       return res.json({
         success: true,
@@ -165,7 +190,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Device tracking
+    // No 2FA — proceed with full login + device tracking
     const device = parseDeviceInfo(req);
     const sessionId = crypto.randomBytes(16).toString('hex');
 
@@ -207,14 +232,18 @@ exports.login = async (req, res) => {
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ success: false, message: 'Login failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+    res.status(500).json({
+      success: false,
+      message: 'Login failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
 /* ============================================================
    VERIFY 2FA LOGIN
-   Called after login() returns requires2FA: true.
-   Validates the TOTP code then issues the real JWT.
+   FIX: Reads secret from TwoFactor collection (where setup stores it)
+   instead of User.twoFactorSecret (which setup never populates).
 ============================================================ */
 exports.verify2FALogin = async (req, res) => {
   try {
@@ -229,23 +258,37 @@ exports.verify2FALogin = async (req, res) => {
     try {
       decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
     } catch (err) {
-      return res.status(401).json({ success: false, message: '2FA session expired. Please log in again.', code: 'TOKEN_EXPIRED' });
+      return res.status(401).json({
+        success: false,
+        message: '2FA session expired. Please log in again.',
+        code: 'TOKEN_EXPIRED'
+      });
     }
 
     if (decoded.scope !== '2fa_pending') {
       return res.status(401).json({ success: false, message: 'Invalid token for 2FA verification' });
     }
 
-    const user = await User.findById(decoded.id)
-      .select('+twoFactorSecret +loginSessions');
-
-    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
-      return res.status(400).json({ success: false, message: 'User not found or 2FA not configured' });
+    const user = await User.findById(decoded.id).select('+loginSessions');
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'User not found' });
     }
 
-    // Validate TOTP code
+    // FIX: Look up secret from TwoFactor collection, NOT User.twoFactorSecret
+    // security.controller.setup2FA saves secret to TwoFactor model only.
+    // User.twoFactorSecret is a legacy field that the setup flow never writes to.
+    const twoFactorDoc = await TwoFactor.findOne({ user: user._id });
+
+    if (!twoFactorDoc || !twoFactorDoc.enabled || !twoFactorDoc.secret) {
+      return res.status(400).json({
+        success: false,
+        message: '2FA is not configured for this account. Please set it up again in Security settings.'
+      });
+    }
+
+    // Validate TOTP code against TwoFactor collection secret
     const isValid = speakeasy.totp.verify({
-      secret: user.twoFactorSecret,
+      secret: twoFactorDoc.secret,
       encoding: 'base32',
       token: code.replace(/\s/g, ''),
       window: 2
@@ -255,7 +298,7 @@ exports.verify2FALogin = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid 2FA code. Please try again.' });
     }
 
-    // Code valid - complete login with device tracking
+    // Code valid — complete login with device tracking
     const device = parseDeviceInfo(req);
     const sessionId = crypto.randomBytes(16).toString('hex');
 
@@ -277,6 +320,10 @@ exports.verify2FALogin = async (req, res) => {
     };
     user.loginSessions = [...(user.loginSessions || []).slice(-9), newSession];
     user.lastLogin = new Date();
+
+    // Update last verified timestamp on TwoFactor doc
+    twoFactorDoc.lastVerified = new Date();
+    await twoFactorDoc.save();
     await user.save();
 
     const token = generateToken(user._id, user.email);
@@ -322,17 +369,33 @@ exports.googleAuth = async (req, res) => {
       if (!user.agreedToTerms) return res.json({ success: true, requiresProfileCompletion: true, googleData: { googleId, email, name, picture } });
 
       const token = generateToken(user._id, user.email);
-      return res.json({ success: true, message: 'Login successful', token, user: { _id: user._id, name: user.name, email: user.email, accountType: user.accountType, verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier, profilePicture: user.profilePicture, businessInfo: user.accountType === 'business' ? user.businessInfo : undefined } });
+      return res.json({
+        success: true, message: 'Login successful', token,
+        user: {
+          _id: user._id, name: user.name, email: user.email, accountType: user.accountType,
+          verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier,
+          profilePicture: user.profilePicture,
+          businessInfo: user.accountType === 'business' ? user.businessInfo : undefined
+        }
+      });
     }
 
     const randomPassword = crypto.randomBytes(32).toString('hex');
-    await User.create({ googleId, email: email.toLowerCase(), name, password: randomPassword, profilePicture: picture, authProvider: 'google', verified: true, verifiedAt: new Date(), role: 'dual', tier: 'free', status: 'active', accountType: 'individual', agreedToTerms: false });
+    await User.create({
+      googleId, email: email.toLowerCase(), name, password: randomPassword,
+      profilePicture: picture, authProvider: 'google', verified: true,
+      verifiedAt: new Date(), role: 'dual', tier: 'free', status: 'active',
+      accountType: 'individual', agreedToTerms: false
+    });
 
     return res.json({ success: true, requiresProfileCompletion: true, message: 'Please complete your profile', googleData: { googleId, email, name, picture } });
 
   } catch (error) {
     console.error('Google auth error:', error);
-    res.status(500).json({ success: false, message: 'Google authentication failed', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+    res.status(500).json({
+      success: false, message: 'Google authentication failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -341,11 +404,11 @@ exports.googleAuth = async (req, res) => {
 ============================================================ */
 exports.completeGoogleProfile = async (req, res) => {
   try {
-    const { googleId, name, email, phone, country, accountType, companyName, companyType, industry, registrationNumber, agreedToTerms, picture } = req.body;
+    const { googleId, name, email, phone, country, accountType, companyName, companyType, businessType, industry, registrationNumber, agreedToTerms, picture } = req.body;
 
     if (!googleId || !email) return res.status(400).json({ success: false, message: 'Google ID and email are required' });
     if (!agreedToTerms) return res.status(400).json({ success: false, message: 'You must agree to the terms and conditions' });
-    if (!accountType || !['individual','business'].includes(accountType)) return res.status(400).json({ success: false, message: 'Valid account type required (individual or business)' });
+    if (!accountType || !['individual', 'business'].includes(accountType)) return res.status(400).json({ success: false, message: 'Valid account type required' });
     if (accountType === 'business' && !companyName) return res.status(400).json({ success: false, message: 'Company name is required for business accounts' });
 
     const user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
@@ -357,17 +420,34 @@ exports.completeGoogleProfile = async (req, res) => {
     user.googleId = googleId; user.verified = true; user.verifiedAt = user.verifiedAt || new Date();
     if (country) { user.address = user.address || {}; user.address.country = country; }
     if (accountType === 'business') {
-      user.businessInfo = { companyName, companyType: companyType || 'other', industry: industry || 'other', registrationNumber: registrationNumber || '', businessEmail: email, businessPhone: phone };
+      user.businessInfo = {
+        companyName, companyType: companyType || 'other',
+        businessType: businessType || '',
+        industry: industry || 'other',
+        registrationNumber: registrationNumber || '',
+        businessEmail: email, businessPhone: phone
+      };
     }
     await user.save();
 
     const token = generateToken(user._id, user.email);
-    res.json({ success: true, message: 'Profile completed successfully', token, user: { _id: user._id, name: user.name, email: user.email, accountType: user.accountType, verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier, profilePicture: user.profilePicture, businessInfo: accountType === 'business' ? user.businessInfo : undefined } });
+    res.json({
+      success: true, message: 'Profile completed successfully', token,
+      user: {
+        _id: user._id, name: user.name, email: user.email, accountType: user.accountType,
+        verified: user.verified, isKYCVerified: user.isKYCVerified, tier: user.tier,
+        profilePicture: user.profilePicture,
+        businessInfo: accountType === 'business' ? user.businessInfo : undefined
+      }
+    });
 
   } catch (error) {
     console.error('Complete Google profile error:', error);
     if (error.code === 11000) return res.status(400).json({ success: false, message: 'This email is already registered' });
-    res.status(500).json({ success: false, message: 'Failed to complete profile', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+    res.status(500).json({
+      success: false, message: 'Failed to complete profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

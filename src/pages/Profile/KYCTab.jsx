@@ -11,12 +11,10 @@ const KYCTab = ({ user, onUpdate }) => {
   const [kycStatus, setKycStatus]   = useState(null);
   const [fetchingStatus, setFetchingStatus] = useState(true);
 
-  // DiDIT section state
   const [startingDigit, setStartingDigit] = useState(false);
   const [resetting, setResetting]         = useState(false);
   const [digitOpen, setDigitOpen]         = useState(true);
 
-  // Document upload section state
   const [uploading, setUploading]   = useState(false);
   const [uploadOpen, setUploadOpen] = useState(true);
   const [docs, setDocs] = useState({
@@ -44,7 +42,6 @@ const KYCTab = ({ user, onUpdate }) => {
     }
   };
 
-  // ── Start DiDIT ──────────────────────────────────────────────────────────────
   const startDigit = async () => {
     try {
       setStartingDigit(true);
@@ -64,7 +61,6 @@ const KYCTab = ({ user, onUpdate }) => {
     }
   };
 
-  // ── Reset DiDIT session ──────────────────────────────────────────────────────
   const resetDigit = async () => {
     if (!window.confirm('Reset your DiDIT verification session and start over?')) return;
     try {
@@ -78,7 +74,6 @@ const KYCTab = ({ user, onUpdate }) => {
     finally { setResetting(false); }
   };
 
-  // ── Submit documents ─────────────────────────────────────────────────────────
   const submitDocs = async (e) => {
     e.preventDefault();
     if (!docs.businessRegistration || !docs.directorId || !docs.proofOfAddress) {
@@ -108,7 +103,6 @@ const KYCTab = ({ user, onUpdate }) => {
     }
   };
 
-  // ─── Loading ─────────────────────────────────────────────────────────────────
   if (fetchingStatus) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -117,7 +111,6 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  // ─── Email not verified ───────────────────────────────────────────────────────
   if (!user?.verified) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-lg p-6">
@@ -127,7 +120,6 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  // ─── Fully approved ───────────────────────────────────────────────────────────
   if (kycStatus?.status === 'approved') {
     return (
       <div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-xl p-6">
@@ -153,7 +145,6 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  // ─── Individual account — single DiDIT flow ───────────────────────────────────
   if (!isBusiness) {
     return (
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8">
@@ -167,7 +158,6 @@ const KYCTab = ({ user, onUpdate }) => {
 
         <IndividualDigitStatus kycStatus={kycStatus} onReset={resetDigit} resetting={resetting} />
 
-        {/* Show start/continue button only if not approved/under review */}
         {!['approved', 'under_review'].includes(kycStatus?.status) && (
           <button onClick={startDigit} disabled={startingDigit}
             className="w-full mt-6 px-6 py-4 bg-blue-600 text-white rounded-xl font-bold text-base hover:bg-blue-700 transition flex items-center justify-center gap-3 disabled:opacity-50">
@@ -186,15 +176,12 @@ const KYCTab = ({ user, onUpdate }) => {
     );
   }
 
-  // ─── BUSINESS ACCOUNT — parallel sections ────────────────────────────────────
-  // Documents already submitted and under review
   const docsSubmitted = ['under_review'].includes(kycStatus?.status) ||
     (kycStatus?.documents && kycStatus.documents.length > 0);
 
   return (
     <div className="space-y-4">
 
-      {/* Page header */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
         <div className="flex items-center gap-3">
           <Building className="w-7 h-7 text-blue-600 dark:text-blue-400" />
@@ -208,14 +195,12 @@ const KYCTab = ({ user, onUpdate }) => {
             </p>
           </div>
         </div>
-
-        {/* Overall status pill */}
         <div className="mt-4">
           <OverallStatusPill kycStatus={kycStatus} />
         </div>
       </div>
 
-      {/* ── Section 1: DiDIT identity check ─────────────────────────────── */}
+      {/* Section 1: DiDIT */}
       <CollapsibleSection
         title="Section 1 — Automated Identity Check (DiDIT)"
         subtitle="Verify that you are a real person. Takes 3-5 minutes."
@@ -224,15 +209,13 @@ const KYCTab = ({ user, onUpdate }) => {
         statusBadge={<DiditBadge status={kycStatus?.status} />}
       >
         <div className="p-5 space-y-4">
-          {/* Current DiDIT status */}
           <IndividualDigitStatus kycStatus={kycStatus} onReset={resetDigit} resetting={resetting} />
 
-          {/* What you need */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
             <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">What you need:</p>
             <ul className="space-y-1">
               {[
-                'Valid government-issued ID (passport, driver\'s licence, or national ID)',
+                "Valid government-issued ID (passport, driver's licence, or national ID)",
                 'Device with a working camera',
                 '3-5 minutes'
               ].map(item => (
@@ -243,7 +226,6 @@ const KYCTab = ({ user, onUpdate }) => {
             </ul>
           </div>
 
-          {/* Action button */}
           {kycStatus?.status === 'approved' ? (
             <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-semibold">
               <CheckCircle className="w-5 h-5" /> Identity verified
@@ -263,7 +245,7 @@ const KYCTab = ({ user, onUpdate }) => {
         </div>
       </CollapsibleSection>
 
-      {/* ── Section 2: Business document upload ─────────────────────────── */}
+      {/* Section 2: Documents */}
       <CollapsibleSection
         title="Section 2 — Business Document Upload"
         subtitle="Upload documents proving your business is real and registered."
@@ -273,7 +255,6 @@ const KYCTab = ({ user, onUpdate }) => {
       >
         <div className="p-5 space-y-4">
           {docsSubmitted ? (
-            /* Docs already submitted */
             <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div>
@@ -294,7 +275,6 @@ const KYCTab = ({ user, onUpdate }) => {
               </div>
             </div>
           ) : (
-            /* Upload form — always available regardless of DiDIT status */
             <form onSubmit={submitDocs} className="space-y-4">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
                 You can upload your documents now — you do not need to wait for the identity check above to complete first.
@@ -316,8 +296,9 @@ const KYCTab = ({ user, onUpdate }) => {
                 file={docs.additionalDoc} setDocs={setDocs}
                 hint="Any other supporting document" />
 
+              {/* FIX: Added MIME types so browsers reliably show PDFs in file picker */}
               <div className="text-xs text-gray-500 dark:text-gray-400 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-                JPEG, PNG, or PDF only · Max 10MB per file · All corners visible, text clearly legible
+                JPEG, PNG, or PDF · Max 10MB per file · All corners visible, text clearly legible
               </div>
 
               <button type="submit"
@@ -339,18 +320,17 @@ const KYCTab = ({ user, onUpdate }) => {
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
-// Shows the overall account verification status in plain English
 const OverallStatusPill = ({ kycStatus }) => {
   const status = kycStatus?.status || 'unverified';
   const configs = {
-    unverified:        { label: 'Not started',           cls: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
-    pending:           { label: 'Identity check started', cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+    unverified:        { label: 'Not started',                cls: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+    pending:           { label: 'Identity check started',     cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
     in_progress:       { label: 'Identity check in progress', cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
-    pending_documents: { label: 'Awaiting documents',    cls: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' },
-    under_review:      { label: 'Under review',          cls: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
-    approved:          { label: 'Verified ✅',            cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
-    rejected:          { label: 'Rejected',              cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
-    expired:           { label: 'Session expired',       cls: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' },
+    pending_documents: { label: 'Awaiting documents',         cls: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' },
+    under_review:      { label: 'Under review',               cls: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
+    approved:          { label: 'Verified ✅',                 cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
+    rejected:          { label: 'Rejected',                   cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
+    expired:           { label: 'Session expired',            cls: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' },
   };
   const { label, cls } = configs[status] || configs.unverified;
   return (
@@ -360,24 +340,22 @@ const OverallStatusPill = ({ kycStatus }) => {
   );
 };
 
-// Small badge shown on the DiDIT section header
 const DiditBadge = ({ status }) => {
   if (!status || status === 'unverified') return <span className="text-xs text-gray-400">Not started</span>;
   if (status === 'pending' || status === 'in_progress') return <span className="text-xs font-semibold text-blue-500 flex items-center gap-1"><Clock className="w-3 h-3" /> In progress</span>;
   if (status === 'approved') return <span className="text-xs font-semibold text-green-500 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Complete</span>;
   if (status === 'rejected') return <span className="text-xs font-semibold text-red-500 flex items-center gap-1"><XCircle className="w-3 h-3" /> Failed</span>;
   if (status === 'expired')  return <span className="text-xs font-semibold text-orange-500">Expired</span>;
+  if (status === 'under_review') return <span className="text-xs font-semibold text-purple-500 flex items-center gap-1"><Clock className="w-3 h-3" /> Under review</span>;
   return null;
 };
 
-// Small badge shown on the documents section header
 const DocsBadge = ({ docsSubmitted, kycStatus }) => {
   if (kycStatus?.status === 'under_review' || docsSubmitted)
     return <span className="text-xs font-semibold text-purple-500 flex items-center gap-1"><FileText className="w-3 h-3" /> Submitted</span>;
   return <span className="text-xs text-gray-400">Not submitted</span>;
 };
 
-// Displays DiDIT status inline — no fake "step complete" messages
 const IndividualDigitStatus = ({ kycStatus, onReset, resetting }) => {
   const status = kycStatus?.status;
 
@@ -389,14 +367,11 @@ const IndividualDigitStatus = ({ kycStatus, onReset, resetting }) => {
         <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5 animate-pulse" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Identity check in progress</p>
-          <p className="text-xs text-blue-700 dark:text-blue-300">
-            Your DiDIT session is active. Continue or start over below.
-          </p>
+          <p className="text-xs text-blue-700 dark:text-blue-300">Your DiDIT session is active. Continue or start over below.</p>
         </div>
         <button onClick={onReset} disabled={resetting}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition flex-shrink-0 disabled:opacity-50">
-          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          Reset
+          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Reset
         </button>
       </div>
     );
@@ -412,8 +387,7 @@ const IndividualDigitStatus = ({ kycStatus, onReset, resetting }) => {
         </div>
         <button onClick={onReset} disabled={resetting}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition flex-shrink-0 disabled:opacity-50">
-          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          Try again
+          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Try again
         </button>
       </div>
     );
@@ -429,8 +403,7 @@ const IndividualDigitStatus = ({ kycStatus, onReset, resetting }) => {
         </div>
         <button onClick={onReset} disabled={resetting}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition flex-shrink-0 disabled:opacity-50">
-          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          Reset
+          {resetting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Reset
         </button>
       </div>
     );
@@ -447,8 +420,6 @@ const IndividualDigitStatus = ({ kycStatus, onReset, resetting }) => {
 
   return null;
 };
-
-// ── Small reusable components ──────────────────────────────────────────────────
 
 const CollapsibleSection = ({ title, subtitle, isOpen, onToggle, statusBadge, children }) => (
   <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
@@ -469,6 +440,9 @@ const CollapsibleSection = ({ title, subtitle, isOpen, onToggle, statusBadge, ch
   </div>
 );
 
+// FIX: accept now includes MIME types so browsers reliably show PDFs in the file picker
+// Previously only extensions were listed (.jpg,.jpeg,.png,.pdf) which some browsers
+// (especially mobile Chrome/Safari) ignore for PDF — adding application/pdf fixes it.
 const DocField = ({ label, field, file, setDocs, hint }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
@@ -478,8 +452,12 @@ const DocField = ({ label, field, file, setDocs, hint }) => (
         <span className="text-sm text-gray-600 dark:text-gray-400 truncate">
           {file ? file.name : 'Click to choose file'}
         </span>
-        <input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden"
-          onChange={(e) => setDocs(prev => ({ ...prev, [field]: e.target.files?.[0] || null }))} />
+        <input
+          type="file"
+          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+          className="hidden"
+          onChange={(e) => setDocs(prev => ({ ...prev, [field]: e.target.files?.[0] || null }))}
+        />
       </label>
       {file && (
         <button type="button" onClick={() => setDocs(prev => ({ ...prev, [field]: null }))}

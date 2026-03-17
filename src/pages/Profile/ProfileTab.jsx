@@ -1,33 +1,9 @@
 // File: src/pages/ProfileTab.jsx
-//
-// KYC LOCKING POLICY (after verification):
-//   FROZEN (cannot change at all):
-//     - Full Name / Owner Name
-//     - Phone Number
-//     - Address (street, city, state, country)
-//     - Business Name
-//     - Business Type
-//     - CAC / Registration Number
-//
-//   FREE EDIT (editable, but requires password confirmation before saving):
-//     - Profile Picture / Avatar
-//     - Bio / Description
-//     - Social Links (Twitter, LinkedIn, Website)
-//     - Business Website
-//
-//   FREE EDIT (no KYC involved, password confirmation still required):
-//     - All fields above when KYC is NOT yet approved
-//
-// PASSWORD CONFIRMATION MODAL:
-//   - Any save attempt triggers a modal asking for current password
-//   - Password is verified against POST /api/users/verify-password
-//   - Only on success does the actual profile update call happen
-//
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Lock, User, Phone, Globe, MapPin, FileText, Save, Loader,
   CheckCircle, Twitter, Linkedin, Link as LinkIcon,
-  ShieldCheck, Eye, EyeOff, KeyRound, AlertCircle, X
+  ShieldCheck, Eye, EyeOff, KeyRound, AlertCircle, X, Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import API from '../../utils/api';
@@ -35,6 +11,29 @@ import API from '../../utils/api';
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Human-readable label for a businessType value
+const BUSINESS_TYPE_LABELS = {
+  sole_proprietor: 'Sole Proprietor',
+  partnership:     'Partnership',
+  llc:             'LLC / Limited Liability Company',
+  corporation:     'Corporation',
+  ngo:             'NGO / Non-Profit',
+  ecommerce:       'E-commerce',
+  freelance:       'Freelance / Consulting',
+  technology:      'Technology / Software',
+  logistics:       'Logistics / Delivery',
+  real_estate:     'Real Estate',
+  finance:         'Finance / Fintech',
+  education:       'Education',
+  healthcare:      'Healthcare',
+  retail:          'Retail',
+  other:           'Other',
+};
+
+const formatBusinessType = (val) =>
+  BUSINESS_TYPE_LABELS[val] || (val ? val.replace(/_/g, ' ') : '');
+
 const buildInitialForm = (user) => ({
   name:   user?.name   || '',
   phone:  user?.phone  || '',
@@ -53,6 +52,7 @@ const buildInitialForm = (user) => ({
   },
   businessInfo: {
     companyName:    user?.businessInfo?.companyName    || '',
+    // businessType comes from registration — never editable in profile
     businessType:   user?.businessInfo?.businessType   || '',
     website:        user?.businessInfo?.website        || '',
     registrationNo: user?.businessInfo?.registrationNo || user?.businessInfo?.registrationNumber || '',
@@ -92,8 +92,6 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl w-full max-w-sm p-6">
-
-        {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
@@ -104,21 +102,16 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
               <p className="text-xs text-gray-500 dark:text-gray-400">Enter your password to save changes</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-400"
-          >
+          <button type="button" onClick={onCancel}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-400">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Why we ask */}
         <div className="flex items-start gap-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-5">
           <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-            For your security, all profile changes require your current password - even small ones.
-            This prevents someone with access to your session from modifying your details silently.
+            For your security, all profile changes require your current password.
           </p>
         </div>
 
@@ -134,42 +127,30 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
                 onChange={e => { setPassword(e.target.value); setError(''); }}
                 autoFocus
                 placeholder="Enter your current password"
-                className={`w-full px-4 py-3 pr-12 rounded-xl border text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none transition focus:ring-2 focus:ring-blue-500 ${
-                  error ? 'border-red-400 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                className={`w-full px-4 py-3 pr-12 rounded-xl border text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 outline-none transition focus:ring-2 focus:ring-blue-500 ${
+                  error ? 'border-red-400' : 'border-gray-300 dark:border-gray-600'
                 }`}
               />
-              <button
-                type="button"
-                onClick={() => setShow(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
-              >
+              <button type="button" onClick={() => setShow(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
                 {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
             {error && (
-              <p className="mt-1.5 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+              <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5" /> {error}
               </p>
             )}
           </div>
 
           <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold transition"
-            >
+            <button type="button" onClick={onCancel}
+              className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold transition">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading || !password.trim()}
-              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading
-                ? <><Loader className="w-4 h-4 animate-spin" /> Verifying...</>
-                : 'Confirm & Save'
-              }
+            <button type="submit" disabled={loading || !password.trim()}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading ? <><Loader className="w-4 h-4 animate-spin" /> Verifying...</> : 'Confirm & Save'}
             </button>
           </div>
         </form>
@@ -179,49 +160,64 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reusable Field Components
+// Field Components
 // ─────────────────────────────────────────────────────────────────────────────
-
 const Field = ({ label, children, hint, required: req }) => (
   <div>
     <div className="flex items-center justify-between mb-1.5">
       <label className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
-        {label}
-        {req && <span className="text-red-500 ml-0.5">*</span>}
+        {label}{req && <span className="text-red-500 ml-0.5">*</span>}
       </label>
-      {hint && <span className="text-[10px] text-gray-400 dark:text-gray-500 italic">{hint}</span>}
+      {hint && <span className="text-[10px] text-gray-400 italic">{hint}</span>}
     </div>
     {children}
   </div>
 );
 
-const FrozenField = ({ label, value, reason }) => (
+// Locked field — dashed border with lock icon and tooltip
+const FrozenField = ({ label, value, reason, badge }) => (
   <div className="group relative">
     <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
       <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold rounded-full border border-green-200 dark:border-green-800 tracking-wide">
-        <ShieldCheck className="w-2.5 h-2.5" /> KYC VERIFIED
-      </span>
+      {badge || (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold rounded-full border border-green-200 dark:border-green-800">
+          <ShieldCheck className="w-2.5 h-2.5" /> KYC VERIFIED
+        </span>
+      )}
     </div>
-
     <div className="relative flex items-center w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-800/40 cursor-not-allowed select-none gap-3">
       <div className="flex-1 min-w-0">
         <span className="text-sm text-gray-700 dark:text-gray-200 font-medium truncate block">
-          {value || <span className="text-gray-400 dark:text-gray-500 font-normal italic">Not set</span>}
+          {value || <span className="text-gray-400 font-normal italic">Not set</span>}
         </span>
       </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <Lock className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
-      </div>
+      <Lock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
     </div>
-
-    <div className="absolute bottom-full left-0 mb-2 z-20 hidden group-hover:block pointer-events-none w-72">
-      <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-xl px-3.5 py-2.5 shadow-2xl leading-relaxed">
-        <p className="font-semibold mb-1 text-green-300">🔒 Locked after KYC verification</p>
-        <p className="text-gray-300">{reason}</p>
-        <p className="mt-1.5 text-gray-400">To change this, contact <span className="text-blue-300 font-medium">support@dealcross.net</span> with supporting documents.</p>
-        <div className="absolute top-full left-5 border-[5px] border-transparent border-t-gray-900 dark:border-t-gray-700" />
+    {reason && (
+      <div className="absolute bottom-full left-0 mb-2 z-20 hidden group-hover:block pointer-events-none w-72">
+        <div className="bg-gray-900 text-white text-xs rounded-xl px-3.5 py-2.5 shadow-2xl leading-relaxed">
+          <p className="font-semibold mb-1 text-green-300">🔒 Locked after KYC verification</p>
+          <p className="text-gray-300">{reason}</p>
+          <p className="mt-1.5 text-gray-400">To change this, contact <span className="text-blue-300 font-medium">support@dealcross.net</span></p>
+          <div className="absolute top-full left-5 border-[5px] border-transparent border-t-gray-900" />
+        </div>
       </div>
+    )}
+  </div>
+);
+
+// Read-only display field — for registration-sourced data, no KYC badge needed
+const ReadOnlyField = ({ label, value, note }) => (
+  <div>
+    <div className="flex items-center justify-between mb-1.5">
+      <label className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+      {note && <span className="text-[10px] text-gray-400 italic">{note}</span>}
+    </div>
+    <div className="flex items-center w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 gap-3">
+      <span className="flex-1 text-sm text-gray-700 dark:text-gray-200 font-medium">
+        {value || <span className="text-gray-400 font-normal italic">Not set during registration</span>}
+      </span>
+      <Building2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
     </div>
   </div>
 );
@@ -265,7 +261,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
   const [saving, setSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
-  // FIX: Sync form when user prop changes (e.g. after parent re-fetch or onUpdate)
+  // Sync form when user prop changes
   useEffect(() => {
     setForm(buildInitialForm(user));
   }, [user]);
@@ -280,14 +276,12 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     });
   }, []);
 
-  // Step 1: user clicks Save → show password modal
   const handleSaveRequest = (e) => {
     e.preventDefault();
     if (!isDirty) return;
     setShowPasswordModal(true);
   };
 
-  // Step 2: password verified → actually save
   const handleConfirmedSave = async () => {
     setShowPasswordModal(false);
     setSaving(true);
@@ -302,13 +296,18 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         payload.name    = form.name;
         payload.phone   = form.phone;
         payload.address = form.address;
-        payload.businessInfo = form.businessInfo;
+        // businessType comes from registration — never sent in profile updates
+        payload.businessInfo = {
+          companyName:    form.businessInfo.companyName,
+          website:        form.businessInfo.website,
+          registrationNo: form.businessInfo.registrationNo,
+        };
       } else {
-        // After KYC: only unlock fields that were empty at approval time
+        // After KYC: only unlock empty fields
         const biz = { website: form.businessInfo.website };
-        if (!initial.businessInfo.businessType)   biz.businessType   = form.businessInfo.businessType;
         if (!initial.businessInfo.registrationNo) biz.registrationNo = form.businessInfo.registrationNo;
         if (!initial.businessInfo.companyName)    biz.companyName    = form.businessInfo.companyName;
+        // businessType is NEVER sent — it's set at registration and read-only
         payload.businessInfo = biz;
       }
 
@@ -317,18 +316,11 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
       if (res.data.success) {
         toast.success('Profile updated successfully');
 
-        // FIX: Re-fetch fresh profile data from server instead of relying on
-        // the save response merge. This guarantees the form reflects exactly
-        // what was persisted, including nested fields like businessInfo.businessType.
+        // Re-fetch fresh profile so form reflects persisted values
         try {
           const freshRes = await API.get('/profile');
-          let freshUser = null;
-          if (freshRes.data?.data?.user)  freshUser = freshRes.data.data.user;
-          else if (freshRes.data?.data)   freshUser = freshRes.data.data;
-          else if (freshRes.data?.user)   freshUser = freshRes.data.user;
-
+          let freshUser = freshRes.data?.data?.user || freshRes.data?.data || freshRes.data?.user;
           if (freshUser && onUpdate) {
-            // Update localStorage so it stays in sync
             const stored = JSON.parse(localStorage.getItem('user') || '{}');
             const merged = {
               ...stored,
@@ -339,10 +331,10 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             localStorage.setItem('user', JSON.stringify(merged));
             onUpdate(merged);
           }
-        } catch (fetchErr) {
-          // Re-fetch failed — fall back to merging the save response
+        } catch {
+          // Fallback: use save response
           const savedUser = res.data.data?.user || res.data.data || {};
-          const fallback = {
+          const fallback  = {
             ...user,
             ...savedUser,
             address:      { ...(user?.address      || {}), ...(savedUser.address      || {}) },
@@ -362,11 +354,10 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
 
   const lockReasons = {
     name:           'Your legal name was verified against your government ID during KYC.',
-    phone:          'Your phone number was registered and verified during KYC. It is used for 2FA and dispute contact.',
-    address:        'Your residential or business address was verified as part of your identity documents.',
+    phone:          'Your phone number was registered and verified during KYC.',
+    address:        'Your address was verified as part of your identity documents.',
     companyName:    'Your business name was verified against your CAC registration documents.',
-    businessType:   'Your business category determines your regulatory and fee treatment - set during KYC.',
-    registrationNo: 'Your CAC / registration number is a legal identifier and cannot be changed after verification.',
+    registrationNo: 'Your CAC / registration number is a legal identifier.',
   };
 
   return (
@@ -380,20 +371,18 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
 
       <form onSubmit={handleSaveRequest} className="space-y-5 sm:space-y-6">
 
-        {/* ── KYC Status Banner ──────────────────────────────────────────────── */}
+        {/* ── KYC Status Banner ─────────────────────────────────────────── */}
         {kycApproved ? (
           <div className="flex items-start gap-3.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-2xl px-4 sm:px-5 py-4">
-            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-bold text-green-800 dark:text-green-300 mb-1">
-                ✓ Identity Verified - Your account is fully trusted
+                ✓ Identity Verified — Your account is fully trusted
               </p>
               <p className="text-xs text-green-700 dark:text-green-400 leading-relaxed">
-                Core identity fields (name, phone, address{isBusinessAccount ? ', business name, type & registration number' : ''}) are
-                permanently locked to protect you against fraud and impersonation.
-                You can still update your bio, picture, social links{isBusinessAccount ? ' and business website' : ''}.
+                Core identity fields are permanently locked to protect you against fraud.
                 To change a locked field, email{' '}
-                <a href="mailto:support@dealcross.net" className="underline font-semibold hover:text-green-600 dark:hover:text-green-300 transition">
+                <a href="mailto:support@dealcross.net" className="underline font-semibold">
                   support@dealcross.net
                 </a>{' '}
                 with legal documentation.
@@ -402,19 +391,17 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           </div>
         ) : (
           <div className="flex items-start gap-3.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl px-4 sm:px-5 py-4">
-            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-0.5">
-                Identity Not Yet Verified
-              </p>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-0.5">Identity Not Yet Verified</p>
               <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                All fields are editable now. After you complete KYC verification, your identity fields will be locked permanently to protect your account.
+                All fields are editable now. After KYC verification, identity fields will be locked permanently.
               </p>
             </div>
           </div>
         )}
 
-        {/* ── Personal Information ───────────────────────────────────────────── */}
+        {/* ── Personal Information ───────────────────────────────────────── */}
         <SectionCard
           icon={User}
           title="Personal Information"
@@ -431,14 +418,8 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               />
             ) : (
               <Field label={isBusinessAccount ? 'Owner / Director Name' : 'Full Name'} required>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => set('name', e.target.value)}
-                  className={inputBase}
-                  placeholder="Your full legal name"
-                  required
-                />
+                <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
+                  className={inputBase} placeholder="Your full legal name" required />
               </Field>
             )}
 
@@ -446,38 +427,22 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
               <FrozenField label="Phone Number" value={form.phone} reason={lockReasons.phone} />
             ) : (
               <Field label="Phone Number">
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={e => set('phone', e.target.value)}
-                    className={inputBase + ' pl-10'}
-                    placeholder="+234 800 000 0000"
-                  />
-                </div>
+                <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
+                  className={inputBase} placeholder="+234 800 000 0000" />
               </Field>
             )}
 
             <div className="sm:col-span-2">
-              <Field label="Bio / Description" hint={`${form.bio.length}/300 - always editable`}>
-                <div className="relative">
-                  <FileText className="absolute left-3 top-3.5 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <textarea
-                    value={form.bio}
-                    onChange={e => set('bio', e.target.value)}
-                    rows={3}
-                    maxLength={300}
-                    className={inputBase + ' pl-10 resize-none'}
-                    placeholder="A brief description about yourself or your business..."
-                  />
-                </div>
+              <Field label="Bio / Description" hint={`${form.bio.length}/300 — always editable`}>
+                <textarea value={form.bio} onChange={e => set('bio', e.target.value)}
+                  rows={3} maxLength={300} className={inputBase + ' resize-none'}
+                  placeholder="A brief description about yourself or your business..." />
               </Field>
             </div>
           </div>
         </SectionCard>
 
-        {/* ── Address ───────────────────────────────────────────────────────── */}
+        {/* ── Address ───────────────────────────────────────────────────── */}
         <SectionCard
           icon={MapPin}
           title="Address"
@@ -518,145 +483,108 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           )}
         </SectionCard>
 
-        {/* ── Social Links ──────────────────────────────────────────────────── */}
-        <SectionCard
-          icon={LinkIcon}
-          title="Social Links"
-          subtitle="Always editable - no KYC restriction"
-        >
+        {/* ── Social Links ─────────────────────────────────────────────── */}
+        <SectionCard icon={LinkIcon} title="Social Links" subtitle="Always editable">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
             <Field label="Twitter / X">
-              <div className="relative">
-                <Twitter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input type="url" value={form.socialLinks.twitter}
-                  onChange={e => set('socialLinks.twitter', e.target.value)}
-                  className={inputBase + ' pl-10'} placeholder="https://twitter.com/yourhandle" />
-              </div>
+              <input type="url" value={form.socialLinks.twitter}
+                onChange={e => set('socialLinks.twitter', e.target.value)}
+                className={inputBase} placeholder="https://twitter.com/yourhandle" />
             </Field>
             <Field label="LinkedIn">
-              <div className="relative">
-                <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input type="url" value={form.socialLinks.linkedin}
-                  onChange={e => set('socialLinks.linkedin', e.target.value)}
-                  className={inputBase + ' pl-10'} placeholder="https://linkedin.com/in/yourname" />
-              </div>
+              <input type="url" value={form.socialLinks.linkedin}
+                onChange={e => set('socialLinks.linkedin', e.target.value)}
+                className={inputBase} placeholder="https://linkedin.com/in/yourname" />
             </Field>
             <div className="sm:col-span-2">
               <Field label="Personal Website">
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <input type="url" value={form.socialLinks.website}
-                    onChange={e => set('socialLinks.website', e.target.value)}
-                    className={inputBase + ' pl-10'} placeholder="https://yourwebsite.com" />
-                </div>
+                <input type="url" value={form.socialLinks.website}
+                  onChange={e => set('socialLinks.website', e.target.value)}
+                  className={inputBase} placeholder="https://yourwebsite.com" />
               </Field>
             </div>
           </div>
         </SectionCard>
 
-        {/* ── Business Information ──────────────────────────────────────────── */}
+        {/* ── Business Information (business accounts only) ─────────────── */}
         {isBusinessAccount && (
           <SectionCard
             icon={Globe}
             title="Business Information"
-            subtitle={kycApproved ? 'Most fields locked - website still editable' : 'Will be locked after KYC'}
+            subtitle={kycApproved ? 'Registration fields locked — website still editable' : 'Some fields from registration'}
             badge={kycApproved ? <VerifiedBadge /> : null}
             accent={kycApproved}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
 
+              {/* Business Name */}
               {kycApproved && initial.businessInfo.companyName ? (
                 <FrozenField label="Business / Company Name" value={form.businessInfo.companyName} reason={lockReasons.companyName} />
               ) : (
-                <Field label="Business / Company Name" hint={kycApproved && !initial.businessInfo.companyName ? "Set once - locked after saving" : ""}>
+                <Field label="Business / Company Name"
+                  hint={kycApproved && !initial.businessInfo.companyName ? 'Set once — locked after saving' : ''}>
                   <input type="text" value={form.businessInfo.companyName}
                     onChange={e => set('businessInfo.companyName', e.target.value)}
                     className={inputBase} placeholder="Acme Ltd" />
                 </Field>
               )}
 
-              {kycApproved && initial.businessInfo.businessType ? (
-                <FrozenField label="Business Type / Category" value={form.businessInfo.businessType} reason={lockReasons.businessType} />
-              ) : (
-                <Field label="Business Type / Category" hint={kycApproved && !initial.businessInfo.businessType ? "Set once - locked after saving" : ""}>
-                  <select value={form.businessInfo.businessType}
-                    onChange={e => set('businessInfo.businessType', e.target.value)}
-                    className={inputBase}>
-                    <option value="">Select business type...</option>
-                    <option value="sole_proprietor">Sole Proprietor</option>
-                    <option value="partnership">Partnership</option>
-                    <option value="llc">LLC / Limited Liability Company</option>
-                    <option value="corporation">Corporation</option>
-                    <option value="ngo">NGO / Non-Profit</option>
-                    <option value="ecommerce">E-commerce</option>
-                    <option value="freelance">Freelance / Consulting</option>
-                    <option value="technology">Technology / Software</option>
-                    <option value="logistics">Logistics / Delivery</option>
-                    <option value="real_estate">Real Estate</option>
-                    <option value="finance">Finance / Fintech</option>
-                    <option value="education">Education</option>
-                    <option value="healthcare">Healthcare</option>
-                    <option value="retail">Retail</option>
-                    <option value="other">Other</option>
-                  </select>
-                </Field>
-              )}
+              {/* Business Type — READ ONLY, sourced from registration, NEVER a dropdown here */}
+              <ReadOnlyField
+                label="Business Type"
+                value={formatBusinessType(form.businessInfo.businessType)}
+                note="Set during registration"
+              />
 
+              {/* Registration Number */}
               {kycApproved && initial.businessInfo.registrationNo ? (
                 <FrozenField label="CAC / Registration Number" value={form.businessInfo.registrationNo} reason={lockReasons.registrationNo} />
               ) : (
-                <Field label="CAC / Registration Number" hint={kycApproved && !initial.businessInfo.registrationNo ? "Set once - locked after saving" : ""}>
+                <Field label="CAC / Registration Number"
+                  hint={kycApproved && !initial.businessInfo.registrationNo ? 'Set once — locked after saving' : ''}>
                   <input type="text" value={form.businessInfo.registrationNo}
                     onChange={e => set('businessInfo.registrationNo', e.target.value)}
                     className={inputBase} placeholder="RC 1234567" />
                 </Field>
               )}
 
+              {/* Business Website — always editable */}
               <Field label="Business Website" hint="Always editable">
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <input type="url" value={form.businessInfo.website}
-                    onChange={e => set('businessInfo.website', e.target.value)}
-                    className={inputBase + ' pl-10'} placeholder="https://yourbusiness.com" />
-                </div>
+                <input type="url" value={form.businessInfo.website}
+                  onChange={e => set('businessInfo.website', e.target.value)}
+                  className={inputBase} placeholder="https://yourbusiness.com" />
               </Field>
             </div>
 
-            {kycApproved && (
-              <div className="mt-5 flex items-start gap-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3.5">
-                <Lock className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  Business name, type and registration number were verified against your CAC documents. They are permanently
-                  locked. Your business website URL remains editable at any time.
-                </p>
-              </div>
-            )}
+            <div className="mt-5 flex items-start gap-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3.5">
+              <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                Business type is set during account registration and cannot be changed here.
+                {kycApproved && ' Business name and registration number are locked after KYC verification.'}
+                {' '}Your website URL is always editable.
+              </p>
+            </div>
           </SectionCard>
         )}
 
-        {/* ── Save Bar ──────────────────────────────────────────────────────── */}
+        {/* ── Save Bar ─────────────────────────────────────────────────── */}
         <div className="sticky bottom-0 -mx-1 sm:-mx-0">
           <div className={`flex items-center justify-between gap-4 px-4 sm:px-5 py-3.5 rounded-2xl border transition-all ${
             isDirty
               ? 'bg-blue-600 border-blue-700 shadow-xl shadow-blue-900/30'
-              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-none'
+              : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800'
           }`}>
             <p className={`text-xs sm:text-sm font-medium transition ${
               isDirty ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'
             }`}>
-              {isDirty
-                ? '⚠ You have unsaved changes - password required to save'
-                : 'No pending changes'}
+              {isDirty ? '⚠ Unsaved changes — password required to save' : 'No pending changes'}
             </p>
-            <button
-              type="submit"
-              disabled={saving || !isDirty}
+            <button type="submit" disabled={saving || !isDirty}
               className={`flex items-center gap-2 px-5 sm:px-7 py-2.5 rounded-xl font-semibold text-sm transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
                 isDirty
                   ? 'bg-white text-blue-700 hover:bg-blue-50 shadow-sm'
                   : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-              }`}
-            >
+              }`}>
               {saving
                 ? <><Loader className="w-4 h-4 animate-spin" /> Saving...</>
                 : <><Save className="w-4 h-4" /> Save Changes</>
@@ -669,5 +597,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     </>
   );
 };
+
 
 export default ProfileTab;

@@ -1,4 +1,4 @@
-// src/services/authService.js - FIXED: no-throw-literal, 401 auto-logout, backend logout call
+// src/services/authService.js - FIXED: passes through requires2FA response correctly
 import api from '../config/api';
 import { toast } from 'react-hot-toast';
 
@@ -35,6 +35,10 @@ export const authService = {
 
   /**
    * 🔑 Login user
+   * NOTE: When 2FA is enabled, backend returns:
+   *   { success: true, requires2FA: true, tempToken: '...' }
+   * There is NO user/token in this response — that comes after 2FA verification.
+   * We MUST pass this through without throwing.
    */
   async login(credentials) {
     try {
@@ -43,12 +47,17 @@ export const authService = {
       if (!res.data.success) {
         const errorMsg = res.data.message || 'Login failed';
         toast.error(errorMsg);
-        // FIX: throw proper Error object (no-throw-literal)
         const err = new Error(errorMsg);
         err.data = res.data;
         throw err;
       }
 
+      // FIX: 2FA required — return early, no user/token to store yet
+      if (res.data.requires2FA) {
+        return res.data; // { success: true, requires2FA: true, tempToken }
+      }
+
+      // Normal login — validate and store session
       if (!res.data.user) {
         toast.error('Invalid response from server');
         throw new Error('No user data in response');
@@ -65,7 +74,6 @@ export const authService = {
       return res.data;
 
     } catch (err) {
-      // FIX: handle EMAIL_NOT_VERIFIED without throw-literal
       if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
         const verifyErr = new Error(err.response.data.message || 'Email not verified');
         verifyErr.code = 'EMAIL_NOT_VERIFIED';
@@ -75,7 +83,7 @@ export const authService = {
       }
 
       const errorMessage = err.response?.data?.message || err.message || 'Invalid credentials.';
-      if (!err.data) toast.error(errorMessage); // avoid double toast
+      if (!err.data) toast.error(errorMessage);
       const outErr = new Error(errorMessage);
       outErr.data = err.response?.data || {};
       throw outErr;
@@ -230,13 +238,13 @@ export const authService = {
   },
 
   /**
-   * 🚪 Logout — calls backend to invalidate token, then clears local storage
+   * 🚪 Logout
    */
   async logout() {
     try {
       const token = this.getToken();
       if (token) {
-        await api.post('/auth/logout').catch(() => {}); // fire-and-forget; don't block on failure
+        await api.post('/auth/logout').catch(() => {});
       }
     } finally {
       localStorage.removeItem('token');
@@ -261,30 +269,18 @@ export const authService = {
     }
   },
 
-  /**
-   * 🎫 Get authentication token
-   */
   getToken() {
     return localStorage.getItem('token');
   },
 
-  /**
-   * ✅ Check if user is authenticated
-   */
   isAuthenticated() {
     return !!(this.getToken() && this.getCurrentUser());
   },
 
-  /**
-   * 🔄 Refresh user data from localStorage
-   */
   refreshUser() {
     return this.getCurrentUser();
   },
 
-  /**
-   * 💾 Update user data in localStorage
-   */
   updateUser(userData) {
     try {
       const currentUser = this.getCurrentUser();

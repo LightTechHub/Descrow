@@ -14,21 +14,23 @@ import API from '../../utils/api';
 
 // Human-readable label for a businessType value
 const BUSINESS_TYPE_LABELS = {
-  sole_proprietor: 'Sole Proprietor',
-  partnership:     'Partnership',
-  llc:             'LLC / Limited Liability Company',
-  corporation:     'Corporation',
-  ngo:             'NGO / Non-Profit',
-  ecommerce:       'E-commerce',
-  freelance:       'Freelance / Consulting',
-  technology:      'Technology / Software',
-  logistics:       'Logistics / Delivery',
-  real_estate:     'Real Estate',
-  finance:         'Finance / Fintech',
-  education:       'Education',
-  healthcare:      'Healthcare',
-  retail:          'Retail',
-  other:           'Other',
+  // companyType values (from registration dropdown)
+  sole_proprietor:  'Sole Proprietor',
+  partnership:      'Partnership',
+  llc:              'LLC / Limited Liability Company',
+  corporation:      'Corporation',
+  ngo:              'NGO / Non-Profit',
+  // businessType values (legacy / alternate field)
+  ecommerce:        'E-commerce',
+  freelance:        'Freelance / Consulting',
+  technology:       'Technology / Software',
+  logistics:        'Logistics / Delivery',
+  real_estate:      'Real Estate',
+  finance:          'Finance / Fintech',
+  education:        'Education',
+  healthcare:       'Healthcare',
+  retail:           'Retail',
+  other:            'Other',
 };
 
 const formatBusinessType = (val) =>
@@ -52,10 +54,14 @@ const buildInitialForm = (user) => ({
   },
   businessInfo: {
     companyName:    user?.businessInfo?.companyName    || '',
-    // businessType comes from registration — never editable in profile
-    businessType:   user?.businessInfo?.businessType   || '',
+    // FIX: Registration form saves companyType (e.g. "sole_proprietor").
+    // businessType is a separate field that may not be set.
+    // Read companyType first (what registration captures), fall back to businessType.
+    businessType:   user?.businessInfo?.companyType    ||
+                    user?.businessInfo?.businessType   || '',
     website:        user?.businessInfo?.website        || '',
-    registrationNo: user?.businessInfo?.registrationNo || user?.businessInfo?.registrationNumber || '',
+    registrationNo: user?.businessInfo?.registrationNo ||
+                    user?.businessInfo?.registrationNumber || '',
   },
 });
 

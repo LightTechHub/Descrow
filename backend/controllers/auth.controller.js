@@ -1,7 +1,9 @@
 // backend/controllers/auth.controller.js
-// FIXED: verify2FALogin now reads twoFactorSecret from the TwoFactor collection
-// (where security.controller.js stores it) instead of User.twoFactorSecret
-// (which was never populated by the setup flow).
+// CHANGES:
+//   - register: saves gender field from req.body / businessInfo
+//   - completeGoogleProfile: saves gender field
+//   - verify2FALogin: reads secret from TwoFactor collection (existing fix preserved)
+//   - login: checks TwoFactor collection for 2FA gate (existing fix preserved)
 
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
@@ -10,7 +12,7 @@ const crypto = require('crypto');
 const { validationResult } = require('express-validator');
 const emailService = require('../services/email.service');
 const speakeasy = require('speakeasy');
-const TwoFactor = require('../models/TwoFactor'); // FIX: import TwoFactor model
+const TwoFactor = require('../models/TwoFactor');
 
 // Generate JWT
 const generateToken = (userId, email = null, scope = 'full', expiresIn = null) => {
@@ -51,6 +53,7 @@ const parseDeviceInfo = (req) => {
 
 /* ============================================================
    REGISTER
+   ADDED: saves gender field (top-level, from req.body or businessInfo block)
 ============================================================ */
 exports.register = async (req, res) => {
   try {
@@ -59,7 +62,7 @@ exports.register = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Validation failed', errors: errors.array() });
     }
 
-    const { name, email, password, phone, country, accountType, agreedToTerms, businessInfo } = req.body;
+    const { name, email, password, phone, country, accountType, agreedToTerms, businessInfo, gender } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
@@ -78,21 +81,32 @@ exports.register = async (req, res) => {
     }
 
     const userData = {
-      name, email: email.toLowerCase(), password,
-      phone: phone || undefined, accountType: accountType || 'individual',
-      role: 'dual', tier: 'free', verified: false, status: 'active', authProvider: 'local',
-      agreedToTerms: agreedToTerms || false, agreedToTermsAt: agreedToTerms ? new Date() : undefined
+      name,
+      email: email.toLowerCase(),
+      password,
+      phone: phone || undefined,
+      accountType: accountType || 'individual',
+      role: 'dual',
+      tier: 'free',
+      verified: false,
+      status: 'active',
+      authProvider: 'local',
+      agreedToTerms: agreedToTerms || false,
+      agreedToTermsAt: agreedToTerms ? new Date() : undefined,
+      // ADDED: save gender if provided at top level or inside businessInfo block
+      gender: gender || businessInfo?.gender || undefined
     };
 
     if (country) userData.address = { country };
+
     if (accountType === 'business' && businessInfo) {
       userData.businessInfo = {
-        companyName: businessInfo.companyName,
-        companyType: businessInfo.companyType,
-        businessType: businessInfo.businessType,
-        industry: businessInfo.industry,
+        companyName:        businessInfo.companyName,
+        companyType:        businessInfo.companyType,
+        businessType:       businessInfo.businessType,
+        industry:           businessInfo.industry,
         registrationNumber: businessInfo.registrationNumber,
-        taxId: businessInfo.taxId
+        taxId:              businessInfo.taxId
       };
     }
 
@@ -175,8 +189,6 @@ exports.login = async (req, res) => {
     await user.resetLoginAttempts();
 
     // 2FA gate — check BOTH User.twoFactorEnabled AND TwoFactor collection
-    // User.twoFactorEnabled is set by security.controller verify2FA
-    // The actual secret lives in the TwoFactor collection
     const twoFactorDoc = await TwoFactor.findOne({ user: user._id });
     const has2FA = user.twoFactorEnabled && twoFactorDoc && twoFactorDoc.enabled;
 
@@ -242,8 +254,7 @@ exports.login = async (req, res) => {
 
 /* ============================================================
    VERIFY 2FA LOGIN
-   FIX: Reads secret from TwoFactor collection (where setup stores it)
-   instead of User.twoFactorSecret (which setup never populates).
+   FIX: Reads secret from TwoFactor collection
 ============================================================ */
 exports.verify2FALogin = async (req, res) => {
   try {
@@ -253,7 +264,6 @@ exports.verify2FALogin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Temp token and 2FA code are required' });
     }
 
-    // Verify the temp token
     let decoded;
     try {
       decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
@@ -274,9 +284,6 @@ exports.verify2FALogin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User not found' });
     }
 
-    // FIX: Look up secret from TwoFactor collection, NOT User.twoFactorSecret
-    // security.controller.setup2FA saves secret to TwoFactor model only.
-    // User.twoFactorSecret is a legacy field that the setup flow never writes to.
     const twoFactorDoc = await TwoFactor.findOne({ user: user._id });
 
     if (!twoFactorDoc || !twoFactorDoc.enabled || !twoFactorDoc.secret) {
@@ -286,7 +293,6 @@ exports.verify2FALogin = async (req, res) => {
       });
     }
 
-    // Validate TOTP code against TwoFactor collection secret
     const isValid = speakeasy.totp.verify({
       secret: twoFactorDoc.secret,
       encoding: 'base32',
@@ -298,7 +304,6 @@ exports.verify2FALogin = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid 2FA code. Please try again.' });
     }
 
-    // Code valid — complete login with device tracking
     const device = parseDeviceInfo(req);
     const sessionId = crypto.randomBytes(16).toString('hex');
 
@@ -321,7 +326,6 @@ exports.verify2FALogin = async (req, res) => {
     user.loginSessions = [...(user.loginSessions || []).slice(-9), newSession];
     user.lastLogin = new Date();
 
-    // Update last verified timestamp on TwoFactor doc
     twoFactorDoc.lastVerified = new Date();
     await twoFactorDoc.save();
     await user.save();
@@ -401,10 +405,16 @@ exports.googleAuth = async (req, res) => {
 
 /* ============================================================
    GOOGLE AUTH - COMPLETE PROFILE
+   ADDED: saves gender field
 ============================================================ */
 exports.completeGoogleProfile = async (req, res) => {
   try {
-    const { googleId, name, email, phone, country, accountType, companyName, companyType, businessType, industry, registrationNumber, agreedToTerms, picture } = req.body;
+    const {
+      googleId, name, email, phone, country, accountType,
+      companyName, companyType, businessType, industry,
+      registrationNumber, agreedToTerms, picture,
+      gender  // ADDED
+    } = req.body;
 
     if (!googleId || !email) return res.status(400).json({ success: false, message: 'Google ID and email are required' });
     if (!agreedToTerms) return res.status(400).json({ success: false, message: 'You must agree to the terms and conditions' });
@@ -414,20 +424,33 @@ exports.completeGoogleProfile = async (req, res) => {
     const user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
     if (!user) return res.status(404).json({ success: false, message: 'User not found. Please sign in with Google again.' });
 
-    user.name = name; user.phone = phone; user.accountType = accountType;
-    user.agreedToTerms = true; user.agreedToTermsAt = new Date();
+    user.name = name;
+    user.phone = phone;
+    user.accountType = accountType;
+    user.agreedToTerms = true;
+    user.agreedToTermsAt = new Date();
     user.profilePicture = picture || user.profilePicture;
-    user.googleId = googleId; user.verified = true; user.verifiedAt = user.verifiedAt || new Date();
+    user.googleId = googleId;
+    user.verified = true;
+    user.verifiedAt = user.verifiedAt || new Date();
+
+    // ADDED: save gender
+    if (gender) user.gender = gender;
+
     if (country) { user.address = user.address || {}; user.address.country = country; }
+
     if (accountType === 'business') {
       user.businessInfo = {
-        companyName, companyType: companyType || 'other',
+        companyName,
+        companyType: companyType || 'other',
         businessType: businessType || '',
         industry: industry || 'other',
         registrationNumber: registrationNumber || '',
-        businessEmail: email, businessPhone: phone
+        businessEmail: email,
+        businessPhone: phone
       };
     }
+
     await user.save();
 
     const token = generateToken(user._id, user.email);

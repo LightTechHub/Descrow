@@ -1,16 +1,35 @@
-// src/pages/Auth/CompleteProfilePage.jsx - COMPLETE FIXED VERSION
+// src/pages/Auth/CompleteProfilePage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Shield, User, Mail, Phone, Globe, Building2, CheckCircle,
   Loader, Lock, Eye, EyeOff, AlertCircle, ArrowRight, ArrowLeft,
-  FileText, Hash, Briefcase
+  FileText, Hash, Briefcase, XCircle
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import toast from 'react-hot-toast';
 import { COUNTRIES, INDUSTRIES, COMPANY_TYPES, prepareUserPayload } from '../../constants';
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ─── Free / consumer email providers blocked for business accounts ─────────────
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com','googlemail.com','yahoo.com','yahoo.co.uk','yahoo.co.in',
+  'yahoo.fr','yahoo.de','yahoo.es','yahoo.it','yahoo.ca','yahoo.com.au',
+  'ymail.com','hotmail.com','hotmail.co.uk','hotmail.fr','hotmail.de',
+  'hotmail.es','hotmail.it','live.com','live.co.uk','live.fr','live.de',
+  'outlook.com','outlook.co.uk','outlook.fr','outlook.de','outlook.es',
+  'msn.com','icloud.com','me.com','mac.com','aol.com','aim.com',
+  'protonmail.com','proton.me','tutanota.com','tuta.io','mail.com',
+  'gmx.com','gmx.net','gmx.de','zoho.com','yandex.com','yandex.ru',
+  'inbox.com','fastmail.com','hushmail.com','rediffmail.com',
+  'rocketmail.com','lycos.com','excite.com','email.com','usa.com',
+]);
+
+const isFreeEmailDomain = (email) => {
+  if (!email || !email.includes('@')) return false;
+  return FREE_EMAIL_DOMAINS.has(email.split('@')[1]?.toLowerCase());
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const inputClass = (hasError) =>
   `w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
     hasError
@@ -26,7 +45,6 @@ const FieldError = ({ message }) =>
     </p>
   ) : null;
 
-// ── Step Indicator ─────────────────────────────────────────────────────────────
 const StepIndicator = ({ currentStep, totalSteps, labels }) => (
   <div className="flex items-center justify-center gap-2 mb-8">
     {Array.from({ length: totalSteps }).map((_, i) => (
@@ -57,6 +75,12 @@ const StepIndicator = ({ currentStep, totalSteps, labels }) => (
   </div>
 );
 
+const GENDER_OPTIONS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' }
+];
+
 // ══════════════════════════════════════════════════════════════════════════════
 const CompleteProfilePage = () => {
   const navigate = useNavigate();
@@ -68,16 +92,17 @@ const CompleteProfilePage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [accountTypeWarning, setAccountTypeWarning] = useState(false);
 
   const [formData, setFormData] = useState({
     name: googleData?.name || '',
+    gender: '',
     email: googleData?.email || '',
     password: '',
     confirmPassword: '',
     phone: '',
     country: '',
     accountType: 'individual',
-    // Business fields
     companyName: '',
     companyType: '',
     industry: '',
@@ -99,7 +124,7 @@ const CompleteProfilePage = () => {
     ? ['Personal Info', 'Business Info', 'Review & Submit']
     : ['Personal Info', 'Review & Submit'];
 
-  // ── Validators ───────────────────────────────────────────────────────────────
+  // ── Validators ────────────────────────────────────────────────────────────
   const validateStep1 = () => {
     const e = {};
 
@@ -109,6 +134,10 @@ const CompleteProfilePage = () => {
       e.name = 'Name must be at least 3 characters';
     } else if (!/^[a-zA-Z\s'\-]+$/.test(formData.name.trim())) {
       e.name = 'Name can only contain letters, spaces, hyphens and apostrophes';
+    }
+
+    if (!formData.gender) {
+      e.gender = 'Please select a gender option';
     }
 
     if (!formData.password) {
@@ -140,6 +169,12 @@ const CompleteProfilePage = () => {
       e.country = 'Country is required';
     }
 
+    // If they've selected business, block progression — must register manually
+    if (isBusinessAccount) {
+      e.accountType = 'Business accounts must register manually. Please use the sign-up page.';
+      setAccountTypeWarning(true);
+    }
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -157,37 +192,28 @@ const CompleteProfilePage = () => {
       e.companyName = 'Company name contains invalid characters';
     }
 
-    if (!formData.companyType) {
-      e.companyType = 'Company type is required';
+    if (!formData.companyType) e.companyType = 'Company type is required';
+    if (!formData.industry) e.industry = 'Industry is required';
+
+    if (formData.registrationNumber && !/^[a-zA-Z0-9\-\/]{3,30}$/.test(formData.registrationNumber.trim())) {
+      e.registrationNumber = 'Invalid format — letters, numbers, hyphens only (3–30 chars)';
     }
 
-    if (!formData.industry) {
-      e.industry = 'Industry is required';
+    if (formData.taxId && !/^[a-zA-Z0-9\-]{5,20}$/.test(formData.taxId.trim())) {
+      e.taxId = 'Invalid Tax ID format (5–20 alphanumeric characters)';
     }
 
-    if (formData.registrationNumber) {
-      if (!/^[a-zA-Z0-9\-\/]{3,30}$/.test(formData.registrationNumber.trim())) {
-        e.registrationNumber = 'Invalid format — letters, numbers, hyphens only (3–30 chars)';
-      }
-    }
-
-    if (formData.taxId) {
-      if (!/^[a-zA-Z0-9\-]{5,20}$/.test(formData.taxId.trim())) {
-        e.taxId = 'Invalid Tax ID format (5–20 alphanumeric characters)';
-      }
-    }
-
-    if (formData.businessEmail) {
-      if (!/^\S+@\S+\.\S+$/.test(formData.businessEmail)) {
-        e.businessEmail = 'Invalid business email address';
-      }
+    if (!formData.businessEmail) {
+      e.businessEmail = 'Company email is required';
+    } else if (!/^\S+@\S+\.\S+$/.test(formData.businessEmail)) {
+      e.businessEmail = 'Invalid business email address';
+    } else if (isFreeEmailDomain(formData.businessEmail)) {
+      e.businessEmail = 'Must be a company email — Gmail, Yahoo and other free providers are not accepted';
     }
 
     if (formData.businessPhone) {
       const phoneClean = formData.businessPhone.replace(/[\s()\-]/g, '');
-      if (!/^\+?[1-9]\d{7,14}$/.test(phoneClean)) {
-        e.businessPhone = 'Invalid business phone number';
-      }
+      if (!/^\+?[1-9]\d{7,14}$/.test(phoneClean)) e.businessPhone = 'Invalid business phone number';
     }
 
     if (formData.website) {
@@ -203,14 +229,40 @@ const CompleteProfilePage = () => {
     return Object.keys(e).length === 0;
   };
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     if (errors[name]) setErrors(prev => { const copy = { ...prev }; delete copy[name]; return copy; });
+    // Clear account type warning if they switch back to individual
+    if (name === 'accountType' && value === 'individual') {
+      setAccountTypeWarning(false);
+      setErrors(prev => { const copy = { ...prev }; delete copy.accountType; return copy; });
+    }
+  };
+
+  const handleAccountTypeChange = (type) => {
+    setFormData(prev => ({ ...prev, accountType: type }));
+    if (type === 'individual') {
+      setAccountTypeWarning(false);
+      setErrors(prev => { const copy = { ...prev }; delete copy.accountType; return copy; });
+    } else {
+      setAccountTypeWarning(true);
+    }
+  };
+
+  const handleGenderSelect = (value) => {
+    setFormData(prev => ({ ...prev, gender: value }));
+    if (errors.gender) setErrors(prev => { const copy = { ...prev }; delete copy.gender; return copy; });
   };
 
   const handleNext = () => {
+    if (isBusinessAccount) {
+      // Hard block — business accounts cannot use Google flow
+      setAccountTypeWarning(true);
+      toast.error('Business accounts must register manually. Please use the sign-up page.');
+      return;
+    }
     let valid = false;
     if (step === 1) valid = validateStep1();
     if (step === 2 && isBusinessAccount) valid = validateStep2Business();
@@ -224,12 +276,17 @@ const CompleteProfilePage = () => {
 
   const handleBack = () => {
     setErrors({});
+    setAccountTypeWarning(false);
     setStep(s => s - 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isBusinessAccount) {
+      toast.error('Business accounts must register manually. Please use the sign-up page.');
+      return;
+    }
     if (!formData.agreedToTerms) {
       toast.error('Please accept the Terms and Conditions to continue');
       return;
@@ -248,12 +305,13 @@ const CompleteProfilePage = () => {
         setTimeout(() => { window.location.href = '/dashboard'; }, 500);
       }
     } catch (error) {
-      console.error('Complete profile error:', error);
       toast.error(error.message || 'Failed to complete profile');
     } finally {
       setLoading(false);
     }
   };
+
+  const genderLabel = GENDER_OPTIONS.find(o => o.value === formData.gender)?.label || '—';
 
   if (!googleData) return null;
 
@@ -261,7 +319,6 @@ const CompleteProfilePage = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
 
-        {/* Header */}
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-lg">
@@ -272,7 +329,6 @@ const CompleteProfilePage = () => {
           <p className="text-gray-600 dark:text-gray-400">Set your password and complete your profile details</p>
         </div>
 
-        {/* Avatar */}
         <div className="flex justify-center mb-6">
           <div className="relative">
             <img src={googleData.picture} alt={googleData.name}
@@ -283,7 +339,6 @@ const CompleteProfilePage = () => {
           </div>
         </div>
 
-        {/* Step Indicator */}
         <StepIndicator currentStep={step} totalSteps={totalSteps} labels={stepLabels} />
 
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
@@ -299,12 +354,29 @@ const CompleteProfilePage = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name *</label>
                 <input type="text" name="name" value={formData.name} onChange={handleChange}
-                  placeholder="Your full legal name"
-                  className={inputClass(errors.name)} />
+                  placeholder="Your full legal name" className={inputClass(errors.name)} />
                 <FieldError message={errors.name} />
               </div>
 
-              {/* Email locked */}
+              {/* Gender */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gender *</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {GENDER_OPTIONS.map(({ value, label }) => (
+                    <button key={value} type="button" onClick={() => handleGenderSelect(value)}
+                      className={`py-3 px-2 border-2 rounded-lg text-sm font-medium transition ${
+                        formData.gender === value
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                          : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-300'
+                      }`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <FieldError message={errors.gender} />
+              </div>
+
+              {/* Email (locked — from Google) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <Mail className="w-4 h-4 inline mr-1" /> Email * (Verified)
@@ -370,8 +442,7 @@ const CompleteProfilePage = () => {
                   <Phone className="w-4 h-4 inline mr-1" /> Phone Number *
                 </label>
                 <input type="tel" name="phone" value={formData.phone} onChange={handleChange}
-                  placeholder="+2348012345678"
-                  className={inputClass(errors.phone)} />
+                  placeholder="+2348012345678" className={inputClass(errors.phone)} />
                 <FieldError message={errors.phone} />
                 <p className="mt-1 text-xs text-gray-500">Include country code (e.g. +234 for Nigeria)</p>
               </div>
@@ -384,9 +455,7 @@ const CompleteProfilePage = () => {
                 <select name="country" value={formData.country} onChange={handleChange}
                   className={inputClass(errors.country)}>
                   <option value="">Select your country</option>
-                  {COUNTRIES.map(c => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
+                  {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
                 </select>
                 <FieldError message={errors.country} />
               </div>
@@ -399,160 +468,55 @@ const CompleteProfilePage = () => {
                     { type: 'individual', Icon: User, label: 'Individual', desc: 'Personal use' },
                     { type: 'business', Icon: Building2, label: 'Business', desc: 'Company account' }
                   ].map(({ type, Icon, label, desc }) => (
-                    <button key={type} type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, accountType: type }))}
+                    <button key={type} type="button" onClick={() => handleAccountTypeChange(type)}
                       className={`p-4 border-2 rounded-lg transition text-center ${
                         formData.accountType === type
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                          ? type === 'business'
+                            ? 'border-red-400 bg-red-50 dark:bg-red-900/20'
+                            : 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                           : 'border-gray-300 dark:border-gray-700 hover:border-blue-300'
                       }`}>
-                      <Icon className="w-6 h-6 mx-auto mb-2 text-blue-600" />
+                      <Icon className={`w-6 h-6 mx-auto mb-2 ${type === 'business' && formData.accountType === 'business' ? 'text-red-500' : 'text-blue-600'}`} />
                       <p className="font-medium text-gray-900 dark:text-white">{label}</p>
                       <p className="text-xs text-gray-500 mt-1">{desc}</p>
                     </button>
                   ))}
                 </div>
+
+                {/* Business account warning banner */}
+                {accountTypeWarning && (
+                  <div className="mt-3 flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-4">
+                    <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                        Business accounts cannot use Google Sign-In
+                      </p>
+                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                        Business registration requires a company email and manual sign-up. Please go to the{' '}
+                        <a href="/signup" className="underline font-medium">sign-up page</a> and choose Business account.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <button type="button" onClick={handleNext}
-                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={isBusinessAccount}
+                className={`w-full py-4 font-semibold rounded-lg transition flex items-center justify-center gap-2 ${
+                  isBusinessAccount
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
+                }`}
+              >
                 Continue <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           )}
 
-          {/* ═══════════ STEP 2: Business Info ═══════════ */}
-          {step === 2 && isBusinessAccount && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
-                <Building2 className="w-5 h-5 text-blue-600" /> Business Information
-              </h2>
-
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-200">
-                ⚠️ Please provide <strong>accurate</strong> business information. This is verified during KYC review. Providing false details may result in account suspension.
-              </div>
-
-              {/* Company Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Building2 className="w-4 h-4 inline mr-1" /> Company Name *
-                </label>
-                <input type="text" name="companyName" value={formData.companyName} onChange={handleChange}
-                  placeholder="Registered company name (must match documents)"
-                  className={inputClass(errors.companyName)} />
-                <FieldError message={errors.companyName} />
-                <p className="mt-1 text-xs text-gray-500">Must match your official registration documents exactly</p>
-              </div>
-
-              {/* Company Type & Industry */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <Briefcase className="w-4 h-4 inline mr-1" /> Company Type *
-                  </label>
-                  <select name="companyType" value={formData.companyType} onChange={handleChange}
-                    className={inputClass(errors.companyType)}>
-                    <option value="">Select type</option>
-                    {COMPANY_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                  <FieldError message={errors.companyType} />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <FileText className="w-4 h-4 inline mr-1" /> Industry *
-                  </label>
-                  <select name="industry" value={formData.industry} onChange={handleChange}
-                    className={inputClass(errors.industry)}>
-                    <option value="">Select industry</option>
-                    {INDUSTRIES.map(i => (
-                      <option key={i.value} value={i.value}>{i.label}</option>
-                    ))}
-                  </select>
-                  <FieldError message={errors.industry} />
-                </div>
-              </div>
-
-              {/* Registration Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Hash className="w-4 h-4 inline mr-1" /> Registration Number
-                  <span className="ml-1 text-gray-400 font-normal text-xs">(Recommended)</span>
-                </label>
-                <input type="text" name="registrationNumber" value={formData.registrationNumber} onChange={handleChange}
-                  placeholder="e.g. RC1234567 (CAC number for Nigeria)"
-                  className={inputClass(errors.registrationNumber)} />
-                <FieldError message={errors.registrationNumber} />
-                <p className="mt-1 text-xs text-gray-500">Government-issued business registration number</p>
-              </div>
-
-              {/* Tax ID */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Tax ID / TIN
-                  <span className="ml-1 text-gray-400 font-normal text-xs">(Recommended)</span>
-                </label>
-                <input type="text" name="taxId" value={formData.taxId} onChange={handleChange}
-                  placeholder="Tax identification number"
-                  className={inputClass(errors.taxId)} />
-                <FieldError message={errors.taxId} />
-              </div>
-
-              {/* Business Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Mail className="w-4 h-4 inline mr-1" /> Business Email
-                  <span className="ml-1 text-gray-400 font-normal text-xs">(Optional)</span>
-                </label>
-                <input type="email" name="businessEmail" value={formData.businessEmail} onChange={handleChange}
-                  placeholder="contact@yourcompany.com"
-                  className={inputClass(errors.businessEmail)} />
-                <FieldError message={errors.businessEmail} />
-              </div>
-
-              {/* Business Phone & Website */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <Phone className="w-4 h-4 inline mr-1" /> Business Phone
-                    <span className="ml-1 text-gray-400 font-normal text-xs">(Optional)</span>
-                  </label>
-                  <input type="tel" name="businessPhone" value={formData.businessPhone} onChange={handleChange}
-                    placeholder="+2348012345678"
-                    className={inputClass(errors.businessPhone)} />
-                  <FieldError message={errors.businessPhone} />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <Globe className="w-4 h-4 inline mr-1" /> Website
-                    <span className="ml-1 text-gray-400 font-normal text-xs">(Optional)</span>
-                  </label>
-                  <input type="text" name="website" value={formData.website} onChange={handleChange}
-                    placeholder="https://yourcompany.com"
-                    className={inputClass(errors.website)} />
-                  <FieldError message={errors.website} />
-                </div>
-              </div>
-
-              {/* Navigation */}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={handleBack}
-                  className="flex-1 py-4 border-2 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center justify-center gap-2">
-                  <ArrowLeft className="w-5 h-5" /> Back
-                </button>
-                <button type="button" onClick={handleNext}
-                  className="flex-1 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2">
-                  Continue <ArrowRight className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════ FINAL STEP: Review & Submit ═══════════ */}
-          {((step === 2 && !isBusinessAccount) || (step === 3 && isBusinessAccount)) && (
+          {/* ═══════════ FINAL STEP: Review & Submit (Individual only) ═══════════ */}
+          {step === 2 && !isBusinessAccount && (
             <form onSubmit={handleSubmit} className="space-y-6">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
                 <CheckCircle className="w-5 h-5 text-green-600" /> Review Your Information
@@ -561,7 +525,6 @@ const CompleteProfilePage = () => {
                 Please confirm your details are correct before submitting.
               </p>
 
-              {/* Personal Summary */}
               <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="font-semibold text-gray-900 dark:text-white text-sm uppercase tracking-wide">Personal Details</h3>
@@ -570,10 +533,11 @@ const CompleteProfilePage = () => {
                 </div>
                 {[
                   { label: 'Name', value: formData.name },
+                  { label: 'Gender', value: genderLabel },
                   { label: 'Email', value: formData.email },
                   { label: 'Phone', value: formData.phone },
                   { label: 'Country', value: COUNTRIES.find(c => c.code === formData.country)?.name || formData.country },
-                  { label: 'Account Type', value: isBusinessAccount ? 'Business Account' : 'Individual Account' },
+                  { label: 'Account Type', value: 'Individual Account' },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
                     <span className="text-gray-500 dark:text-gray-400">{label}</span>
@@ -582,41 +546,6 @@ const CompleteProfilePage = () => {
                 ))}
               </div>
 
-              {/* Business Summary */}
-              {isBusinessAccount && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 space-y-3 border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-blue-900 dark:text-blue-100 text-sm uppercase tracking-wide">Business Details</h3>
-                    <button type="button" onClick={() => setStep(2)}
-                      className="text-xs text-blue-600 dark:text-blue-400 underline">Edit</button>
-                  </div>
-                  {[
-                    { label: 'Company', value: formData.companyName },
-                    { label: 'Type', value: COMPANY_TYPES.find(t => t.value === formData.companyType)?.label },
-                    { label: 'Industry', value: INDUSTRIES.find(i => i.value === formData.industry)?.label },
-                    { label: 'Reg. Number', value: formData.registrationNumber || 'Not provided' },
-                    { label: 'Tax ID', value: formData.taxId || 'Not provided' },
-                    { label: 'Business Email', value: formData.businessEmail || 'Not provided' },
-                    { label: 'Website', value: formData.website || 'Not provided' },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex justify-between text-sm">
-                      <span className="text-blue-700 dark:text-blue-300">{label}</span>
-                      <span className="text-blue-900 dark:text-blue-100 font-medium">{value || '—'}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* KYC Notice */}
-              {isBusinessAccount && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    <strong>⚠️ KYC Required:</strong> After registration you'll need to upload business documents for verification. Unverified accounts have limited access.
-                  </p>
-                </div>
-              )}
-
-              {/* Terms */}
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" name="agreedToTerms" checked={formData.agreedToTerms} onChange={handleChange}
@@ -626,12 +555,10 @@ const CompleteProfilePage = () => {
                     <a href="/terms" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">Terms of Service</a>
                     {' '}and{' '}
                     <a href="/privacy" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
-                    I understand that providing false information may result in account suspension.
                   </span>
                 </label>
               </div>
 
-              {/* Navigation */}
               <div className="flex gap-3">
                 <button type="button" onClick={handleBack}
                   className="flex-1 py-4 border-2 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition flex items-center justify-center gap-2">

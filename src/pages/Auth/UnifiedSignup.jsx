@@ -1,15 +1,37 @@
-// src/pages/Auth/UnifiedSignup.jsx - COMPLETE FIXED VERSION
+// src/pages/Auth/UnifiedSignup.jsx
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
+import {
   Shield, User, Building2, Eye, EyeOff,
-  CheckCircle, Loader, ArrowRight, AlertCircle
+  CheckCircle, Loader, ArrowRight, AlertCircle, Lock
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import toast from 'react-hot-toast';
 import { COUNTRIES, INDUSTRIES, COMPANY_TYPES, prepareUserPayload, COMPANY_TYPE_MAP } from '../../constants';
+
+// ─── Free / consumer email providers that are blocked for business accounts ───
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com','googlemail.com','yahoo.com','yahoo.co.uk','yahoo.co.in',
+  'yahoo.fr','yahoo.de','yahoo.es','yahoo.it','yahoo.ca','yahoo.com.au',
+  'ymail.com','hotmail.com','hotmail.co.uk','hotmail.fr','hotmail.de',
+  'hotmail.es','hotmail.it','live.com','live.co.uk','live.fr','live.de',
+  'outlook.com','outlook.co.uk','outlook.fr','outlook.de','outlook.es',
+  'msn.com','icloud.com','me.com','mac.com','aol.com','aim.com',
+  'protonmail.com','proton.me','tutanota.com','tuta.io','mail.com',
+  'gmx.com','gmx.net','gmx.de','zoho.com','yandex.com','yandex.ru',
+  'inbox.com','fastmail.com','hushmail.com','rediffmail.com',
+  'rocketmail.com','lycos.com','excite.com','email.com','usa.com',
+]);
+
+const isFreeEmailDomain = (email) => {
+  if (!email || !email.includes('@')) return false;
+  const domain = email.split('@')[1]?.toLowerCase();
+  return FREE_EMAIL_DOMAINS.has(domain);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const UnifiedSignup = () => {
   const navigate = useNavigate();
@@ -21,6 +43,7 @@ const UnifiedSignup = () => {
 
   const [formData, setFormData] = useState({
     name: '',
+    gender: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -34,6 +57,7 @@ const UnifiedSignup = () => {
     taxId: ''
   });
 
+  // ── Validators ──────────────────────────────────────────────────────────────
   const validateField = (name, value) => {
     const newErrors = { ...errors };
 
@@ -44,12 +68,24 @@ const UnifiedSignup = () => {
         else delete newErrors.name;
         break;
 
-      case 'email':
-        const emailRegex = /^\S+@\S+\.\S+$/;
-        if (!value) newErrors.email = 'Email is required';
-        else if (!emailRegex.test(value)) newErrors.email = 'Please enter a valid email';
-        else delete newErrors.email;
+      case 'gender':
+        if (!value) newErrors.gender = 'Please select a gender option';
+        else delete newErrors.gender;
         break;
+
+      case 'email': {
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!value) {
+          newErrors.email = 'Email is required';
+        } else if (!emailRegex.test(value)) {
+          newErrors.email = 'Please enter a valid email';
+        } else if (accountType === 'business' && isFreeEmailDomain(value)) {
+          newErrors.email = 'Business accounts must use a company email address (e.g. you@yourcompany.com)';
+        } else {
+          delete newErrors.email;
+        }
+        break;
+      }
 
       case 'password':
         if (!value) newErrors.password = 'Password is required';
@@ -72,12 +108,13 @@ const UnifiedSignup = () => {
         else delete newErrors.confirmPassword;
         break;
 
-      case 'phone':
+      case 'phone': {
         const phoneRegex = /^\+?[1-9]\d{7,14}$/;
         if (!value) newErrors.phone = 'Phone number is required';
         else if (!phoneRegex.test(value.replace(/[\s()-]/g, ''))) newErrors.phone = 'Invalid phone number';
         else delete newErrors.phone;
         break;
+      }
 
       case 'country':
         if (!value) newErrors.country = 'Country is required';
@@ -107,9 +144,7 @@ const UnifiedSignup = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
-
     setFormData(prev => ({ ...prev, [name]: newValue }));
-
     if (type !== 'checkbox') {
       validateField(name, newValue);
     }
@@ -118,33 +153,22 @@ const UnifiedSignup = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
-
       const decoded = jwtDecode(credentialResponse.credential);
-
-      console.log('🔵 Decoded Google user:', decoded);
-
       const response = await authService.googleAuth({
         googleId: decoded.sub,
         email: decoded.email,
         name: decoded.name,
         picture: decoded.picture
       });
-
       if (response.success) {
         if (response.requiresProfileCompletion) {
-          navigate('/complete-profile', {
-            state: { googleData: response.googleData }
-          });
+          navigate('/complete-profile', { state: { googleData: response.googleData } });
           return;
         }
-
         toast.success('Login successful!');
-        setTimeout(() => {
-          window.location.href = '/dashboard';
-        }, 500);
+        setTimeout(() => { window.location.href = '/dashboard'; }, 500);
       }
     } catch (error) {
-      console.error('❌ Google signup error:', error);
       toast.error(error.message || 'Google signup failed');
     } finally {
       setLoading(false);
@@ -153,7 +177,7 @@ const UnifiedSignup = () => {
 
   const validateStep = () => {
     if (accountType === 'individual') {
-      if (!formData.name || !formData.email || !formData.password || !formData.phone || !formData.country) {
+      if (!formData.name || !formData.gender || !formData.email || !formData.password || !formData.phone || !formData.country) {
         toast.error('Please fill all required fields');
         return false;
       }
@@ -181,8 +205,12 @@ const UnifiedSignup = () => {
           return false;
         }
       } else if (step === 2) {
-        if (!formData.name || !formData.email || !formData.password || !formData.phone || !formData.country) {
+        if (!formData.name || !formData.gender || !formData.email || !formData.password || !formData.phone || !formData.country) {
           toast.error('Please fill all required fields');
+          return false;
+        }
+        if (isFreeEmailDomain(formData.email)) {
+          toast.error('Business accounts require a company email address');
           return false;
         }
         if (formData.password !== formData.confirmPassword) {
@@ -205,54 +233,37 @@ const UnifiedSignup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!validateStep()) return;
-
     if (accountType === 'business' && step < 3) {
       setStep(prev => prev + 1);
       return;
     }
-
     try {
       setLoading(true);
-
-      // Map company type if it's in old format
       let companyType = formData.companyType;
       if (formData.companyType && !['sole_proprietor', 'partnership', 'llc', 'corporation', 'ngo', 'other'].includes(formData.companyType)) {
         companyType = COMPANY_TYPE_MAP[formData.companyType] || formData.companyType.toLowerCase().replace(' ', '_');
       }
-
-      const updatedFormData = {
-        ...formData,
-        companyType
-      };
-
-      const payload = prepareUserPayload(updatedFormData, accountType);
-
-      console.log('📦 Sending payload:', payload);
-
+      const payload = prepareUserPayload({ ...formData, companyType }, accountType);
       const response = await authService.register(payload);
-
       if (response.success) {
         toast.success('Account created! Check your email for verification.');
-
         setTimeout(() => {
-          navigate('/login', {
-            state: {
-              message: '✅ Account created! Please verify your email.',
-              email: formData.email
-            }
-          });
+          navigate('/login', { state: { message: '✅ Account created! Please verify your email.', email: formData.email } });
         }, 1000);
       }
-
     } catch (error) {
-      console.error('❌ Signup error:', error);
       toast.error(error.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
   };
+
+  const genderOptions = [
+    { value: 'male', label: 'Male' },
+    { value: 'female', label: 'Female' },
+    { value: 'prefer_not_to_say', label: 'Prefer not to say' }
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 py-12 px-4">
@@ -264,15 +275,12 @@ const UnifiedSignup = () => {
             <Shield className="w-6 h-6" />
             <span className="text-xl font-bold">Dealcross</span>
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Create Your Account
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Create Your Account</h1>
           <p className="text-gray-600 dark:text-gray-400">
             {accountType === 'individual' ? 'Join thousands of secure traders' : 'Get started with business escrow'}
           </p>
         </div>
 
-        {/* Main Form */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
 
           {/* Account Type Selector */}
@@ -282,11 +290,7 @@ const UnifiedSignup = () => {
           <div className="grid grid-cols-2 gap-4 mb-6">
             <button
               type="button"
-              onClick={() => {
-                setAccountType('individual');
-                setStep(1);
-                setErrors({});
-              }}
+              onClick={() => { setAccountType('individual'); setStep(1); setErrors({}); }}
               disabled={loading}
               className={`p-4 border-2 rounded-xl transition ${
                 accountType === 'individual'
@@ -301,11 +305,7 @@ const UnifiedSignup = () => {
 
             <button
               type="button"
-              onClick={() => {
-                setAccountType('business');
-                setStep(1);
-                setErrors({});
-              }}
+              onClick={() => { setAccountType('business'); setStep(1); setErrors({}); setFormData(prev => ({ ...prev, email: '' })); }}
               disabled={loading}
               className={`p-4 border-2 rounded-xl transition ${
                 accountType === 'business'
@@ -319,7 +319,7 @@ const UnifiedSignup = () => {
             </button>
           </div>
 
-          {/* Progress Bar (Business Only) */}
+          {/* Business Progress Bar */}
           {accountType === 'business' && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
@@ -342,41 +342,50 @@ const UnifiedSignup = () => {
             </div>
           )}
 
-          {/* Google Signup */}
-          <div className="mb-6">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => toast.error('Google signup failed')}
-              text="signup_with"
-              size="large"
-              width="100%"
-            />
-          </div>
+          {/* ── Google Signup — INDIVIDUAL ONLY ── */}
+          {accountType === 'individual' && (
+            <>
+              <div className="mb-6">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => toast.error('Google signup failed')}
+                  text="signup_with"
+                  size="large"
+                  width="100%"
+                />
+              </div>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 border-t border-gray-300 dark:border-gray-700" />
+                <span className="text-sm text-gray-500">OR</span>
+                <div className="flex-1 border-t border-gray-300 dark:border-gray-700" />
+              </div>
+            </>
+          )}
 
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-700" />
-            <span className="text-sm text-gray-500">OR</span>
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-700" />
-          </div>
+          {/* ── Business: manual-only notice ── */}
+          {accountType === 'business' && (
+            <div className="mb-6 flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
+              <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Manual registration required</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                  Business accounts cannot use Google Sign-In. Please register with your company email and password.
+                </p>
+              </div>
+            </div>
+          )}
 
-          {/* Form Steps */}
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
 
-            {/* BUSINESS STEP 1: Company Info */}
+            {/* ── BUSINESS STEP 1: Company Info ── */}
             {accountType === 'business' && step === 1 && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Company Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Company Name *</label>
                   <input
-                    type="text"
-                    name="companyName"
-                    value={formData.companyName}
-                    onChange={handleChange}
-                    placeholder="Acme Corp"
-                    required
-                    disabled={loading}
+                    type="text" name="companyName" value={formData.companyName}
+                    onChange={handleChange} placeholder="Acme Corp" required disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
                       errors.companyName ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
@@ -385,96 +394,60 @@ const UnifiedSignup = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Industry *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Industry *</label>
                   <select
-                    name="industry"
-                    value={formData.industry}
-                    onChange={handleChange}
-                    required
-                    disabled={loading}
+                    name="industry" value={formData.industry} onChange={handleChange}
+                    required disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
                       errors.industry ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                   >
                     <option value="">Select Industry</option>
-                    {INDUSTRIES.map(ind => (
-                      <option key={ind.value} value={ind.value}>{ind.label}</option>
-                    ))}
+                    {INDUSTRIES.map(ind => <option key={ind.value} value={ind.value}>{ind.label}</option>)}
                   </select>
                   {errors.industry && <p className="mt-1 text-sm text-red-600">{errors.industry}</p>}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Company Type
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Company Type</label>
                     <select
-                      name="companyType"
-                      value={formData.companyType}
-                      onChange={handleChange}
-                      disabled={loading}
+                      name="companyType" value={formData.companyType} onChange={handleChange} disabled={loading}
                       className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                     >
                       <option value="">Select</option>
-                      {COMPANY_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
+                      {COMPANY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Registration Number
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Registration Number</label>
                     <input
-                      type="text"
-                      name="registrationNumber"
-                      value={formData.registrationNumber}
-                      onChange={handleChange}
-                      placeholder="Optional"
-                      disabled={loading}
+                      type="text" name="registrationNumber" value={formData.registrationNumber}
+                      onChange={handleChange} placeholder="Optional" disabled={loading}
                       className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tax ID
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tax ID</label>
                   <input
-                    type="text"
-                    name="taxId"
-                    value={formData.taxId}
-                    onChange={handleChange}
-                    placeholder="Optional"
-                    disabled={loading}
+                    type="text" name="taxId" value={formData.taxId}
+                    onChange={handleChange} placeholder="Optional" disabled={loading}
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white"
                   />
                 </div>
               </>
             )}
 
-            {/* INDIVIDUAL OR BUSINESS STEP 2: Personal Info */}
+            {/* ── PERSONAL INFO (Individual always / Business Step 2) ── */}
             {(accountType === 'individual' || (accountType === 'business' && step === 2)) && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Full Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name *</label>
                   <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="John Doe"
-                    required
-                    disabled={loading}
+                    type="text" name="name" value={formData.name} onChange={handleChange}
+                    placeholder="John Doe" required disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
                       errors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
@@ -482,66 +455,78 @@ const UnifiedSignup = () => {
                   {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
                 </div>
 
+                {/* Gender */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gender *</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {genderOptions.map(({ value, label }) => (
+                      <button
+                        key={value} type="button" disabled={loading}
+                        onClick={() => { setFormData(prev => ({ ...prev, gender: value })); validateField('gender', value); }}
+                        className={`py-3 px-2 border-2 rounded-lg text-sm font-medium transition ${
+                          formData.gender === value
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                            : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-300'
+                        } disabled:opacity-50`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {errors.gender && <p className="mt-1 text-sm text-red-600">{errors.gender}</p>}
+                </div>
+
+                {/* Email — with business domain hint */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Email *
+                    {accountType === 'business' ? 'Company Email *' : 'Email *'}
                   </label>
                   <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="you@example.com"
-                    required
-                    disabled={loading}
+                    type="email" name="email" value={formData.email} onChange={handleChange}
+                    placeholder={accountType === 'business' ? 'you@yourcompany.com' : 'you@example.com'}
+                    required disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
                       errors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                   />
-                  {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+                  {errors.email
+                    ? <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                    : accountType === 'business' && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Must be a company email — Gmail, Yahoo and other free providers are not accepted.
+                      </p>
+                    )
+                  }
                 </div>
 
+                {/* Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Password *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password *</label>
                   <div className="relative">
                     <input
-                      type={showPassword ? 'text' : 'password'}
-                      name="password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      placeholder="Min. 8 characters"
-                      required
-                      disabled={loading}
+                      type={showPassword ? 'text' : 'password'} name="password"
+                      value={formData.password} onChange={handleChange}
+                      placeholder="Min. 8 characters" required disabled={loading}
                       className={`w-full px-4 py-3 pr-12 bg-gray-50 dark:bg-gray-800 border ${
                         errors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                       } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
                   {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
                 </div>
 
+                {/* Confirm Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Confirm Password *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Confirm Password *</label>
                   <div className="relative">
                     <input
-                      type={showPassword ? 'text' : 'password'}
-                      name="confirmPassword"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      placeholder="Repeat password"
-                      required
-                      disabled={loading}
+                      type={showPassword ? 'text' : 'password'} name="confirmPassword"
+                      value={formData.confirmPassword} onChange={handleChange}
+                      placeholder="Repeat password" required disabled={loading}
                       className={`w-full px-4 py-3 pr-12 bg-gray-50 dark:bg-gray-800 border ${
                         errors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                       } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
@@ -550,18 +535,12 @@ const UnifiedSignup = () => {
                   {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
                 </div>
 
+                {/* Phone */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Phone Number *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone Number *</label>
                   <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    placeholder="+1234567890"
-                    required
-                    disabled={loading}
+                    type="tel" name="phone" value={formData.phone} onChange={handleChange}
+                    placeholder="+1234567890" required disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
                       errors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
@@ -569,83 +548,44 @@ const UnifiedSignup = () => {
                   {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
                 </div>
 
+                {/* Country */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Country *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Country *</label>
                   <select
-                    name="country"
-                    value={formData.country}
-                    onChange={handleChange}
-                    required
-                    disabled={loading}
+                    name="country" value={formData.country} onChange={handleChange}
+                    required disabled={loading}
                     className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border ${
                       errors.country ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'
                     } rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white`}
                   >
                     <option value="">Select country</option>
-                    {COUNTRIES.map(country => (
-                      <option key={country.code} value={country.code}>{country.name}</option>
-                    ))}
+                    {COUNTRIES.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}
                   </select>
                   {errors.country && <p className="mt-1 text-sm text-red-600">{errors.country}</p>}
                 </div>
               </>
             )}
 
-            {/* STEP 3: Terms (Business Only) */}
+            {/* ── BUSINESS STEP 3: Review + Terms ── */}
             {accountType === 'business' && step === 3 && (
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Almost done!
-                </h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Almost done!</h3>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
                   Please review your information and accept the terms to complete registration.
                 </p>
-
-                <div className="space-y-4">
+                <div className="space-y-3 mb-6">
                   <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                     <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Company information saved
-                    </span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Company information saved</span>
                   </div>
                   <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                     <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Contact details verified
-                    </span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Contact details verified</span>
                   </div>
                 </div>
-
-                <div className="mt-6">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="agreedToTerms"
-                      checked={formData.agreedToTerms}
-                      onChange={handleChange}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      I agree to the{' '}
-                      <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>
-                      {' '}and{' '}
-                      <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>
-                    </span>
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {/* Individual Terms */}
-            {accountType === 'individual' && (
-              <div className="mt-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
-                    type="checkbox"
-                    name="agreedToTerms"
-                    checked={formData.agreedToTerms}
+                    type="checkbox" name="agreedToTerms" checked={formData.agreedToTerms}
                     onChange={handleChange}
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
@@ -659,10 +599,27 @@ const UnifiedSignup = () => {
               </div>
             )}
 
-            {/* Submit Button */}
+            {/* Individual Terms */}
+            {accountType === 'individual' && (
+              <div className="mt-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox" name="agreedToTerms" checked={formData.agreedToTerms}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    I agree to the{' '}
+                    <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>
+                    {' '}and{' '}
+                    <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>
+                  </span>
+                </label>
+              </div>
+            )}
+
             <button
-              type="submit"
-              disabled={loading}
+              type="submit" disabled={loading}
               className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
             >
               {loading ? (
@@ -679,12 +636,9 @@ const UnifiedSignup = () => {
             </button>
           </form>
 
-          {/* Login Link */}
           <p className="text-center mt-6 text-sm text-gray-600 dark:text-gray-400">
             Already have an account?{' '}
-            <Link to="/login" className="text-blue-600 hover:underline font-medium">
-              Sign in
-            </Link>
+            <Link to="/login" className="text-blue-600 hover:underline font-medium">Sign in</Link>
           </p>
         </div>
       </div>

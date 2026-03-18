@@ -1058,18 +1058,22 @@ function _extractErrorMessage(error) {
 }
 
 function _mapDiditStatus(status, verified, failureReason) {
+  // FIX: ALL DiDIT results → under_review. Admin must approve/reject.
+  // No auto-approve for individuals. Only expired stays as expired.
   let kycStatus = 'pending';
   let isKYCVerified = false;
   let logMessage = '';
 
-  if ((status === 'completed' || status === 'approved') && verified) {
-    kycStatus = 'approved'; isKYCVerified = true; logMessage = '✅ KYC approved';
-  } else if (status === 'failed') {
-    kycStatus = 'rejected'; logMessage = `❌ KYC rejected: ${failureReason}`;
-  } else if (status === 'expired') {
-    kycStatus = 'expired'; logMessage = '⏰ KYC expired';
+  if (status === 'expired') {
+    kycStatus = 'expired';
+    logMessage = '⏰ KYC session expired';
   } else if (status === 'processing' || status === 'pending') {
     kycStatus = 'in_progress';
+  } else {
+    // completed/approved/failed/rejected → all under_review for admin
+    kycStatus = 'under_review';
+    isKYCVerified = false;
+    logMessage = `📋 KYC submitted to admin review (DiDIT: ${status}, verified: ${verified})`;
   }
   return { kycStatus, isKYCVerified, logMessage };
 }

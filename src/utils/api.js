@@ -1,53 +1,74 @@
+// src/utils/api.js
+// FIX: Ensures API base URL always has https:// protocol prefix.
+// ERR_NAME_NOT_RESOLVED was caused by the URL being constructed as
+// "descrow-backend-5ykg.onrender.com/api/..." (no protocol) so the
+// browser tried to resolve it as a relative path / bare hostname.
+
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// ── Safe base URL builder ─────────────────────────────────────────────────────
+// Reads from REACT_APP_API_URL env var, falls back to the production backend.
+// Guarantees the result always starts with https:// or http://.
+const buildBaseURL = () => {
+  const raw = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
-console.log('API Base URL:', API_BASE_URL); // Debug log
+  // Already has a protocol — use as-is
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
 
-// Create axios instance
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  timeout: 30000 // 30 second timeout
+  // Bare hostname or hostname/path — prepend https://
+  return `https://${raw.replace(/\/$/, '')}`;
+};
+
+const BASE_URL = buildBaseURL();
+
+// Log in development so you can confirm the URL looks right
+if (process.env.NODE_ENV === 'development') {
+  console.log('API Base URL:', BASE_URL);
+}
+
+// ── Axios instance ────────────────────────────────────────────────────────────
+const API = axios.create({
+  baseURL: BASE_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' }
 });
 
-// Add token to requests
-api.interceptors.request.use(
+// ── Request interceptor — attach auth token ───────────────────────────────────
+API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
     }
-    console.log('API Request:', config.method.toUpperCase(), config.url); // Debug log
+
     return config;
   },
-  (error) => {
-    console.error('Request Error:', error);
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Handle response errors
-api.interceptors.response.use(
+// ── Response interceptor — handle 401 globally ───────────────────────────────
+API.interceptors.response.use(
   (response) => {
-    console.log('API Response:', response.status, response.config.url); // Debug log
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`API Response: ${response.status} ${response.config.url}`);
+    }
     return response;
   },
   (error) => {
-    console.error('Response Error:', error.response?.data || error.message); // Debug log
-    
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
+      // Token expired or invalid — clear storage and redirect to login
+      const isAuthRoute = window.location.pathname.startsWith('/login') ||
+                          window.location.pathname.startsWith('/signup');
+      if (!isAuthRoute) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/login';
       }
     }
-    
     return Promise.reject(error);
   }
 );
 
-export default api;
+export default API;

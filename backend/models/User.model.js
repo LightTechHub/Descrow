@@ -1,25 +1,32 @@
 // backend/models/User.model.js
-// ADDED: loginAttempts, lockUntil, loginSessions for lockout + device tracking
+// ADDED: gender field under BASIC INFO section
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   // ==================== BASIC INFO ====================
-  name: { type: String, required: [true, 'Name is required'], trim: true },
-  email: { type: String, required: [true, 'Email is required'], unique: true, lowercase: true, trim: true, match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'] },
+  name:     { type: String, required: [true, 'Name is required'], trim: true },
+  email:    { type: String, required: [true, 'Email is required'], unique: true, lowercase: true, trim: true, match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'] },
   password: { type: String, required: [true, 'Password is required'], minlength: [8, 'Password must be at least 8 characters'], select: false },
   googleId: { type: String, sparse: true, unique: true },
-  country: { type: String, trim: true },
+  country:  { type: String, trim: true },
+
+  // ADDED: gender field
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'prefer_not_to_say'],
+    default: undefined
+  },
 
   // ==================== ACCOUNT SETTINGS ====================
-  role: { type: String, enum: ['dual'], default: 'dual' },
+  role:        { type: String, enum: ['dual'], default: 'dual' },
   accountType: { type: String, enum: ['individual', 'business'], default: 'individual' },
-  tier: { type: String, enum: ['free', 'starter', 'growth', 'enterprise', 'api'], default: 'free' },
-  status: { type: String, enum: ['active', 'suspended', 'deleted'], default: 'active' },
+  tier:        { type: String, enum: ['free', 'starter', 'growth', 'enterprise', 'api'], default: 'free' },
+  status:      { type: String, enum: ['active', 'suspended', 'deleted'], default: 'active' },
 
   // ==================== VERIFICATION ====================
-  verified: { type: Boolean, default: false },
-  verifiedAt: Date,
+  verified:      { type: Boolean, default: false },
+  verifiedAt:    Date,
   isKYCVerified: { type: Boolean, default: false },
   kycStatus: {
     status: { type: String, enum: ['unverified','pending','in_progress','under_review','approved','rejected','expired','pending_documents'], default: 'unverified' },
@@ -34,14 +41,14 @@ const userSchema = new mongoose.Schema({
 
   // ==================== SECURITY: LOGIN LOCKOUT ====================
   loginAttempts: { type: Number, default: 0 },
-  lockUntil: { type: Date, default: null },
+  lockUntil:     { type: Date, default: null },
 
   // ==================== SECURITY: LOGIN SESSIONS (device tracking) ====================
   loginSessions: [{
     sessionId:    { type: String },
     ipAddress:    { type: String },
     userAgent:    { type: String },
-    deviceType:   { type: String },  // mobile | desktop | tablet
+    deviceType:   { type: String },
     browser:      { type: String },
     os:           { type: String },
     country:      { type: String },
@@ -84,9 +91,9 @@ const userSchema = new mongoose.Schema({
   stats: {
     totalTransactions: { type: Number, default: 0 }, totalSpent: { type: Number, default: 0 }, totalEarned: { type: Number, default: 0 },
     completedEscrows: { type: Number, default: 0 }, cancelledEscrows: { type: Number, default: 0 },
-    asBuyer: { totalTransactions: { type: Number, default: 0 }, totalSpent: { type: Number, default: 0 }, completedDeals: { type: Number, default: 0 } },
-    asSeller: { totalTransactions: { type: Number, default: 0 }, totalEarned: { type: Number, default: 0 }, completedDeals: { type: Number, default: 0 } },
-    asArbitrator: { casesHandled: { type: Number, default: 0 }, successRate: { type: Number, default: 0 } },
+    asBuyer:       { totalTransactions: { type: Number, default: 0 }, totalSpent: { type: Number, default: 0 }, completedDeals: { type: Number, default: 0 } },
+    asSeller:      { totalTransactions: { type: Number, default: 0 }, totalEarned: { type: Number, default: 0 }, completedDeals: { type: Number, default: 0 } },
+    asArbitrator:  { casesHandled: { type: Number, default: 0 }, successRate: { type: Number, default: 0 } },
     bankAccountsCount: { type: Number, default: 0 }, verifiedBankAccountsCount: { type: Number, default: 0 },
     totalPayoutsReceived: { type: Number, default: 0 }, totalPayoutAmount: { type: Number, default: 0 }, lastPayoutAt: Date,
     totalLogins: { type: Number, default: 0 }, accountAgeDays: { type: Number, default: 0 }
@@ -109,7 +116,8 @@ const userSchema = new mongoose.Schema({
 
   // ==================== ESCROW ACCESS ====================
   escrowAccess: {
-    canCreateEscrow: { type: Boolean, default: true }, canReceiveEscrow: { type: Boolean, default: true },
+    canCreateEscrow:  { type: Boolean, default: true },
+    canReceiveEscrow: { type: Boolean, default: true },
     maxActiveEscrows: { type: Number, default: 5 },
     restrictions: [{ type: String, enum: ['amount_limit','currency_restriction','geographic_restriction'] }],
     suspendedUntil: Date, suspensionReason: String
@@ -172,20 +180,17 @@ userSchema.methods.comparePassword = function (candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
-// Increment failed login attempts; lock after 5
 userSchema.methods.incLoginAttempts = async function () {
-  // If lock expired, reset
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({ $set: { loginAttempts: 1, lockUntil: null } });
   }
   const updates = { $inc: { loginAttempts: 1 } };
   if (this.loginAttempts + 1 >= 5 && !this.isLocked) {
-    updates.$set = { lockUntil: new Date(Date.now() + 30 * 60 * 1000) }; // 30 min lock
+    updates.$set = { lockUntil: new Date(Date.now() + 30 * 60 * 1000) };
   }
   return this.updateOne(updates);
 };
 
-// Reset attempts on successful login
 userSchema.methods.resetLoginAttempts = function () {
   return this.updateOne({ $set: { loginAttempts: 0, lockUntil: null } });
 };
@@ -260,13 +265,9 @@ userSchema.methods.getKYCStatusDisplay = function () {
   return statusMap[status] || { label: 'Unknown', color: 'gray' };
 };
 
-userSchema.methods.getDisplayName = function () {
-  if (this.accountType === 'business' && this.businessInfo?.companyName) return this.businessInfo.companyName;
-  return this.name;
-};
-
+userSchema.methods.getDisplayName      = function () { if (this.accountType === 'business' && this.businessInfo?.companyName) return this.businessInfo.companyName; return this.name; };
 userSchema.methods.getAccountTypeDisplay = function () { return this.accountType === 'business' ? 'Business Account' : 'Individual Account'; };
-userSchema.methods.getAccountIcon = function () { return this.accountType === 'business' ? '🏢' : '👤'; };
-userSchema.methods.getAccountColor = function () { return this.accountType === 'business' ? 'purple' : 'blue'; };
+userSchema.methods.getAccountIcon      = function () { return this.accountType === 'business' ? '🏢' : '👤'; };
+userSchema.methods.getAccountColor     = function () { return this.accountType === 'business' ? 'purple' : 'blue'; };
 
 module.exports = mongoose.model('User', userSchema);

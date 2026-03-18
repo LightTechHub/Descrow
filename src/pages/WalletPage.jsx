@@ -9,13 +9,23 @@ import {
 import toast from 'react-hot-toast';
 import { authService } from '../services/authService';
 
-// ── API helper ─────────────────────────────────────────────────────────────────
-const API = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
+// ── Safe API base URL (always has https://) ────────────────────────────────────
+const buildAPIUrl = () => {
+  const raw = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
+  return `https://${raw.replace(/\/$/, '')}`;
+};
+const API_BASE = buildAPIUrl();
 
+// ── API helper ─────────────────────────────────────────────────────────────────
 const apiFetch = async (path, options = {}) => {
   const token = localStorage.getItem('token');
-  const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options.headers },
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...options.headers
+    },
     ...options
   });
   return res.json();
@@ -25,7 +35,6 @@ const apiFetch = async (path, options = {}) => {
 const DepositModal = ({ onClose, onSuccess }) => {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-  const API = process.env.REACT_APP_API_URL || 'https://descrow-backend-5ykg.onrender.com/api';
 
   const QUICK_AMOUNTS = [5000, 10000, 25000, 50000, 100000, 250000];
 
@@ -36,19 +45,33 @@ const DepositModal = ({ onClose, onSuccess }) => {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API}/wallet/deposit/initiate`, {
+      const res = await fetch(`${API_BASE}/wallet/deposit/initiate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
         body: JSON.stringify({ amount: amountNGN })
       });
+
       const data = await res.json();
-      if (data.success && data.data?.authorizationUrl) {
-        // Redirect to Paystack checkout
-        window.location.href = data.data.authorizationUrl;
-      } else {
+
+      if (!res.ok || !data.success) {
         toast.error(data.message || 'Failed to initiate deposit');
+        return;
+      }
+
+      // FIX: backend returns authorization_url (snake_case), not authorizationUrl (camelCase)
+      const redirectUrl = data.data?.authorization_url || data.data?.authorizationUrl;
+
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        console.error('Deposit response missing authorization_url:', data);
+        toast.error('Payment gateway did not return a redirect URL. Please try again.');
       }
     } catch (err) {
+      console.error('Deposit fetch error:', err);
       toast.error('Failed to connect to payment gateway');
     } finally {
       setLoading(false);
@@ -121,7 +144,6 @@ const DepositModal = ({ onClose, onSuccess }) => {
 
 // ── Withdrawal Modal ───────────────────────────────────────────────────────────
 const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
-  const [step, setStep] = useState(1); // 1=form, 2=verify, 3=confirm
   const [banks, setBanks] = useState([]);
   const [loadingBanks, setLoadingBanks] = useState(true);
   const [verifying, setVerifying] = useState(false);
@@ -220,7 +242,6 @@ const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-700">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Withdraw Funds</h2>
@@ -236,9 +257,7 @@ const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
         <div className="p-6 space-y-5">
           {/* Amount */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-              Amount (₦)
-            </label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Amount (₦)</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-lg">₦</span>
               <input
@@ -294,9 +313,7 @@ const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
 
           {/* Account Number */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-              Account Number
-            </label>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Account Number</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -322,7 +339,6 @@ const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
             )}
           </div>
 
-          {/* Info note */}
           <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
             <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700 dark:text-blue-300">
@@ -330,7 +346,6 @@ const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
             </p>
           </div>
 
-          {/* Submit */}
           <button
             onClick={handleSubmit}
             disabled={submitting || !form.amount || !verifiedName}
@@ -339,10 +354,7 @@ const WithdrawalModal = ({ balance, onClose, onSuccess }) => {
             {submitting ? (
               <><Loader className="w-5 h-5 animate-spin" />Processing...</>
             ) : (
-              <>
-                <ArrowUpCircle className="w-5 h-5" />
-                Withdraw ₦{parseFloat(form.amount || 0).toLocaleString()}
-              </>
+              <><ArrowUpCircle className="w-5 h-5" />Withdraw ₦{parseFloat(form.amount || 0).toLocaleString()}</>
             )}
           </button>
         </div>
@@ -417,6 +429,37 @@ const WalletPage = () => {
       setLoading(false);
     }
   }, []);
+
+  // Auto-verify deposit after Paystack redirect back
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const depositStatus = params.get('deposit');
+    const reference = params.get('reference') || params.get('trxref');
+
+    if (depositStatus === 'success' && reference) {
+      // Remove query params from URL without reload
+      window.history.replaceState({}, '', '/wallet');
+
+      // Verify the deposit
+      const verifyDeposit = async () => {
+        try {
+          const res = await apiFetch('/wallet/deposit/verify', {
+            method: 'POST',
+            body: JSON.stringify({ reference })
+          });
+          if (res.success) {
+            toast.success(res.message || 'Wallet funded successfully!');
+            fetchData(); // refresh balance
+          } else {
+            toast.error(res.message || 'Could not verify deposit');
+          }
+        } catch {
+          toast.error('Deposit verification failed. Contact support if funds were deducted.');
+        }
+      };
+      verifyDeposit();
+    }
+  }, [fetchData]);
 
   useEffect(() => {
     const user = authService.getCurrentUser();
@@ -541,7 +584,6 @@ const WalletPage = () => {
               ) : (
                 transactions.map((tx) => (
                   <div key={tx._id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                    {/* Icon */}
                     <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${
                       tx.type === 'credit' ? 'bg-green-100 dark:bg-green-900/30' :
                       tx.type === 'refund' ? 'bg-blue-100 dark:bg-blue-900/30' :
@@ -553,7 +595,6 @@ const WalletPage = () => {
                       }
                     </div>
 
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 dark:text-white text-sm truncate">
                         {tx.description || tx.type}
@@ -564,7 +605,6 @@ const WalletPage = () => {
                       </p>
                     </div>
 
-                    {/* Amount */}
                     <div className="text-right flex-shrink-0">
                       <p className={`font-bold text-base ${
                         tx.type === 'credit' || tx.type === 'refund'

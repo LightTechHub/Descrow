@@ -11,11 +11,14 @@ const userSchema = new mongoose.Schema({
   googleId: { type: String, sparse: true, unique: true },
   country:  { type: String, trim: true },
 
-  // ADDED: gender field
+  // Gender — optional field, null/undefined never trigger enum error on existing docs
   gender: {
     type: String,
-    enum: ['male', 'female', 'prefer_not_to_say'],
-    default: undefined
+    enum: {
+      values: ['male', 'female', 'prefer_not_to_say'],
+      message: 'Gender must be male, female, or prefer_not_to_say'
+    },
+    default: null
   },
 
   // ==================== ACCOUNT SETTINGS ====================

@@ -93,8 +93,9 @@ exports.register = async (req, res) => {
       authProvider: 'local',
       agreedToTerms: agreedToTerms || false,
       agreedToTermsAt: agreedToTerms ? new Date() : undefined,
-      // ADDED: save gender if provided at top level or inside businessInfo block
-      gender: gender || businessInfo?.gender || undefined
+      // Save gender only when a valid non-empty value is provided (guards against enum error)
+      gender: (['male','female','prefer_not_to_say'].includes(gender) ? gender : 
+               ['male','female','prefer_not_to_say'].includes(businessInfo?.gender) ? businessInfo.gender : null)
     };
 
     if (country) userData.address = { country };
@@ -434,8 +435,8 @@ exports.completeGoogleProfile = async (req, res) => {
     user.verified = true;
     user.verifiedAt = user.verifiedAt || new Date();
 
-    // ADDED: save gender
-    if (gender) user.gender = gender;
+    // Save gender only when a valid non-empty value is provided
+    if (['male','female','prefer_not_to_say'].includes(gender)) user.gender = gender;
 
     if (country) { user.address = user.address || {}; user.address.country = country; }
 

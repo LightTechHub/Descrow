@@ -7,11 +7,9 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import API from '../../utils/api';
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
 // Human-readable label for a businessType value
 const BUSINESS_TYPE_LABELS = {
   // companyType values (from registration dropdown)
@@ -32,10 +30,8 @@ const BUSINESS_TYPE_LABELS = {
   retail:           'Retail',
   other:            'Other',
 };
-
 const formatBusinessType = (val) =>
   BUSINESS_TYPE_LABELS[val] || (val ? val.replace(/_/g, ' ') : '');
-
 const buildInitialForm = (user) => ({
   name:   user?.name   || '',
   phone:  user?.phone  || '',
@@ -64,9 +60,7 @@ const buildInitialForm = (user) => ({
                     user?.businessInfo?.registrationNumber || '',
   },
 });
-
 const deepEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Password Confirmation Modal
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,7 +69,6 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!password.trim()) { setError('Please enter your password'); return; }
@@ -94,7 +87,6 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
       setLoading(false);
     }
   };
-
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl w-full max-w-sm p-6">
@@ -113,14 +105,12 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
             <X className="w-4 h-4" />
           </button>
         </div>
-
         <div className="flex items-start gap-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-5">
           <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
             For your security, all profile changes require your current password.
           </p>
         </div>
-
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
@@ -148,7 +138,6 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
               </p>
             )}
           </div>
-
           <div className="flex gap-3">
             <button type="button" onClick={onCancel}
               className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold transition">
@@ -164,7 +153,6 @@ const PasswordConfirmModal = ({ onConfirm, onCancel }) => {
     </div>
   );
 };
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Field Components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +167,6 @@ const Field = ({ label, children, hint, required: req }) => (
     {children}
   </div>
 );
-
 // Locked field — dashed border with lock icon and tooltip
 const FrozenField = ({ label, value, reason, badge }) => (
   <div className="group relative">
@@ -202,7 +189,7 @@ const FrozenField = ({ label, value, reason, badge }) => (
     {reason && (
       <div className="absolute bottom-full left-0 mb-2 z-20 hidden group-hover:block pointer-events-none w-72">
         <div className="bg-gray-900 text-white text-xs rounded-xl px-3.5 py-2.5 shadow-2xl leading-relaxed">
-          <p className="font-semibold mb-1 text-green-300">🔒 Locked after KYC verification</p>
+          <p className="font-semibold mb-1 text-green-300">Locked after KYC verification</p>
           <p className="text-gray-300">{reason}</p>
           <p className="mt-1.5 text-gray-400">To change this, contact <span className="text-blue-300 font-medium">support@dealcross.net</span></p>
           <div className="absolute top-full left-5 border-[5px] border-transparent border-t-gray-900" />
@@ -211,7 +198,6 @@ const FrozenField = ({ label, value, reason, badge }) => (
     )}
   </div>
 );
-
 // Read-only display field — for registration-sourced data, no KYC badge needed
 const ReadOnlyField = ({ label, value, note }) => (
   <div>
@@ -227,10 +213,8 @@ const ReadOnlyField = ({ label, value, note }) => (
     </div>
   </div>
 );
-
 const inputBase =
   'w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition';
-
 const SectionCard = ({ icon: Icon, title, subtitle, badge, children, accent }) => (
   <div className={`rounded-2xl border p-4 sm:p-6 transition ${
     accent
@@ -250,13 +234,11 @@ const SectionCard = ({ icon: Icon, title, subtitle, badge, children, accent }) =
     {children}
   </div>
 );
-
 const VerifiedBadge = () => (
   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white text-xs font-bold rounded-full shadow-sm">
     <CheckCircle className="w-3.5 h-3.5" /> Identity Verified
   </span>
 );
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -266,14 +248,11 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-
   // Sync form when user prop changes
   useEffect(() => {
     setForm(buildInitialForm(user));
   }, [user]);
-
   const isDirty = useMemo(() => !deepEqual(form, initial), [form, initial]);
-
   const set = useCallback((path, value) => {
     const keys = path.split('.');
     setForm(f => {
@@ -281,13 +260,11 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
       return { ...f, [keys[0]]: { ...f[keys[0]], [keys[1]]: value } };
     });
   }, []);
-
   const handleSaveRequest = (e) => {
     e.preventDefault();
     if (!isDirty) return;
     setShowPasswordModal(true);
   };
-
   const handleConfirmedSave = async () => {
     setShowPasswordModal(false);
     setSaving(true);
@@ -297,7 +274,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         avatar:      form.avatar,
         socialLinks: form.socialLinks,
       };
-
       if (!kycApproved) {
         payload.name    = form.name;
         payload.phone   = form.phone;
@@ -316,12 +292,9 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
         // businessType is NEVER sent — it's set at registration and read-only
         payload.businessInfo = biz;
       }
-
       const res = await API.put('/users/profile', payload);
-
       if (res.data.success) {
         toast.success('Profile updated successfully');
-
         // Re-fetch fresh profile so form reflects persisted values
         try {
           const freshRes = await API.get('/profile');
@@ -357,7 +330,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
       setSaving(false);
     }
   };
-
   const lockReasons = {
     name:           'Your legal name was verified against your government ID during KYC.',
     phone:          'Your phone number was registered and verified during KYC.',
@@ -365,7 +337,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
     companyName:    'Your business name was verified against your CAC registration documents.',
     registrationNo: 'Your CAC / registration number is a legal identifier.',
   };
-
   return (
     <>
       {showPasswordModal && (
@@ -374,16 +345,14 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           onCancel={() => setShowPasswordModal(false)}
         />
       )}
-
       <form onSubmit={handleSaveRequest} className="space-y-5 sm:space-y-6">
-
-        {/* ── KYC Status Banner ─────────────────────────────────────────── */}
+        {/* KYC Status Banner */}
         {kycApproved ? (
           <div className="flex items-start gap-3.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-2xl px-4 sm:px-5 py-4">
             <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-bold text-green-800 dark:text-green-300 mb-1">
-                ✓ Identity Verified — Your account is fully trusted
+                Identity Verified — Your account is fully trusted
               </p>
               <p className="text-xs text-green-700 dark:text-green-400 leading-relaxed">
                 Core identity fields are permanently locked to protect you against fraud.
@@ -406,8 +375,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
           </div>
         )}
-
-        {/* ── Personal Information ───────────────────────────────────────── */}
+        {/* Personal Information */}
         <SectionCard
           icon={User}
           title="Personal Information"
@@ -415,7 +383,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
           accent={kycApproved}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-
             {kycApproved ? (
               <FrozenField
                 label={isBusinessAccount ? 'Owner / Director Name' : 'Full Name'}
@@ -428,7 +395,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                   className={inputBase} placeholder="Your full legal name" required />
               </Field>
             )}
-
             {kycApproved ? (
               <FrozenField label="Phone Number" value={form.phone} reason={lockReasons.phone} />
             ) : (
@@ -437,7 +403,17 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                   className={inputBase} placeholder="+234 800 000 0000" />
               </Field>
             )}
-
+            {/* Gender — read-only, set at registration */}
+            <ReadOnlyField
+              label="Gender"
+              value={
+                user?.gender === 'male'               ? 'Male' :
+                user?.gender === 'female'             ? 'Female' :
+                user?.gender === 'prefer_not_to_say'  ? 'Prefer not to say' :
+                'Not specified'
+              }
+              note="Set during registration"
+            />
             <div className="sm:col-span-2">
               <Field label="Bio / Description" hint={`${form.bio.length}/300 — always editable`}>
                 <textarea value={form.bio} onChange={e => set('bio', e.target.value)}
@@ -447,8 +423,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
           </div>
         </SectionCard>
-
-        {/* ── Address ───────────────────────────────────────────────────── */}
+        {/* Address */}
         <SectionCard
           icon={MapPin}
           title="Address"
@@ -488,8 +463,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
           )}
         </SectionCard>
-
-        {/* ── Social Links ─────────────────────────────────────────────── */}
+        {/* Social Links */}
         <SectionCard icon={LinkIcon} title="Social Links" subtitle="Always editable">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
             <Field label="Twitter / X">
@@ -511,8 +485,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
           </div>
         </SectionCard>
-
-        {/* ── Business Information (business accounts only) ─────────────── */}
+        {/* Business Information (business accounts only) */}
         {isBusinessAccount && (
           <SectionCard
             icon={Globe}
@@ -522,7 +495,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             accent={kycApproved}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-
               {/* Business Name */}
               {kycApproved && initial.businessInfo.companyName ? (
                 <FrozenField label="Business / Company Name" value={form.businessInfo.companyName} reason={lockReasons.companyName} />
@@ -534,14 +506,12 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                     className={inputBase} placeholder="Acme Ltd" />
                 </Field>
               )}
-
               {/* Business Type — READ ONLY, sourced from registration, NEVER a dropdown here */}
               <ReadOnlyField
                 label="Business Type"
                 value={formatBusinessType(form.businessInfo.businessType)}
                 note="Set during registration"
               />
-
               {/* Registration Number */}
               {kycApproved && initial.businessInfo.registrationNo ? (
                 <FrozenField label="CAC / Registration Number" value={form.businessInfo.registrationNo} reason={lockReasons.registrationNo} />
@@ -553,7 +523,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                     className={inputBase} placeholder="RC 1234567" />
                 </Field>
               )}
-
               {/* Business Website — always editable */}
               <Field label="Business Website" hint="Always editable">
                 <input type="url" value={form.businessInfo.website}
@@ -561,7 +530,6 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
                   className={inputBase} placeholder="https://yourbusiness.com" />
               </Field>
             </div>
-
             <div className="mt-5 flex items-start gap-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3.5">
               <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
@@ -572,8 +540,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </div>
           </SectionCard>
         )}
-
-        {/* ── Save Bar ─────────────────────────────────────────────────── */}
+        {/* Save Bar */}
         <div className="sticky bottom-0 -mx-1 sm:-mx-0">
           <div className={`flex items-center justify-between gap-4 px-4 sm:px-5 py-3.5 rounded-2xl border transition-all ${
             isDirty
@@ -583,7 +550,7 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             <p className={`text-xs sm:text-sm font-medium transition ${
               isDirty ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'
             }`}>
-              {isDirty ? '⚠ Unsaved changes — password required to save' : 'No pending changes'}
+              {isDirty ? 'Unsaved changes — password required to save' : 'No pending changes'}
             </p>
             <button type="submit" disabled={saving || !isDirty}
               className={`flex items-center gap-2 px-5 sm:px-7 py-2.5 rounded-xl font-semibold text-sm transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -598,11 +565,8 @@ const ProfileTab = ({ user, onUpdate, kycApproved = false }) => {
             </button>
           </div>
         </div>
-
       </form>
     </>
   );
 };
-
-
 export default ProfileTab;

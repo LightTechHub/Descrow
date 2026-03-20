@@ -176,11 +176,14 @@ export const COMPANY_TYPES = [
   { label: 'Other', value: 'other' }
 ];
 
+// Valid gender values — must match User.model.js enum exactly
+const VALID_GENDERS = ['male', 'female', 'prefer_not_to_say'];
+
 // Helper function to prepare user payload
 export const prepareUserPayload = (formData, accountType, additionalData = {}) => {
   // Get the full country name from the code
   const countryFullName = COUNTRY_MAP[formData.country] || formData.country;
-  
+
   const payload = {
     name: formData.name,
     email: formData.email,
@@ -189,12 +192,16 @@ export const prepareUserPayload = (formData, accountType, additionalData = {}) =
     country: countryFullName,
     accountType,
     agreedToTerms: true,
-    
+
+    // ADDED: send gender only when a valid value was selected
+    // null is safe — backend and Mongoose both accept it without enum error
+    gender: VALID_GENDERS.includes(formData.gender) ? formData.gender : null,
+
     // Add address object with country
     address: {
       country: countryFullName
     },
-    
+
     ...additionalData
   };
 
@@ -205,6 +212,9 @@ export const prepareUserPayload = (formData, accountType, additionalData = {}) =
       industry: formData.industry,
       registrationNumber: formData.registrationNumber || '',
       taxId: formData.taxId || '',
+      // ADDED: pass gender inside businessInfo too so backend register()
+      // can read it from either req.body.gender or req.body.businessInfo.gender
+      gender: VALID_GENDERS.includes(formData.gender) ? formData.gender : null,
       // Add business address
       businessAddress: {
         country: countryFullName

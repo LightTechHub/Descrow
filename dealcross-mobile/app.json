@@ -4,7 +4,7 @@
     "slug": "dealcross",
     "version": "1.0.0",
     "orientation": "portrait",
-    "owner": "lighttech-hub",
+    "owner": "lighttech-hub-dev-team",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {

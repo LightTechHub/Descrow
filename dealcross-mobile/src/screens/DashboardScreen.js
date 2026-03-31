@@ -9,6 +9,19 @@ import { useAuth } from '../context/AuthContext';
 import escrowService from '../services/escrowService';
 import API from '../utils/api';
 
+// Safe amount parser - handles all API response formats
+const getAmount = (item) => {
+  let raw = item?.amount ?? item?.escrowAmount ?? item?.totalAmount ?? item?.price ?? 0;
+  // Handle amount stored as object e.g. { USD: 100, NGN: 150000 }
+  if (raw && typeof raw === 'object') {
+    const currency = getCurrency(item);
+    raw = raw[currency] || raw['USD'] || Object.values(raw)[0] || 0;
+  }
+  const num = parseFloat(raw);
+  return isNaN(num) ? 0 : num;
+};
+const getCurrency = (item) => item?.currency || item?.escrowCurrency || 'USD';
+
 const StatCard = ({ icon, label, value, color }) => (
   <View style={[styles.statCard, { borderLeftColor: color }]}>
     <Ionicons name={icon} size={22} color={color} style={{ marginBottom: 6 }} />
@@ -26,7 +39,7 @@ const EscrowItem = ({ item, onPress }) => {
         <View style={[styles.escrowDot, { backgroundColor: color }]} />
         <View>
           <Text style={styles.escrowTitle} numberOfLines={1}>{item.title || 'Escrow Transaction'}</Text>
-          <Text style={styles.escrowAmount}>${parseFloat(item.amount || 0).toLocaleString()} {item.currency || 'USD'}</Text>
+          <Text style={styles.escrowAmount}>${getAmount(item).toLocaleString()} {getCurrency(item)}</Text>
         </View>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>

@@ -385,7 +385,14 @@ const ProfilePage = () => {
           {isEmailVerified && !isKYCApproved && (
             <KYCVerificationWarning 
               kycStatus={kycStatus} 
-              onVerifyClick={() => handleTabChange('kyc')}
+              onVerifyClick={() => {
+                handleTabChange('kyc');
+                // Scroll to tab content after navigation
+                setTimeout(() => {
+                  const tabContent = document.querySelector('[data-tab-content]');
+                  if (tabContent) tabContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+              }}
             />
           )}
 
@@ -408,7 +415,7 @@ const ProfilePage = () => {
             {canAccessEscrowFeatures && <PayoutInfo />}
           </div>
 
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3" data-tab-content>
             <TabContent 
               activeTab={activeTab}
               user={user}

@@ -32,12 +32,13 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
   }, [user._id]);
 
   const handleKYCAction = async (action) => {
-    const reason = action === 'reject' ? window.prompt('Rejection reason (required):') : '';
+    const reason = action === 'reject' ? window.prompt('Rejection reason (required):') : 
+                   action === 'revoke' ? (window.prompt('Reason for revoking KYC (optional):') || 'Revoked by admin') : '';
     if (action === 'reject' && !reason) return;
     try {
       setSaving(true);
-      await adminService.reviewKYC(user._id, action, reason);
-      toast.success(`KYC ${action}d successfully`);
+      await adminService.reviewKYC(user._id, action === 'revoke' ? 'reject' : action, reason);
+      toast.success(`KYC ${action === 'revoke' ? 'revoked' : action + 'd'} successfully`);
       onRefresh();
       onClose();
     } catch (err) {
@@ -187,18 +188,34 @@ const UserDetailsModal = ({ user, onClose, onRefresh }) => {
           <div className="border-t border-gray-700 pt-4 space-y-4">
             <h3 className="font-semibold text-white">Admin Actions</h3>
 
-            {(kycStatus === 'under_review' || kycStatus === 'pending' || kycStatus === 'pending_documents') && (
+            {/* KYC Actions - always visible, buttons adapt to current status */}
+            <div className="space-y-3">
+              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">KYC Status: <span className={`${
+                kycStatus === 'approved' ? 'text-green-400' :
+                kycStatus === 'rejected' ? 'text-red-400' :
+                kycStatus === 'unverified' ? 'text-gray-400' : 'text-yellow-400'
+              }`}>{kycStatus}</span></p>
               <div className="flex gap-3">
-                <button onClick={() => handleKYCAction('approve')} disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 font-semibold">
-                  <CheckCircle className="w-4 h-4" /> Approve KYC
-                </button>
-                <button onClick={() => handleKYCAction('reject')} disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 font-semibold">
-                  <XCircle className="w-4 h-4" /> Reject KYC
-                </button>
+                {kycStatus !== 'approved' && (
+                  <button onClick={() => handleKYCAction('approve')} disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 font-semibold text-sm">
+                    <CheckCircle className="w-4 h-4" /> Approve KYC
+                  </button>
+                )}
+                {kycStatus === 'approved' && (
+                  <button onClick={() => handleKYCAction('revoke')} disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50 font-semibold text-sm">
+                    <XCircle className="w-4 h-4" /> Revoke KYC
+                  </button>
+                )}
+                {kycStatus !== 'rejected' && (
+                  <button onClick={() => handleKYCAction('reject')} disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 font-semibold text-sm">
+                    <XCircle className="w-4 h-4" /> Reject KYC
+                  </button>
+                )}
               </div>
-            )}
+            </div>
 
             <div className="flex gap-3 items-center">
               <select value={newTier} onChange={(e) => setNewTier(e.target.value)}
